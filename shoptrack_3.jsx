@@ -26,6 +26,14 @@ function fmt(s) {
   return h>0?`${h}:${String(m).padStart(2,"0")}:${String(sc).padStart(2,"0")}`:
              `${String(m).padStart(2,"0")}:${String(sc).padStart(2,"0")}`;
 }
+function fmtHM(s){
+  const h=Math.floor(s/3600),m=Math.floor((s%3600)/60);
+  return h>0?`${h}h ${m}m`:`${m}m`;
+}
+function fmtDetail(s){
+  const h=Math.floor(s/3600),m=Math.floor((s%3600)/60),sc=s%60;
+  return h>0?`${h}h ${m}m ${sc}s`:`${m}m ${sc}s`;
+}
 function fmtDate(ts){
   return new Date(ts).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 }
@@ -271,8 +279,10 @@ function QuickEntryTab({user,machines,setJobs,setTab}){
   const [job,    setJob]    =useState("");
   const [machine,setMachine]=useState("");
   const [op,     setOp]     =useState("");
-  const [setupMin,setSetupMin]=useState("");
-  const [runMin, setRunMin] =useState("");
+  const [setupH,  setSetupH]  =useState("");
+  const [setupM,  setSetupM]  =useState("");
+  const [runH,    setRunH]    =useState("");
+  const [runM,    setRunM]    =useState("");
   const [pieces, setPieces] =useState("");
   const [photo,  setPhoto]  =useState(null);
   const [errs,   setErrs]   =useState({});
@@ -288,13 +298,13 @@ function QuickEntryTab({user,machines,setJobs,setTab}){
     const e={};
     if(!job.trim())            e.job="Job / part number is required";
     if(!machine)               e.machine="Select a machine";
-    if(!runMin||parseFloat(runMin)<=0) e.runMin="Enter the run time in minutes";
+    if((parseInt(runH)||0)+(parseInt(runM)||0)===0) e.runTime="Enter the run time";
     if(!pieces||parseInt(pieces)<1)   e.pieces="Enter number of pieces produced";
     if(!photo)                 e.photo="Quality photo is required";
     if(Object.keys(e).length){setErrs(e);return;}
 
-    const setupSec=Math.round((parseFloat(setupMin)||0)*60);
-    const runSec  =Math.round(parseFloat(runMin)*60);
+    const setupSec=(parseInt(setupH)||0)*3600+(parseInt(setupM)||0)*60;
+    const runSec  =(parseInt(runH)||0)*3600+(parseInt(runM)||0)*60;
     setJobs(prev=>[{
       id:Date.now(), job:job.trim(), machine, op:op.trim(),
       operatorId:user.id, operatorName:user.name,
@@ -308,7 +318,7 @@ function QuickEntryTab({user,machines,setJobs,setTab}){
   };
 
   const reset=()=>{
-    setJob("");setMachine("");setOp("");setSetupMin("");setRunMin("");
+    setJob("");setMachine("");setOp("");setSetupH("");setSetupM("");setRunH("");setRunM("");
     setPieces("");setPhoto(null);setErrs({});setDone(false);
   };
 
@@ -328,7 +338,7 @@ function QuickEntryTab({user,machines,setJobs,setTab}){
   );
 
   // ── checklist progress bar ──
-  const filled=[!!job.trim(),!!machine,!!runMin&&parseFloat(runMin)>0,!!pieces&&parseInt(pieces)>0,!!photo];
+  const filled=[!!job.trim(),!!machine,(parseInt(runH)||0)+(parseInt(runM)||0)>0,!!pieces&&parseInt(pieces)>0,!!photo];
   const pct=Math.round((filled.filter(Boolean).length/filled.length)*100);
 
   return(
@@ -373,19 +383,36 @@ function QuickEntryTab({user,machines,setJobs,setTab}){
       {/* ── Times ── */}
       <div style={{...card(),marginBottom:10}}>
         <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}><i className="ti ti-clock"/> Time Spent</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          <div>
-            <label style={label}>Setup Time (min)</label>
-            <input type="number" min="0" step="0.5" style={{...inp(),textAlign:"center",fontSize:18,color:C.amber}}
-              value={setupMin} onChange={e=>setSetupMin(e.target.value)} placeholder="0"/>
-            <div style={{fontSize:9,color:C.muted,marginTop:4,letterSpacing:1,textAlign:"center"}}>Optional</div>
+        <div style={{marginBottom:10}}>
+          <label style={label}>Setup Time <span style={{fontSize:9,color:C.muted}}>(optional)</span></label>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <div>
+              <input type="number" min="0" style={{...inp(),textAlign:"center",fontSize:18,color:C.amber}}
+                value={setupH} onChange={e=>setSetupH(e.target.value)} placeholder="0"/>
+              <div style={{fontSize:9,color:C.muted,marginTop:4,letterSpacing:1,textAlign:"center"}}>Hours</div>
+            </div>
+            <div>
+              <input type="number" min="0" max="59" style={{...inp(),textAlign:"center",fontSize:18,color:C.amber}}
+                value={setupM} onChange={e=>setSetupM(e.target.value)} placeholder="0"/>
+              <div style={{fontSize:9,color:C.muted,marginTop:4,letterSpacing:1,textAlign:"center"}}>Minutes</div>
+            </div>
           </div>
-          <div>
-            <label style={label}>Run Time (min) <span style={{color:C.red}}>*</span></label>
-            <input type="number" min="0.1" step="0.5" style={{...inp(errs.runMin),textAlign:"center",fontSize:18,color:C.green}}
-              value={runMin} onChange={e=>{setRunMin(e.target.value);setErrs(p=>({...p,runMin:null}));}} placeholder="0"/>
-            {errs.runMin&&<div style={errMsg}><i className="ti ti-alert-triangle"/> {errs.runMin}</div>}
+        </div>
+        <div>
+          <label style={label}>Run Time <span style={{color:C.red}}>*</span></label>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            <div>
+              <input type="number" min="0" style={{...inp(errs.runTime),textAlign:"center",fontSize:18,color:C.green}}
+                value={runH} onChange={e=>{setRunH(e.target.value);setErrs(p=>({...p,runTime:null}));}} placeholder="0"/>
+              <div style={{fontSize:9,color:C.muted,marginTop:4,letterSpacing:1,textAlign:"center"}}>Hours</div>
+            </div>
+            <div>
+              <input type="number" min="0" max="59" style={{...inp(errs.runTime),textAlign:"center",fontSize:18,color:C.green}}
+                value={runM} onChange={e=>{setRunM(e.target.value);setErrs(p=>({...p,runTime:null}));}} placeholder="0"/>
+              <div style={{fontSize:9,color:C.muted,marginTop:4,letterSpacing:1,textAlign:"center"}}>Minutes</div>
+            </div>
           </div>
+          {errs.runTime&&<div style={errMsg}><i className="ti ti-alert-triangle"/> {errs.runTime}</div>}
         </div>
       </div>
 
@@ -451,11 +478,11 @@ function ActiveTab({user,jobs,setJobs,setCompleteId}){
           <div style={meta}><span><i className="ti ti-robot"/> {j.machine}</span>{j.op&&<span><i className="ti ti-tools"/> {j.op}</span>}</div>
           <div style={{padding:"16px 0 8px",textAlign:"center"}}>
             <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",textAlign:"center",color:j.status==="setup"?C.amber:C.green,marginBottom:6}}>{j.status==="setup"?"Setup Time":"Run Time"}</div>
-            <div style={{fontSize:46,letterSpacing:4,textAlign:"center",color:j.status==="setup"?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{fmt(j.status==="setup"?j.setupSec:j.runSec)}</div>
+            <div style={{fontSize:46,letterSpacing:4,textAlign:"center",color:j.status==="setup"?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{fmtHM(j.status==="setup"?j.setupSec:j.runSec)}</div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-            <div style={statBox}><div style={{fontSize:20,color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{fmt(j.setupSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Setup {j.status==="run"?"✓":""}</div></div>
-            <div style={{...statBox,opacity:j.status==="setup"?0.4:1}}><div style={{fontSize:20,color:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{fmt(j.runSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Run Time</div></div>
+            <div style={statBox}><div style={{fontSize:20,color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{fmtHM(j.setupSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Setup {j.status==="run"?"✓":""}</div></div>
+            <div style={{...statBox,opacity:j.status==="setup"?0.4:1}}><div style={{fontSize:20,color:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{fmtHM(j.runSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Run Time</div></div>
           </div>
           <div style={{display:"flex",gap:8}}>
             {j.status==="setup"&&<button style={{...btn("primary",true),flex:1}} onClick={()=>startRun(j.id)}><i className="ti ti-player-play"/> Start Running</button>}
@@ -496,8 +523,8 @@ function CompleteModal({jobId,jobs,setJobs,onClose}){
           <div style={meta}><span><i className="ti ti-robot"/> {j.machine}</span><span><i className="ti ti-user"/> {j.operatorName}</span></div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-          <div style={statBox}><div style={{fontSize:20,color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{fmt(j.setupSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Setup</div></div>
-          <div style={statBox}><div style={{fontSize:20,color:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{fmt(j.runSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Run</div></div>
+          <div style={statBox}><div style={{fontSize:20,color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{fmtHM(j.setupSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Setup</div></div>
+          <div style={statBox}><div style={{fontSize:20,color:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{fmtHM(j.runSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Run</div></div>
         </div>
         <div style={{marginBottom:14}}>
           <label style={label}>Pieces Produced <span style={{color:C.red}}>*</span></label>
@@ -548,8 +575,8 @@ function HistoryTab({user,jobs}){
             </div>
             <div style={meta}><span><i className="ti ti-robot"/> {j.machine}</span></div>
             <div style={{display:"flex",gap:14,marginTop:8,flexWrap:"wrap"}}>
-              <span style={{fontSize:11,color:C.amber}}><i className="ti ti-settings"/> {fmt(j.setupSec)}</span>
-              <span style={{fontSize:11,color:C.green}}><i className="ti ti-player-play"/> {fmt(j.runSec)}</span>
+              <span style={{fontSize:11,color:C.amber}}><i className="ti ti-settings"/> {fmtHM(j.setupSec)}</span>
+              <span style={{fontSize:11,color:C.green}}><i className="ti ti-player-play"/> {fmtHM(j.runSec)}</span>
             </div>
             <div style={{fontSize:10,color:C.muted,marginTop:4}}>{fmtDate(j.completedAt)}</div>
           </div>
@@ -586,14 +613,14 @@ function AdminDash({jobs}){
       {Object.keys(machMap).length>0&&<><div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",margin:"16px 0 10px"}}>Machine Run Time</div>
         {Object.entries(machMap).sort((a,b)=>b[1].run-a[1].run).map(([m,d])=>(
           <div key={m} style={{marginBottom:12}}>
-            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}><span style={{color:C.text}}>{m}</span><span style={{color:C.muted}}>{(d.run/60).toFixed(0)}m · {d.jobs} jobs</span></div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:4}}><span style={{color:C.text}}>{m}</span><span style={{color:C.muted}}>{fmtHM(d.run)} run · {d.jobs} jobs</span></div>
             <div style={{height:6,background:C.raised,borderRadius:3,overflow:"hidden"}}><div style={{height:"100%",background:C.green,width:`${(d.run/maxRun)*100}%`,borderRadius:3}}/></div>
             <div style={{height:4,background:C.raised,borderRadius:3,overflow:"hidden",marginTop:2}}><div style={{height:"100%",background:C.amber,width:`${(d.setup/maxRun)*100}%`,borderRadius:3}}/></div>
             <div style={{fontSize:9,color:C.muted,marginTop:2,letterSpacing:1}}><span style={{color:C.green}}>■</span> Run &nbsp;<span style={{color:C.amber}}>■</span> Setup</div>
           </div>
         ))}</>}
       {Object.keys(opMap).length>0&&<><div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",margin:"16px 0 10px"}}>Operator Summary</div>
-        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}><thead><tr>{["Operator","Jobs","Pieces","Avg Run"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead><tbody>{Object.entries(opMap).map(([n,d])=><tr key={n}><td style={td}>{n}</td><td style={td}>{d.jobs}</td><td style={td}>{d.pieces}</td><td style={td}>{(d.run/d.jobs/60).toFixed(1)} min</td></tr>)}</tbody></table></div></>}
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}><thead><tr>{["Operator","Jobs","Pieces","Avg Run"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead><tbody>{Object.entries(opMap).map(([n,d])=><tr key={n}><td style={td}>{n}</td><td style={td}>{d.jobs}</td><td style={td}>{d.pieces}</td><td style={td}>{fmtHM(Math.round(d.run/d.jobs))}</td></tr>)}</tbody></table></div></>}
     </div>
   );
 }
@@ -602,13 +629,22 @@ function AdminDash({jobs}){
 // ALL JOBS
 // ═══════════════════════════════════════════════════════
 function AllJobsTab({jobs,setCompleteId}){
-  const [filt,setFilt]=useState("all");
-  const filtered=jobs.filter(j=>filt==="all"||j.status===filt);
+  const [statusFilt,setStatusFilt]=useState("all");
+  const [machineFilt,setMachineFilt]=useState("all");
+  const machines=[...new Set(jobs.map(j=>j.machine))].sort();
+  const filtered=jobs.filter(j=>
+    (statusFilt==="all"||j.status===statusFilt)&&
+    (machineFilt==="all"||j.machine===machineFilt)
+  );
   return(
     <div style={{padding:"14px 16px"}}>
-      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-        {[["all","All"],["setup","Setup"],["run","Running"],["done","Done"]].map(([f,l])=><button key={f} style={tag(filt===f)} onClick={()=>setFilt(f)}>{l}</button>)}
+      <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
+        {[["all","All"],["setup","Setup"],["run","Running"],["done","Done"]].map(([f,l])=><button key={f} style={tag(statusFilt===f)} onClick={()=>setStatusFilt(f)}>{l}</button>)}
       </div>
+      {machines.length>0&&<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        <button style={tag(machineFilt==="all")} onClick={()=>setMachineFilt("all")}>All Machines</button>
+        {machines.map(m=><button key={m} style={tag(machineFilt===m)} onClick={()=>setMachineFilt(m)}>{m}</button>)}
+      </div>}
       {!filtered.length?<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No jobs found.</div>:filtered.map(j=>(
         <div key={j.id} style={card(j.status==="setup"?C.amber:j.status==="run"?C.green:undefined)}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
@@ -617,10 +653,12 @@ function AllJobsTab({jobs,setCompleteId}){
               <span style={badge(j.status)}>{j.status==="setup"?"Setup":j.status==="run"?"Running":"Done"}</span>
               {j.quickEntry&&<div style={{marginTop:4}}><span style={{...badge("admin"),fontSize:9}}>Quick Entry</span></div>}
               {j.status==="done"&&j.photoData&&<img src={j.photoData} style={{width:34,height:34,borderRadius:6,objectFit:"cover",marginTop:6,display:"block",marginLeft:"auto"}}/>}
+            </div>
           </div>
           <div style={{display:"flex",gap:14,marginTop:10,flexWrap:"wrap"}}>
-            <span style={{fontSize:11,color:C.amber}}><i className="ti ti-settings"/> {fmt(j.setupSec)}</span>
-            <span style={{fontSize:11,color:C.green}}><i className="ti ti-player-play"/> {fmt(j.runSec)}</span>
+            <span style={{fontSize:11,color:C.amber}}><i className="ti ti-settings"/> Setup: {fmtHM(j.setupSec)}</span>
+            <span style={{fontSize:11,color:C.green}}><i className="ti ti-player-play"/> Run: {fmtHM(j.runSec)}</span>
+            {j.status==="done"&&j.pieces>0&&<span style={{fontSize:11,color:C.blue}}><i className="ti ti-clock"/> Per piece: {fmtDetail(Math.round((j.setupSec+j.runSec)/j.pieces))}</span>}
             {j.status==="done"&&<span style={{fontSize:11,color:C.muted}}><i className="ti ti-box"/> {j.pieces} pcs · {fmtDate(j.completedAt)}</span>}
           </div>
           {j.status!=="done"&&<button style={{...btn("success",true),marginTop:10}} onClick={()=>setCompleteId(j.id)}><i className="ti ti-check"/> Complete</button>}
@@ -679,8 +717,8 @@ function ReportsTab({jobs}){
       </div>
       {!filtered.length?<div style={{textAlign:"center",padding:"30px 16px",color:C.muted,fontSize:12}}><i className="ti ti-calendar-off" style={{fontSize:28,display:"block",marginBottom:10,opacity:0.3}}/>No jobs match filters.</div>
         :<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-          <thead><tr>{["Job","Machine","Operator","Type","Setup","Run","Pcs","✓","Date"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
-          <tbody>{filtered.map(j=><tr key={j.id}><td style={td}>{j.job}</td><td style={td}>{j.machine}</td><td style={td}>{j.operatorName}</td><td style={td}><span style={{...badge(j.quickEntry?"admin":"run"),fontSize:9}}>{j.quickEntry?"Quick":"Timed"}</span></td><td style={{...td,color:C.amber}}>{fmt(j.setupSec)}</td><td style={{...td,color:C.green}}>{fmt(j.runSec)}</td><td style={td}>{j.pieces}</td><td style={td}>{j.photoData?<span style={{color:C.green}}>✓</span>:<span style={{color:C.red}}>✗</span>}</td><td style={{...td,color:C.muted,fontSize:10}}>{fmtDate(j.completedAt)}</td></tr>)}</tbody>
+          <thead><tr>{["Job","Machine","Operator","Type","Setup","Run","Per Piece","Pcs","✓","Date"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+          <tbody>{filtered.map(j=><tr key={j.id}><td style={td}>{j.job}</td><td style={td}>{j.machine}</td><td style={td}>{j.operatorName}</td><td style={td}><span style={{...badge(j.quickEntry?"admin":"run"),fontSize:9}}>{j.quickEntry?"Quick":"Timed"}</span></td><td style={{...td,color:C.amber}}>{fmtHM(j.setupSec)}</td><td style={{...td,color:C.green}}>{fmtHM(j.runSec)}</td><td style={{...td,color:C.blue}}>{j.pieces>0?fmtDetail(Math.round((j.setupSec+j.runSec)/j.pieces)):"-"}</td><td style={td}>{j.pieces}</td><td style={td}>{j.photoData?<span style={{color:C.green}}>✓</span>:<span style={{color:C.red}}>✗</span>}</td><td style={{...td,color:C.muted,fontSize:10}}>{fmtDate(j.completedAt)}</td></tr>)}</tbody>
         </table></div>}
     </div>
   );
