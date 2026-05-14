@@ -91,6 +91,7 @@ export default function App(){
   const [jobs,  setJobs]     =useState([]);
   const [users, setUsers]    =useState(INIT_USERS);
   const [machines,setMachines]=useState(INIT_MACHINES);
+  const [workHours,setWorkHours]=useState({start:"07:00",end:"15:00"});
   const [completeId,setCompleteId]=useState(null);
   const [clock, setClock]    =useState("");
   const [machineIssues,setMachineIssues]=useState({});
@@ -102,9 +103,33 @@ export default function App(){
   },[]);
 
   useEffect(()=>{
-    const t=setInterval(()=>{setJobs(prev=>prev.map(j=>j.paused||j.status==="done"?j:j.status==="setup"?{...j,setupSec:j.setupSec+1}:j.status==="run"?{...j,runSec:j.runSec+1}:j));},1000);
+    const t=setInterval(()=>{
+      const now=Date.now();
+      setJobs(prev=>prev.map(j=>{
+        if(j.status==="done") return j;
+        if(j.nightMode&&j.nightModeEndsAt&&now>=j.nightModeEndsAt) return {...j,nightModeDone:true};
+        if(j.paused||j.logoutPaused||j.nightModeDone) return j;
+        if(j.status==="setup") return {...j,setupSec:j.setupSec+1};
+        if(j.status==="run")   return {...j,runSec:j.runSec+1};
+        return j;
+      }));
+    },1000);
     return()=>clearInterval(t);
   },[]);
+
+  useEffect(()=>{
+    const check=()=>{
+      const now=new Date();
+      const hhmm=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+      users.forEach(u=>{
+        if(u.autoPauseTime&&u.autoPauseTime===hhmm){
+          setJobs(prev=>prev.map(j=>j.operatorId===u.id&&j.status!=="done"&&!j.logoutPaused&&!j.nightMode?{...j,logoutPaused:true}:j));
+        }
+      });
+    };
+    const t=setInterval(check,60000);
+    return()=>clearInterval(t);
+  },[users]);
 
   const reportIssue=(machineName,status,reason)=>{
     setMachineIssues(prev=>({...prev,[machineName]:{status,reason,reportedBy:user.name,reportedAt:Date.now()}}));
@@ -118,8 +143,17 @@ export default function App(){
     setJobs(prev=>prev.map(j=>j.machine===machineName&&j.paused?{...j,paused:false}:j));
   };
 
-  const login =u=>{setUser(u);setTab(u.role==="admin"?"admin":"new");};
-  const logout =()=>{setUser(null);setTab("new");};
+  const login =u=>{
+    setJobs(prev=>prev.map(j=>j.operatorId===u.id&&j.logoutPaused?{...j,logoutPaused:false}:j));
+    setUser(u);setTab(u.role==="admin"?"admin":"new");
+  };
+  const logout=()=>{
+    const now=new Date();
+    const hhmm=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+    const inWorkHours=hhmm>=workHours.start&&hhmm<workHours.end;
+    if(!inWorkHours) setJobs(prev=>prev.map(j=>j.operatorId===user.id&&j.status!=="done"&&!j.nightMode?{...j,logoutPaused:true}:j));
+    setUser(null);setTab("new");
+  };
 
   if(!user) return <LoginScreen users={users} onLogin={login}/>;
 
@@ -172,7 +206,7 @@ export default function App(){
       {tab==="admin"    &&<AdminDash         jobs={jobs} machineIssues={machineIssues} downtimeLog={downtimeLog}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={jobs} setCompleteId={setCompleteId}/>}
       {tab==="reports"  &&<ReportsTab        jobs={jobs}/>}
-      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines}/>}
+      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)}/>}
     </div>
@@ -479,36 +513,46 @@ function QuickEntryTab({user,machines,setJobs,setTab}){
 // ═══════════════════════════════════════════════════════
 // ACTIVE
 // ═══════════════════════════════════════════════════════
-function ActiveTab({user,jobs,setJobs,setCompleteId}){
-  const [machineFilt,setMachineFilt]=useState("all");
-  const active=jobs.filter(j=>j.status!=="done"&&j.operatorId===user.id);
-  const machines=[...new Set(active.map(j=>j.machine))].sort();
-  const visible=active.filter(j=>machineFilt==="all"||j.machine===machineFilt);
-  const setupJobs=visible.filter(j=>j.status==="setup").sort((a,b)=>b.setupSec-a.setupSec);
-  const runJobs  =visible.filter(j=>j.status==="run").sort((a,b)=>b.runSec-a.runSec);
-  const startRun=id=>setJobs(prev=>prev.map(j=>j.id===id?{...j,status:"run"}:j));
+function JobCard({j,setJobs,startRun,setCompleteId}){
+    const [nmForm,setNmForm]=useState(false);
+    const [nmH,setNmH]=useState(""); const [nmM,setNmM]=useState("");
+    const anyPaused=j.paused||j.logoutPaused;
+    const nightColor="#7c5cbf";
+    const color=j.paused?C.red:j.logoutPaused?C.muted:j.nightMode?nightColor:j.status==="setup"?C.amber:C.green;
+    const remainingSec=j.nightMode&&!j.nightModeDone?Math.max(0,Math.round((j.nightModeEndsAt-Date.now())/1000)):0;
 
-  if(!active.length) return <div style={{padding:"14px 16px"}}><div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12,letterSpacing:1}}><i className="ti ti-tool" style={{fontSize:34,display:"block",marginBottom:10,opacity:0.3}}/> No active jobs.</div></div>;
+    const activateNightMode=()=>{
+      const dur=(parseInt(nmH)||0)*3600+(parseInt(nmM)||0)*60;
+      if(dur<=0) return;
+      setJobs(prev=>prev.map(x=>x.id===j.id?{...x,nightMode:true,nightModeEndsAt:Date.now()+dur*1000,nightModeDone:false}:x));
+      setNmForm(false);setNmH("");setNmM("");
+    };
+    const cancelNightMode=()=>setJobs(prev=>prev.map(x=>x.id===j.id?{...x,nightMode:false,nightModeEndsAt:null,nightModeDone:false}:x));
 
-  const JobCard=({j})=>{
-    const color=j.paused?C.red:j.status==="setup"?C.amber:C.green;
     return(
       <div style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${color}`,border:`1px solid ${C.border}`,borderTopColor:color,padding:"12px 10px",display:"flex",flexDirection:"column",gap:6}}>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
-          <i className="ti ti-robot" style={{fontSize:14,color}}/>
+          <i className={`ti ti-${j.nightMode?"moon":"robot"}`} style={{fontSize:14,color}}/>
           <div style={{fontSize:12,color,fontWeight:700,letterSpacing:1,textTransform:"uppercase",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.machine}</div>
-          {j.paused?<span style={badge("down")}>Paused</span>:<span style={badge(j.status)}>{j.status==="setup"?"Setup":"Run"}</span>}
+          {j.paused?<span style={badge("down")}>Paused</span>
+            :j.logoutPaused?<span style={badge("")}>Paused</span>
+            :j.nightModeDone?<span style={{...badge("admin"),background:"rgba(124,92,191,.15)",color:nightColor}}>Done</span>
+            :j.nightMode?<span style={{...badge("admin"),background:"rgba(124,92,191,.15)",color:nightColor}}>Night</span>
+            :<span style={badge(j.status)}>{j.status==="setup"?"Setup":"Run"}</span>}
         </div>
         <div style={{fontSize:18,color:C.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.job}</div>
         {j.op&&<div style={{fontSize:10,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.op}</div>}
-        {j.paused&&(
-          <div style={{background:"rgba(231,76,60,0.12)",borderRadius:6,padding:"6px 8px",fontSize:10,color:C.red,letterSpacing:0.5}}>
-            <i className="ti ti-player-pause"/> Timer paused — machine down
-          </div>
-        )}
-        <div style={{textAlign:"center",padding:"8px 0",opacity:j.paused?0.4:1}}>
+        {j.paused&&<div style={{background:"rgba(231,76,60,0.12)",borderRadius:6,padding:"6px 8px",fontSize:10,color:C.red}}><i className="ti ti-player-pause"/> Timer paused — machine down</div>}
+        {j.logoutPaused&&<div style={{background:"rgba(138,155,181,0.1)",borderRadius:6,padding:"6px 8px",fontSize:10,color:C.muted}}><i className="ti ti-moon"/> Timer paused — operator away</div>}
+        {j.nightMode&&!j.nightModeDone&&<div style={{background:"rgba(124,92,191,0.12)",borderRadius:6,padding:"6px 8px",fontSize:10,color:nightColor}}>
+          <i className="ti ti-moon-stars"/> Night mode — stops in {fmtHM(remainingSec)}
+        </div>}
+        {j.nightModeDone&&<div style={{background:"rgba(124,92,191,0.12)",borderRadius:6,padding:"6px 8px",fontSize:10,color:nightColor}}>
+          <i className="ti ti-check"/> Night run complete — ready to finish
+        </div>}
+        <div style={{textAlign:"center",padding:"8px 0",opacity:anyPaused?0.4:1}}>
           <div style={{fontSize:9,letterSpacing:2,textTransform:"uppercase",color,marginBottom:4}}>{j.status==="setup"?"Setup":"Run"} Time</div>
-          <div style={{fontSize:28,letterSpacing:2,color:j.paused?C.muted:color,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{fmtHM(j.status==="setup"?j.setupSec:j.runSec)}</div>
+          <div style={{fontSize:28,letterSpacing:2,color:anyPaused?C.muted:color,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{fmtHM(j.status==="setup"?j.setupSec:j.runSec)}</div>
         </div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
           <div style={{background:C.raised,borderRadius:6,padding:"6px",textAlign:"center"}}>
@@ -520,45 +564,79 @@ function ActiveTab({user,jobs,setJobs,setCompleteId}){
             <div style={{fontSize:8,letterSpacing:1,color:C.muted,textTransform:"uppercase",marginTop:2}}>Run</div>
           </div>
         </div>
-        {!j.paused&&(
+        {!anyPaused&&!j.nightMode&&(
           j.status==="setup"
             ?<button style={{...btn("primary",true,true),marginTop:2}} onClick={()=>startRun(j.id)}><i className="ti ti-player-play"/> Start Run</button>
-            :<button style={{...btn("success",true,true),marginTop:2}} onClick={()=>setCompleteId(j.id)}><i className="ti ti-check"/> Complete</button>
+            :<div style={{display:"flex",flexDirection:"column",gap:6,marginTop:2}}>
+              <button style={btn("success",true,true)} onClick={()=>setCompleteId(j.id)}><i className="ti ti-check"/> Complete</button>
+              <button style={{...btn("outline",true,true),color:nightColor,borderColor:nightColor}} onClick={()=>setNmForm(f=>!f)}><i className="ti ti-moon"/> Night Mode</button>
+            </div>
+        )}
+        {(j.nightMode||j.nightModeDone)&&(
+          <div style={{display:"flex",flexDirection:"column",gap:6,marginTop:2}}>
+            <button style={btn("success",true,true)} onClick={()=>setCompleteId(j.id)}><i className="ti ti-check"/> Complete</button>
+            {!j.nightModeDone&&<button style={btn("outline",true,true)} onClick={cancelNightMode}><i className="ti ti-x"/> Cancel Night Mode</button>}
+          </div>
+        )}
+        {nmForm&&(
+          <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10,marginTop:4}}>
+            <div style={{fontSize:10,color:nightColor,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}><i className="ti ti-moon-stars"/> How long will the machine run?</div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+              <div>
+                <input type="number" min="0" style={{...inp(),textAlign:"center",fontSize:16,color:nightColor}} value={nmH} onChange={e=>setNmH(e.target.value)} placeholder="0"/>
+                <div style={{fontSize:9,color:C.muted,textAlign:"center",marginTop:4,letterSpacing:1}}>Hours</div>
+              </div>
+              <div>
+                <input type="number" min="0" max="59" style={{...inp(),textAlign:"center",fontSize:16,color:nightColor}} value={nmM} onChange={e=>setNmM(e.target.value)} placeholder="0"/>
+                <div style={{fontSize:9,color:C.muted,textAlign:"center",marginTop:4,letterSpacing:1}}>Minutes</div>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:6}}>
+              <button style={{...btn("outline",true,true),color:nightColor,borderColor:nightColor}} onClick={activateNightMode}><i className="ti ti-moon-stars"/> Start Night Mode</button>
+              <button style={btn("outline",false,true)} onClick={()=>setNmForm(false)}>Cancel</button>
+            </div>
+          </div>
         )}
       </div>
     );
-  };
+}
+
+function ActiveTab({user,jobs,setJobs,setCompleteId}){
+  const [machineFilt,setMachineFilt]=useState("all");
+  const active=jobs.filter(j=>j.status!=="done"&&j.operatorId===user.id);
+  const machines=[...new Set(active.map(j=>j.machine))].sort();
+  const visible=active.filter(j=>machineFilt==="all"||j.machine===machineFilt);
+  const setupJobs=visible.filter(j=>j.status==="setup").sort((a,b)=>b.setupSec-a.setupSec);
+  const runJobs  =visible.filter(j=>j.status==="run").sort((a,b)=>b.runSec-a.runSec);
+  const startRun=id=>setJobs(prev=>prev.map(j=>j.id===id?{...j,status:"run"}:j));
+
+  if(!active.length) return <div style={{padding:"14px 16px"}}><div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12,letterSpacing:1}}><i className="ti ti-tool" style={{fontSize:34,display:"block",marginBottom:10,opacity:0.3}}/> No active jobs.</div></div>;
 
   return(
     <div style={{padding:"10px 12px"}}>
-      {/* Machine filter */}
       {machines.length>1&&(
         <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
           <button style={tag(machineFilt==="all")} onClick={()=>setMachineFilt("all")}>All Machines</button>
           {machines.map(m=><button key={m} style={tag(machineFilt===m)} onClick={()=>setMachineFilt(m)}>{m}</button>)}
         </div>
       )}
-
-      {/* Setup section */}
       {setupJobs.length>0&&(
         <>
           <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid rgba(240,165,0,0.2)`}}>
             <i className="ti ti-settings"/> Setting Up · {setupJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {setupJobs.map(j=><JobCard key={j.id} j={j}/>)}
+            {setupJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId}/>)}
           </div>
         </>
       )}
-
-      {/* Running section */}
       {runJobs.length>0&&(
         <>
           <div style={{fontSize:10,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid rgba(39,174,96,0.2)`}}>
             <i className="ti ti-player-play"/> Running · {runJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            {runJobs.map(j=><JobCard key={j.id} j={j}/>)}
+            {runJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId}/>)}
           </div>
         </>
       )}
@@ -745,12 +823,23 @@ function AdminDash({jobs,machineIssues,downtimeLog}){
         ))}
       </div>
       {active.length>0&&<><div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Live Active Jobs</div>
-        {active.map(j=>(
-          <div key={j.id} style={{...card(j.status==="setup"?C.amber:C.green),display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div><div style={{fontSize:13,color:C.text,fontWeight:700}}>{j.job}</div><div style={meta}><span><i className="ti ti-robot"/> {j.machine}</span><span><i className="ti ti-user"/> {j.operatorName}</span></div></div>
-            <div style={{textAlign:"right"}}><span style={badge(j.status)}>{j.status==="setup"?"Setup":"Running"}</span><div style={{fontSize:13,color:j.status==="setup"?C.amber:C.green,marginTop:6,fontFamily:"'Share Tech Mono',monospace"}}>{fmt(j.status==="setup"?j.setupSec:j.runSec)}</div></div>
+        {active.map(j=>{
+          const pauseColor=j.paused?C.red:j.logoutPaused?C.muted:null;
+          return(
+          <div key={j.id} style={{...card(pauseColor||(j.status==="setup"?C.amber:C.green)),display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div>
+              <div style={{fontSize:13,color:C.text,fontWeight:700}}>{j.job}</div>
+              <div style={meta}><span><i className="ti ti-robot"/> {j.machine}</span><span><i className="ti ti-user"/> {j.operatorName}</span></div>
+            </div>
+            <div style={{textAlign:"right",display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
+              <span style={badge(j.status)}>{j.status==="setup"?"Setup":"Running"}</span>
+              {j.paused&&<span style={badge("down")}>Machine Down</span>}
+              {j.logoutPaused&&<span style={badge("")}>Paused</span>}
+              <div style={{fontSize:13,color:pauseColor||(j.status==="setup"?C.amber:C.green),fontFamily:"'Share Tech Mono',monospace"}}>{fmtHM(j.status==="setup"?j.setupSec:j.runSec)}</div>
+            </div>
           </div>
-        ))}</>}
+        );})}
+      </>}
       {Object.keys(machMap).length>0&&<><div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",margin:"16px 0 10px"}}>Machine Run Time</div>
         {Object.entries(machMap).sort((a,b)=>b[1].run-a[1].run).map(([m,d])=>(
           <div key={m} style={{marginBottom:12}}>
@@ -821,13 +910,17 @@ function AllJobsTab({jobs,setCompleteId}){
         <button style={tag(machineFilt==="all")} onClick={()=>setMachineFilt("all")}>All Machines</button>
         {machines.map(m=><button key={m} style={tag(machineFilt===m)} onClick={()=>setMachineFilt(m)}>{m}</button>)}
       </div>}
-      {!filtered.length?<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No jobs found.</div>:filtered.map(j=>(
-        <div key={j.id} style={card(j.status==="setup"?C.amber:j.status==="run"?C.green:undefined)}>
+      {!filtered.length?<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No jobs found.</div>:filtered.map(j=>{
+        const accentColor=j.paused?C.red:j.logoutPaused?C.muted:j.status==="setup"?C.amber:j.status==="run"?C.green:undefined;
+        return(
+        <div key={j.id} style={card(accentColor)}>
           <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
             <div><div style={{fontSize:14,color:C.text,fontWeight:700}}>{j.job}</div><div style={meta}><span><i className="ti ti-robot"/> {j.machine}</span><span><i className="ti ti-user"/> {j.operatorName}</span>{j.op&&<span><i className="ti ti-tools"/> {j.op}</span>}</div></div>
-            <div style={{textAlign:"right"}}>
+            <div style={{textAlign:"right",display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4}}>
               <span style={badge(j.status)}>{j.status==="setup"?"Setup":j.status==="run"?"Running":"Done"}</span>
-              {j.quickEntry&&<div style={{marginTop:4}}><span style={{...badge("admin"),fontSize:9}}>Quick Entry</span></div>}
+              {j.paused&&<span style={badge("down")}>Machine Down</span>}
+              {j.logoutPaused&&<span style={badge("")}>Paused</span>}
+              {j.quickEntry&&<span style={{...badge("admin"),fontSize:9}}>Quick Entry</span>}
               {j.status==="done"&&j.photoData&&<img src={j.photoData} style={{width:34,height:34,borderRadius:6,objectFit:"cover",marginTop:6,display:"block",marginLeft:"auto"}}/>}
             </div>
           </div>
@@ -839,7 +932,8 @@ function AllJobsTab({jobs,setCompleteId}){
           </div>
           {j.status!=="done"&&<button style={{...btn("success",true),marginTop:10}} onClick={()=>setCompleteId(j.id)}><i className="ti ti-check"/> Complete</button>}
         </div>
-      ))}
+      );})}
+
     </div>
   );
 }
@@ -903,16 +997,58 @@ function ReportsTab({jobs}){
 // ═══════════════════════════════════════════════════════
 // MANAGE TAB
 // ═══════════════════════════════════════════════════════
-function ManageTab({users,setUsers,machines,setMachines}){
+function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours}){
   const [view,setView]=useState("operators");
   return(
     <div style={{padding:"14px 16px"}}>
-      <div style={{display:"flex",gap:8,marginBottom:16}}>
+      <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
         <button style={tag(view==="operators")} onClick={()=>setView("operators")}><i className="ti ti-users"/> Operators</button>
         <button style={tag(view==="machines")}  onClick={()=>setView("machines")} ><i className="ti ti-tool"/> Machines</button>
+        <button style={tag(view==="settings")}  onClick={()=>setView("settings")} ><i className="ti ti-adjustments"/> Settings</button>
       </div>
       {view==="operators"&&<ManageOperators users={users} setUsers={setUsers}/>}
       {view==="machines" &&<ManageMachines  machines={machines} setMachines={setMachines}/>}
+      {view==="settings" &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours}/>}
+    </div>
+  );
+}
+
+function WorkHoursSettings({workHours,setWorkHours}){
+  const [start,setStart]=useState(workHours.start);
+  const [end,setEnd]    =useState(workHours.end);
+  const [saved,setSaved]=useState(false);
+  const save=()=>{
+    setWorkHours({start,end});
+    setSaved(true);
+    setTimeout(()=>setSaved(false),2000);
+  };
+  return(
+    <div>
+      <div style={{...card(),border:`1px solid ${C.amber}`}}>
+        <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}><i className="ti ti-clock"/> Work Hours</div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:16}}>
+          Logging out within these hours will <span style={{color:C.text}}>not</span> pause timers — accidental logouts are ignored. Outside these hours, timers pause automatically.
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+          <div>
+            <label style={label}>Start of Day</label>
+            <input type="time" style={{...inp(),fontSize:18,textAlign:"center",color:C.green}} value={start} onChange={e=>setStart(e.target.value)}/>
+          </div>
+          <div>
+            <label style={label}>End of Day</label>
+            <input type="time" style={{...inp(),fontSize:18,textAlign:"center",color:C.amber}} value={end} onChange={e=>setEnd(e.target.value)}/>
+          </div>
+        </div>
+        <button style={btn(saved?"success":"primary",true)} onClick={save}>
+          {saved?<><i className="ti ti-check"/> Saved!</>:<><i className="ti ti-device-floppy"/> Save Work Hours</>}
+        </button>
+      </div>
+      <div style={{...card(),marginTop:0}}>
+        <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Current Setting</div>
+        <div style={{fontSize:13,color:C.text}}>
+          Timers keep running on logout between <span style={{color:C.green}}>{workHours.start}</span> and <span style={{color:C.amber}}>{workHours.end}</span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -920,6 +1056,7 @@ function ManageTab({users,setUsers,machines,setMachines}){
 function ManageOperators({users,setUsers}){
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [pin,setPin]=useState(""); const [errs,setErrs]=useState({});
   const [editId,setEditId]=useState(null); const [editPin,setEditPin]=useState(""); const [editErr,setEditErr]=useState("");
+  const [editPauseId,setEditPauseId]=useState(null); const [editPauseTime,setEditPauseTime]=useState("");
   const operators=users.filter(u=>u.role==="operator");
   const save=()=>{
     const e={};
@@ -959,11 +1096,17 @@ function ManageOperators({users,setUsers}){
               <div style={{fontSize:14,color:C.text,fontWeight:700}}>{u.name}</div>
               <div style={{fontSize:10,color:C.muted,marginTop:2}}>PIN: {"●".repeat(4)} &nbsp;·&nbsp; <span style={{color:u.active?C.green:C.red}}>{u.active?"Active":"Inactive"}</span></div>
             </div>
-            <div style={{display:"flex",gap:6}}>
-              <button style={btn("outline",false,true)} onClick={()=>{setEditId(editId===u.id?null:u.id);setEditPin("");setEditErr("");}}><i className="ti ti-key"/> PIN</button>
+            <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+              <button style={btn("outline",false,true)} onClick={()=>{setEditId(editId===u.id?null:u.id);setEditPauseId(null);setEditPin("");setEditErr("");}}><i className="ti ti-key"/> PIN</button>
+              <button style={btn("outline",false,true)} onClick={()=>{setEditPauseId(editPauseId===u.id?null:u.id);setEditId(null);setEditPauseTime(u.autoPauseTime||"");}}><i className="ti ti-clock"/> Auto-Pause</button>
               <button style={btn(u.active?"danger":"success",false,true)} onClick={()=>toggle(u.id)}>{u.active?"Disable":"Enable"}</button>
             </div>
           </div>
+          {u.autoPauseTime&&editPauseId!==u.id&&(
+            <div style={{marginTop:8,fontSize:11,color:C.muted}}>
+              <i className="ti ti-clock"/> Auto-pauses at <span style={{color:C.amber}}>{u.autoPauseTime}</span>
+            </div>
+          )}
           {editId===u.id&&(
             <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Change PIN for {u.name}</div>
@@ -972,6 +1115,17 @@ function ManageOperators({users,setUsers}){
                 <button style={btn("primary",false,false)} onClick={()=>savePin(u.id)}>Save</button>
               </div>
               {editErr&&<div style={errMsg}>{editErr}</div>}
+            </div>
+          )}
+          {editPauseId===u.id&&(
+            <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Auto-pause time for {u.name}</div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Jobs will automatically pause at this time every day, even if they forget to log out.</div>
+              <div style={{display:"flex",gap:8,alignItems:"center"}}>
+                <input type="time" style={{...inp(),flex:1,fontSize:18,textAlign:"center",color:C.amber}} value={editPauseTime} onChange={e=>setEditPauseTime(e.target.value)}/>
+                <button style={btn("primary",false,false)} onClick={()=>{setUsers(prev=>prev.map(u2=>u2.id===u.id?{...u2,autoPauseTime:editPauseTime}:u2));setEditPauseId(null);}}>Save</button>
+                {u.autoPauseTime&&<button style={btn("danger",false,true)} onClick={()=>{setUsers(prev=>prev.map(u2=>u2.id===u.id?{...u2,autoPauseTime:""}:u2));setEditPauseId(null);}}>Remove</button>}
+              </div>
             </div>
           )}
         </div>
