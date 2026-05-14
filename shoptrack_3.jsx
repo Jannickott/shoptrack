@@ -419,7 +419,7 @@ function QuickEntryTab({user,machines,setJobs,setTab}){
       {/* ── operator chip ── */}
       <div style={{...card(),background:"#1a2535",marginBottom:16,display:"flex",alignItems:"center",gap:12}}>
         <div style={avatar()}>{initials(user.name)}</div>
-        <div><div style={{fontSize:12,color:C.muted,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginBottom:2}}>Logging as</div><div style={{fontSize:14,color:C.text}}>{user.name}</div></div>
+        <div><div style={{color:C.muted,letterSpacing:1,textTransform:"uppercase",fontSize:9,marginBottom:2}}>Logging as</div><div style={{fontSize:14,color:C.text}}>{user.name}</div></div>
       </div>
 
       {/* ── submit ── */}
