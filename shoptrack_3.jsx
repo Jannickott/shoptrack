@@ -57,8 +57,8 @@ const btn   =(v,full,sm)=>({width:full?"100%":"auto",padding:sm?"7px 11px":"12px
   color:(v==="primary"||v==="success"||v==="blue")?"#1a1a1a":v==="danger"?"white":C.muted});
 const navBtn=(a)=>({flex:"0 0 auto",padding:"9px 14px",border:"none",borderRadius:8,background:a?C.amber:"transparent",color:a?"#1a1a1a":C.muted,fontSize:11,letterSpacing:1.5,textTransform:"uppercase",cursor:"pointer",fontFamily:"inherit",fontWeight:a?700:400});
 const badge =(s)=>({fontSize:10,letterSpacing:1.5,padding:"3px 8px",borderRadius:20,textTransform:"uppercase",
-  background:s==="setup"?"rgba(240,165,0,.15)":s==="run"?"rgba(39,174,96,.15)":s==="admin"?"rgba(59,130,246,.15)":"rgba(138,155,181,.1)",
-  color:s==="setup"?C.amber:s==="run"?C.green:s==="admin"?C.blue:C.muted});
+  background:s==="setup"?"rgba(240,165,0,.15)":s==="run"?"rgba(39,174,96,.15)":s==="admin"?"rgba(59,130,246,.15)":s==="down"?"rgba(231,76,60,.15)":s==="repair"?"rgba(240,165,0,.15)":"rgba(138,155,181,.1)",
+  color:s==="setup"?C.amber:s==="run"?C.green:s==="admin"?C.blue:s==="down"?C.red:s==="repair"?C.amber:C.muted});
 const statBox={background:C.raised,borderRadius:8,padding:"12px 14px",textAlign:"center",border:`1px solid rgba(255,255,255,.05)`};
 const tag   =(a)=>({display:"inline-flex",alignItems:"center",padding:"5px 10px",borderRadius:20,border:`1px solid ${a?C.amber:C.border}`,background:a?C.amber:"transparent",color:a?"#1a1a1a":C.muted,fontSize:10,fontFamily:"inherit",cursor:"pointer",letterSpacing:1,textTransform:"uppercase"});
 const avatar=(bg)=>({width:38,height:38,borderRadius:"50%",background:bg||C.raised,display:"flex",alignItems:"center",justifyContent:"center",fontSize:13,color:C.amber,fontWeight:700,flexShrink:0,border:`1px solid rgba(255,255,255,.1)`});
@@ -93,6 +93,8 @@ export default function App(){
   const [machines,setMachines]=useState(INIT_MACHINES);
   const [completeId,setCompleteId]=useState(null);
   const [clock, setClock]    =useState("");
+  const [machineIssues,setMachineIssues]=useState({});
+  const [downtimeLog,setDowntimeLog]   =useState([]);
 
   useEffect(()=>{
     const t=setInterval(()=>{const n=new Date();setClock([n.getHours(),n.getMinutes(),n.getSeconds()].map(x=>String(x).padStart(2,"0")).join(":"));},1000);
@@ -100,9 +102,21 @@ export default function App(){
   },[]);
 
   useEffect(()=>{
-    const t=setInterval(()=>{setJobs(prev=>prev.map(j=>j.status==="setup"?{...j,setupSec:j.setupSec+1}:j.status==="run"?{...j,runSec:j.runSec+1}:j));},1000);
+    const t=setInterval(()=>{setJobs(prev=>prev.map(j=>j.paused||j.status==="done"?j:j.status==="setup"?{...j,setupSec:j.setupSec+1}:j.status==="run"?{...j,runSec:j.runSec+1}:j));},1000);
     return()=>clearInterval(t);
   },[]);
+
+  const reportIssue=(machineName,status,reason)=>{
+    setMachineIssues(prev=>({...prev,[machineName]:{status,reason,reportedBy:user.name,reportedAt:Date.now()}}));
+    setJobs(prev=>prev.map(j=>j.machine===machineName&&j.status!=="done"?{...j,paused:true}:j));
+  };
+  const resolveIssue=(machineName)=>{
+    const issue=machineIssues[machineName]; if(!issue) return;
+    const resolvedAt=Date.now();
+    setDowntimeLog(prev=>[...prev,{id:resolvedAt,machineName,...issue,resolvedBy:user.name,resolvedAt,downtimeSec:Math.round((resolvedAt-issue.reportedAt)/1000)}]);
+    setMachineIssues(prev=>{const n={...prev};delete n[machineName];return n;});
+    setJobs(prev=>prev.map(j=>j.machine===machineName&&j.paused?{...j,paused:false}:j));
+  };
 
   const login =u=>{setUser(u);setTab(u.role==="admin"?"admin":"new");};
   const logout =()=>{setUser(null);setTab("new");};
@@ -132,10 +146,11 @@ export default function App(){
       {/* NAV */}
       {user.role==="operator"&&(
         <div style={{display:"flex",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-          {[["new","plus","New Job"],["quick","bolt","Quick Entry"],["active","player-play","Active"],["history","list","History"]].map(([t,ic,lb])=>(
+          {[["new","plus","New Job"],["quick","bolt","Quick Entry"],["active","player-play","Active"],["machines","alert-triangle","Machines"],["history","list","History"]].map(([t,ic,lb])=>(
             <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
               <i className={`ti ti-${ic}`}/> {lb}
               {t==="active"&&activeCnt>0&&<span style={{background:C.amber,color:"#1a1a1a",borderRadius:20,fontSize:9,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{activeCnt}</span>}
+              {t==="machines"&&Object.keys(machineIssues).length>0&&<span style={{background:C.red,color:"white",borderRadius:20,fontSize:9,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{Object.keys(machineIssues).length}</span>}
             </button>
           ))}
         </div>
@@ -149,14 +164,15 @@ export default function App(){
       )}
 
       {/* CONTENT */}
-      {tab==="new"    &&<NewJobTab      user={user} machines={machines} setJobs={setJobs}/>}
-      {tab==="quick"  &&<QuickEntryTab  user={user} machines={machines} setJobs={setJobs} setTab={setTab}/>}
-      {tab==="active" &&<ActiveTab      user={user} jobs={jobs} setJobs={setJobs} setCompleteId={setCompleteId}/>}
-      {tab==="history"&&<HistoryTab     user={user} jobs={jobs}/>}
-      {tab==="admin"  &&<AdminDash      jobs={jobs}/>}
-      {tab==="alljobs"&&<AllJobsTab     jobs={jobs} setCompleteId={setCompleteId}/>}
-      {tab==="reports"&&<ReportsTab     jobs={jobs}/>}
-      {tab==="manage" &&<ManageTab      users={users} setUsers={setUsers} machines={machines} setMachines={setMachines}/>}
+      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs}/>}
+      {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab}/>}
+      {tab==="active"   &&<ActiveTab         user={user} jobs={jobs} setJobs={setJobs} setCompleteId={setCompleteId}/>}
+      {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
+      {tab==="history"  &&<HistoryTab        user={user} jobs={jobs}/>}
+      {tab==="admin"    &&<AdminDash         jobs={jobs} machineIssues={machineIssues} downtimeLog={downtimeLog}/>}
+      {tab==="alljobs"  &&<AllJobsTab        jobs={jobs} setCompleteId={setCompleteId}/>}
+      {tab==="reports"  &&<ReportsTab        jobs={jobs}/>}
+      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)}/>}
     </div>
@@ -464,32 +480,88 @@ function QuickEntryTab({user,machines,setJobs,setTab}){
 // ACTIVE
 // ═══════════════════════════════════════════════════════
 function ActiveTab({user,jobs,setJobs,setCompleteId}){
+  const [machineFilt,setMachineFilt]=useState("all");
   const active=jobs.filter(j=>j.status!=="done"&&j.operatorId===user.id);
+  const machines=[...new Set(active.map(j=>j.machine))].sort();
+  const visible=active.filter(j=>machineFilt==="all"||j.machine===machineFilt);
+  const setupJobs=visible.filter(j=>j.status==="setup").sort((a,b)=>b.setupSec-a.setupSec);
+  const runJobs  =visible.filter(j=>j.status==="run").sort((a,b)=>b.runSec-a.runSec);
   const startRun=id=>setJobs(prev=>prev.map(j=>j.id===id?{...j,status:"run"}:j));
+
   if(!active.length) return <div style={{padding:"14px 16px"}}><div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12,letterSpacing:1}}><i className="ti ti-tool" style={{fontSize:34,display:"block",marginBottom:10,opacity:0.3}}/> No active jobs.</div></div>;
-  return(
-    <div style={{padding:"14px 16px"}}>
-      {active.map(j=>(
-        <div key={j.id} style={card(j.status==="setup"?C.amber:C.green)}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
-            <div style={{fontSize:15,color:C.text,fontWeight:700}}>{j.job}</div>
-            <span style={badge(j.status)}>{j.status==="setup"?"Setting Up":"Running"}</span>
+
+  const JobCard=({j})=>{
+    const color=j.paused?C.red:j.status==="setup"?C.amber:C.green;
+    return(
+      <div style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${color}`,border:`1px solid ${C.border}`,borderTopColor:color,padding:"12px 10px",display:"flex",flexDirection:"column",gap:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          <i className="ti ti-robot" style={{fontSize:14,color}}/>
+          <div style={{fontSize:12,color,fontWeight:700,letterSpacing:1,textTransform:"uppercase",flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.machine}</div>
+          {j.paused?<span style={badge("down")}>Paused</span>:<span style={badge(j.status)}>{j.status==="setup"?"Setup":"Run"}</span>}
+        </div>
+        <div style={{fontSize:18,color:C.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.job}</div>
+        {j.op&&<div style={{fontSize:10,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.op}</div>}
+        {j.paused&&(
+          <div style={{background:"rgba(231,76,60,0.12)",borderRadius:6,padding:"6px 8px",fontSize:10,color:C.red,letterSpacing:0.5}}>
+            <i className="ti ti-player-pause"/> Timer paused — machine down
           </div>
-          <div style={meta}><span><i className="ti ti-robot"/> {j.machine}</span>{j.op&&<span><i className="ti ti-tools"/> {j.op}</span>}</div>
-          <div style={{padding:"16px 0 8px",textAlign:"center"}}>
-            <div style={{fontSize:10,letterSpacing:3,textTransform:"uppercase",textAlign:"center",color:j.status==="setup"?C.amber:C.green,marginBottom:6}}>{j.status==="setup"?"Setup Time":"Run Time"}</div>
-            <div style={{fontSize:46,letterSpacing:4,textAlign:"center",color:j.status==="setup"?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{fmtHM(j.status==="setup"?j.setupSec:j.runSec)}</div>
+        )}
+        <div style={{textAlign:"center",padding:"8px 0",opacity:j.paused?0.4:1}}>
+          <div style={{fontSize:9,letterSpacing:2,textTransform:"uppercase",color,marginBottom:4}}>{j.status==="setup"?"Setup":"Run"} Time</div>
+          <div style={{fontSize:28,letterSpacing:2,color:j.paused?C.muted:color,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{fmtHM(j.status==="setup"?j.setupSec:j.runSec)}</div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+          <div style={{background:C.raised,borderRadius:6,padding:"6px",textAlign:"center"}}>
+            <div style={{fontSize:13,color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{fmtHM(j.setupSec)}</div>
+            <div style={{fontSize:8,letterSpacing:1,color:C.muted,textTransform:"uppercase",marginTop:2}}>Setup{j.status==="run"?" ✓":""}</div>
           </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-            <div style={statBox}><div style={{fontSize:20,color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{fmtHM(j.setupSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Setup {j.status==="run"?"✓":""}</div></div>
-            <div style={{...statBox,opacity:j.status==="setup"?0.4:1}}><div style={{fontSize:20,color:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{fmtHM(j.runSec)}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>Run Time</div></div>
-          </div>
-          <div style={{display:"flex",gap:8}}>
-            {j.status==="setup"&&<button style={{...btn("primary",true),flex:1}} onClick={()=>startRun(j.id)}><i className="ti ti-player-play"/> Start Running</button>}
-            {j.status==="run"&&<button style={{...btn("success",true),flex:1}} onClick={()=>setCompleteId(j.id)}><i className="ti ti-check"/> Complete Job</button>}
+          <div style={{background:C.raised,borderRadius:6,padding:"6px",textAlign:"center",opacity:j.status==="setup"?0.35:1}}>
+            <div style={{fontSize:13,color:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{fmtHM(j.runSec)}</div>
+            <div style={{fontSize:8,letterSpacing:1,color:C.muted,textTransform:"uppercase",marginTop:2}}>Run</div>
           </div>
         </div>
-      ))}
+        {!j.paused&&(
+          j.status==="setup"
+            ?<button style={{...btn("primary",true,true),marginTop:2}} onClick={()=>startRun(j.id)}><i className="ti ti-player-play"/> Start Run</button>
+            :<button style={{...btn("success",true,true),marginTop:2}} onClick={()=>setCompleteId(j.id)}><i className="ti ti-check"/> Complete</button>
+        )}
+      </div>
+    );
+  };
+
+  return(
+    <div style={{padding:"10px 12px"}}>
+      {/* Machine filter */}
+      {machines.length>1&&(
+        <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+          <button style={tag(machineFilt==="all")} onClick={()=>setMachineFilt("all")}>All Machines</button>
+          {machines.map(m=><button key={m} style={tag(machineFilt===m)} onClick={()=>setMachineFilt(m)}>{m}</button>)}
+        </div>
+      )}
+
+      {/* Setup section */}
+      {setupJobs.length>0&&(
+        <>
+          <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid rgba(240,165,0,0.2)`}}>
+            <i className="ti ti-settings"/> Setting Up · {setupJobs.length}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+            {setupJobs.map(j=><JobCard key={j.id} j={j}/>)}
+          </div>
+        </>
+      )}
+
+      {/* Running section */}
+      {runJobs.length>0&&(
+        <>
+          <div style={{fontSize:10,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid rgba(39,174,96,0.2)`}}>
+            <i className="ti ti-player-play"/> Running · {runJobs.length}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            {runJobs.map(j=><JobCard key={j.id} j={j}/>)}
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -548,6 +620,75 @@ function CompleteModal({jobId,jobs,setJobs,onClose}){
 }
 
 // ═══════════════════════════════════════════════════════
+// MACHINE STATUS (operator)
+// ═══════════════════════════════════════════════════════
+function MachineStatusTab({user,machines,machineIssues,reportIssue,resolveIssue}){
+  const [reporting,setReporting]=useState(null);
+  const [issueType,setIssueType]=useState("repair");
+  const [note,setNote]=useState("");
+
+  const submit=(machineName)=>{
+    reportIssue(machineName,issueType,note.trim());
+    setReporting(null);setNote("");
+  };
+
+  return(
+    <div style={{padding:"14px 16px"}}>
+      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Machine Status</div>
+      {machines.filter(m=>m.active).map(m=>{
+        const issue=machineIssues[m.name];
+        const isReporting=reporting===m.name;
+        return(
+          <div key={m.id} style={card(issue?(issue.status==="down"?C.red:C.amber):C.green)}>
+            <div style={{display:"flex",alignItems:"center",gap:12}}>
+              <div style={{width:38,height:38,borderRadius:8,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+                <i className="ti ti-robot" style={{fontSize:18,color:issue?(issue.status==="down"?C.red:C.amber):C.green}}/>
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:14,color:C.text,fontWeight:700}}>{m.name}</div>
+                <span style={badge(issue?issue.status:"run")}>{issue?(issue.status==="down"?"Down":"Needs Repair"):"Running"}</span>
+              </div>
+              {!issue&&!isReporting&&(
+                <button style={btn("outline",false,true)} onClick={()=>{setReporting(m.name);setIssueType("repair");setNote("");}}>
+                  <i className="ti ti-alert-triangle"/> Report
+                </button>
+              )}
+              {issue&&(
+                <button style={btn("success",false,true)} onClick={()=>resolveIssue(m.name)}>
+                  <i className="ti ti-check"/> Running Again
+                </button>
+              )}
+            </div>
+            {issue&&(
+              <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,fontSize:11,color:C.muted}}>
+                {issue.reason&&<div style={{color:C.text,marginBottom:4}}>{issue.reason}</div>}
+                <div>Reported by <span style={{color:C.text}}>{issue.reportedBy}</span> · {fmtDate(issue.reportedAt)}</div>
+              </div>
+            )}
+            {isReporting&&(
+              <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+                <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>What is wrong?</div>
+                <div style={{display:"flex",gap:8,marginBottom:12}}>
+                  <button style={btn(issueType==="repair"?"primary":"outline",true)} onClick={()=>setIssueType("repair")}>Needs Repair</button>
+                  <button style={btn(issueType==="down"?"danger":"outline",true)} onClick={()=>setIssueType("down")}>Machine Down</button>
+                </div>
+                <input style={{...inp(),marginBottom:10}} value={note} onChange={e=>setNote(e.target.value)} placeholder="Describe the issue (optional)"/>
+                <div style={{display:"flex",gap:8}}>
+                  <button style={btn(issueType==="down"?"danger":"primary",true)} onClick={()=>submit(m.name)}>
+                    <i className="ti ti-send"/> Submit Report
+                  </button>
+                  <button style={btn("outline",false,true)} onClick={()=>setReporting(null)}>Cancel</button>
+                </div>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
 // HISTORY (operator)
 // ═══════════════════════════════════════════════════════
 function HistoryTab({user,jobs}){
@@ -589,7 +730,7 @@ function HistoryTab({user,jobs}){
 // ═══════════════════════════════════════════════════════
 // ADMIN DASHBOARD
 // ═══════════════════════════════════════════════════════
-function AdminDash({jobs}){
+function AdminDash({jobs,machineIssues,downtimeLog}){
   const done=jobs.filter(j=>j.status==="done"); const active=jobs.filter(j=>j.status!=="done");
   const totalPieces=done.reduce((s,j)=>s+j.pieces,0);
   const avgRun=done.length?(done.reduce((s,j)=>s+j.runSec,0)/done.length/60).toFixed(1):0;
@@ -621,6 +762,41 @@ function AdminDash({jobs}){
         ))}</>}
       {Object.keys(opMap).length>0&&<><div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",margin:"16px 0 10px"}}>Operator Summary</div>
         <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}><thead><tr>{["Operator","Jobs","Pieces","Avg Run"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead><tbody>{Object.entries(opMap).map(([n,d])=><tr key={n}><td style={td}>{n}</td><td style={td}>{d.jobs}</td><td style={td}>{d.pieces}</td><td style={td}>{fmtHM(Math.round(d.run/d.jobs))}</td></tr>)}</tbody></table></div></>}
+
+      {Object.keys(machineIssues).length>0&&<>
+        <div style={{fontSize:10,color:C.red,letterSpacing:2,textTransform:"uppercase",margin:"16px 0 10px"}}><i className="ti ti-alert-triangle"/> Current Machine Issues</div>
+        {Object.entries(machineIssues).map(([name,issue])=>(
+          <div key={name} style={card(issue.status==="down"?C.red:C.amber)}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div><div style={{fontSize:13,color:C.text,fontWeight:700}}>{name}</div>
+                <span style={badge(issue.status)}>{issue.status==="down"?"Down":"Needs Repair"}</span>
+              </div>
+              <div style={{textAlign:"right",fontSize:11,color:C.muted}}>
+                <div>By {issue.reportedBy}</div>
+                <div>{fmtDate(issue.reportedAt)}</div>
+              </div>
+            </div>
+            {issue.reason&&<div style={{marginTop:8,fontSize:11,color:C.text}}>{issue.reason}</div>}
+          </div>
+        ))}
+      </>}
+
+      {downtimeLog.length>0&&<>
+        <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",margin:"16px 0 10px"}}>Downtime Log</div>
+        <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+          <thead><tr>{["Machine","Type","Duration","Reported By","Resolved By","Date"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+          <tbody>{[...downtimeLog].reverse().map(d=>(
+            <tr key={d.id}>
+              <td style={td}>{d.machineName}</td>
+              <td style={td}><span style={badge(d.status)}>{d.status==="down"?"Down":"Repair"}</span></td>
+              <td style={{...td,color:C.amber}}>{fmtHM(d.downtimeSec)}</td>
+              <td style={td}>{d.reportedBy}</td>
+              <td style={td}>{d.resolvedBy}</td>
+              <td style={{...td,color:C.muted,fontSize:10}}>{fmtDate(d.resolvedAt)}</td>
+            </tr>
+          ))}</tbody>
+        </table></div>
+      </>}
     </div>
   );
 }
