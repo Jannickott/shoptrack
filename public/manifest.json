@@ -1,0 +1,18 @@
+{
+  "name": "ShopTrack",
+  "short_name": "ShopTrack",
+  "description": "Shop floor job tracking",
+  "display": "standalone",
+  "orientation": "any",
+  "start_url": "/",
+  "background_color": "#151e2b",
+  "theme_color": "#f0a500",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
