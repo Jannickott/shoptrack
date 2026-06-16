@@ -67,6 +67,67 @@ function scheduleBackup() {
 
 scheduleBackup();
 
+// ── Server-side auto-pause ────────────────────────────────
+// Runs every 30 seconds. If any user has an autoPauseTime matching the
+// current HH:MM, their active jobs are paused and forcedLogoutAt is set.
+// This works even when no browser tab is open.
+function runAutoPause() {
+  if (!fs.existsSync(DATA_FILE)) return;
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    const now  = new Date();
+    const hhmm = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+
+    let changed = false;
+
+    (data.users || []).forEach(u => {
+      if (!u.autoPauseTime || u.autoPauseTime !== hhmm) return;
+      // Avoid firing twice in the same minute
+      if (u.lastAutoPausedAt) {
+        const last = new Date(u.lastAutoPausedAt);
+        const lastHhmm = `${String(last.getHours()).padStart(2,"0")}:${String(last.getMinutes()).padStart(2,"0")}`;
+        if (lastHhmm === hhmm && last.toDateString() === now.toDateString()) return;
+      }
+
+      const nowMs = Date.now();
+      console.log(`  ⏱  Auto-pause: pausing jobs for ${u.name} at ${hhmm}`);
+
+      // Pause all active jobs belonging to this operator
+      data.jobs = (data.jobs || []).map(j => {
+        if (j.operatorId !== u.id || j.status === "done" || j.logoutPaused) return j;
+        // Activate night mode countdown if armed
+        if (j.nightMode && j.nightModeDuration && !j.nightModeEndsAt)
+          return { ...j, nightModeEndsAt: nowMs + j.nightModeDuration * 1000, lastModifiedAt: nowMs };
+        // Freeze the timer
+        const setupSec  = (j.setupSec  || 0) + (j.status === "setup"       && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
+        const runSec    = (j.runSec    || 0) + (j.status === "run"          && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
+        const setupSec2 = (j.setupSec2 || 0) + (j.status === "side2_setup" && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
+        const runSec2   = (j.runSec2   || 0) + (j.status === "side2_run"   && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
+        return { ...j, logoutPaused: true, setupSec, runSec, setupSec2, runSec2, phaseStartedAt: null, lastModifiedAt: nowMs };
+      });
+
+      // Mark user as force-logged-out so browsers detect it on next poll
+      data.users = data.users.map(x =>
+        x.id === u.id ? { ...x, forcedLogoutAt: nowMs, lastAutoPausedAt: nowMs } : x
+      );
+
+      changed = true;
+    });
+
+    if (changed) {
+      const tmp = DATA_FILE + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+      fs.renameSync(tmp, DATA_FILE);
+      console.log(`  ✓ Auto-pause complete — data saved.`);
+    }
+  } catch (e) {
+    console.error("  ✗ Auto-pause error:", e.message);
+  }
+}
+
+// Run every 30 seconds so we never miss a minute
+setInterval(runAutoPause, 30 * 1000);
+
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 
