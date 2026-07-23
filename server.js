@@ -128,6 +128,54 @@ function runAutoPause() {
 // Run every 30 seconds so we never miss a minute
 setInterval(runAutoPause, 30 * 1000);
 
+// ── Server-side machine downtime counter ──────────────────
+// Runs every 30 seconds. Increments downtimeSec on active machine issues
+// only during work hours — keeps running even when all browsers are closed.
+let lastDowntimeTickAt = Date.now();
+function runDowntimeTick() {
+  if (!fs.existsSync(DATA_FILE)) return;
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    if (!data.machineIssues || Object.keys(data.machineIssues).length === 0) {
+      lastDowntimeTickAt = Date.now();
+      return;
+    }
+
+    const now    = new Date();
+    const hhmm   = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+    const wh     = data.workHours || {};
+    const DAYS   = ["sun","mon","tue","wed","thu","fri","sat"];
+    const dayKey = DAYS[now.getDay()];
+    const dh     = wh[dayKey] || null;
+    const inWork = !!(dh && dh.enabled && hhmm >= dh.start && hhmm < dh.end);
+
+    const elapsedSec = Math.round((Date.now() - lastDowntimeTickAt) / 1000);
+    lastDowntimeTickAt = Date.now();
+
+    if (!inWork) return; // outside work hours — don't count
+
+    let changed = false;
+    Object.keys(data.machineIssues).forEach(k => {
+      data.machineIssues[k] = {
+        ...data.machineIssues[k],
+        downtimeSec: (data.machineIssues[k].downtimeSec || 0) + elapsedSec,
+        counting: true,
+      };
+      changed = true;
+    });
+
+    if (changed) {
+      const tmp = DATA_FILE + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+      fs.renameSync(tmp, DATA_FILE);
+    }
+  } catch (e) {
+    console.error("  ✗ Downtime tick error:", e.message);
+  }
+}
+
+setInterval(runDowntimeTick, 30 * 1000);
+
 app.use(cors());
 app.use(express.json({ limit: "25mb" }));
 

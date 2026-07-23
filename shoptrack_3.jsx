@@ -323,10 +323,8 @@ export default function App(){
         return changed?next:prev;
       });
       setMachineIssues(prev=>{
-        const n=new Date();
-        const hhmm=`${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`;
         const wh=workHoursRef.current;
-        const inWork=hhmm>=wh.start&&hhmm<wh.end;
+        const inWork=isInWorkHoursNow(wh);
         const updated={...prev};
         let changed=false;
         Object.keys(updated).forEach(k=>{
