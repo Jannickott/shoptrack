@@ -167,6 +167,7 @@ export default function App(){
   const [downtimeLog,setDowntimeLog]   =useState([]);
   const [tools,      setTools]         =useState([]);
   const [toolLog,    setToolLog]       =useState([]);
+  const [cabinets,   setCabinets]      =useState([]);
 
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
@@ -197,6 +198,7 @@ export default function App(){
           if(data.machineIssues)setMachineIssues(data.machineIssues);
           if(data.tools)        setTools(data.tools);
           if(data.toolLog)      setToolLog(data.toolLog);
+          if(data.cabinets)     setCabinets(data.cabinets);
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
             workHours:data.workHours,
@@ -205,6 +207,7 @@ export default function App(){
             downtimeLog:data.downtimeLog,
             tools:data.tools,
             toolLog:data.toolLog,
+            cabinets:data.cabinets,
           };
         }
       })
@@ -217,7 +220,7 @@ export default function App(){
   const lastServerRef=useRef({});
   const dataLoadedRef=useRef(false); // prevents saving before server data is loaded
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog};
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets};
   },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog]);
 
   // Save to server every 3 seconds — only after data has been loaded
@@ -273,8 +276,9 @@ export default function App(){
         if(data.downtimeLog&&s(data.downtimeLog)!==s(last.downtimeLog))setDowntimeLog(data.downtimeLog);
         if(data.tools      &&s(data.tools)      !==s(last.tools))      setTools(data.tools);
         if(data.toolLog    &&s(data.toolLog)    !==s(last.toolLog))    setToolLog(data.toolLog);
+        if(data.cabinets   &&s(data.cabinets)   !==s(last.cabinets))   setCabinets(data.cabinets);
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets};
       }).catch(()=>{});
     },5000);
     return()=>clearInterval(t);
@@ -514,13 +518,13 @@ export default function App(){
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
-      {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} saveNow={saveNow}/>}
+      {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
-      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow}/>}
+      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
     </div>
@@ -2477,7 +2481,7 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues}){
 // ═══════════════════════════════════════════════════════
 // MANAGE TAB
 // ═══════════════════════════════════════════════════════
-function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,tools,setTools,toolLog,saveNow}){
+function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,tools,setTools,toolLog,cabinets,setCabinets,saveNow}){
   const [view,setView]=useState("operators");
   return(
     <div style={{padding:"14px 16px"}}>
@@ -2485,12 +2489,174 @@ function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,t
         <button style={tag(view==="operators")} onClick={()=>setView("operators")}><i className="ti ti-users"/> Operators</button>
         <button style={tag(view==="machines")}  onClick={()=>setView("machines")} ><i className="ti ti-robot"/> Machines</button>
         <button style={tag(view==="tools")}     onClick={()=>setView("tools")}    ><i className="ti ti-package"/> Tools</button>
+        <button style={tag(view==="cabinets")}  onClick={()=>setView("cabinets")} ><i className="ti ti-archive"/> Cabinets</button>
         <button style={tag(view==="settings")}  onClick={()=>setView("settings")} ><i className="ti ti-adjustments"/> Settings</button>
       </div>
       {view==="operators"&&<ManageOperators users={users} setUsers={setUsers} machines={machines}/>}
       {view==="machines" &&<ManageMachines  machines={machines} setMachines={setMachines}/>}
-      {view==="tools"    &&<ManageTools     tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow} users={users} machines={machines}/>}
+      {view==="tools"    &&<ManageTools     tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets}/>}
+      {view==="cabinets" &&<ManageCabinets  cabinets={cabinets} setCabinets={setCabinets} saveNow={saveNow}/>}
       {view==="settings" &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours}/>}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// MANAGE CABINETS — admin configures cabinets & drawers
+// ═══════════════════════════════════════════════════════
+function ManageCabinets({cabinets,setCabinets,saveNow}){
+  const [view,setView]=useState("list"); // "list"|"cabinet"|"drawer"
+  const [editCabId,setEditCabId]=useState(null);
+  const [cabForm,setCabForm]=useState({name:""});
+  const [editDrawer,setEditDrawer]=useState(null); // {cabinetId, drawerId|null}
+  const [drawerForm,setDrawerForm]=useState({number:"",label:"",rows:6,cols:7});
+  const [errs,setErrs]=useState({});
+
+  const openAddCabinet=()=>{setCabForm({name:""});setEditCabId(null);setErrs({});setView("cabinet");};
+  const openEditCabinet=c=>{setCabForm({name:c.name});setEditCabId(c.id);setErrs({});setView("cabinet");};
+  const saveCabinet=()=>{
+    if(!cabForm.name.trim()){setErrs({name:"Required"});return;}
+    const now=Date.now();
+    if(editCabId){
+      setCabinets(prev=>prev.map(c=>c.id===editCabId?{...c,name:cabForm.name.trim()}:c));
+    } else {
+      setCabinets(prev=>[...prev,{id:now,name:cabForm.name.trim(),drawers:[]}]);
+    }
+    setView("list");saveNow&&saveNow();
+  };
+  const deleteCabinet=id=>{
+    if(!window.confirm("Delete this cabinet and all its drawers?")) return;
+    setCabinets(prev=>prev.filter(c=>c.id!==id));
+    saveNow&&saveNow();
+  };
+
+  const openAddDrawer=cabId=>{setDrawerForm({number:"",label:"",rows:6,cols:7});setEditDrawer({cabinetId:cabId,drawerId:null});setErrs({});setView("drawer");};
+  const openEditDrawer=(cabId,d)=>{setDrawerForm({number:d.number,label:d.label||"",rows:d.rows,cols:d.cols});setEditDrawer({cabinetId:cabId,drawerId:d.id});setErrs({});setView("drawer");};
+  const saveDrawer=()=>{
+    const e={};
+    if(!String(drawerForm.number).trim()) e.number="Required";
+    if(!drawerForm.rows||drawerForm.rows<1||drawerForm.rows>26) e.rows="1–26";
+    if(!drawerForm.cols||drawerForm.cols<1||drawerForm.cols>20) e.cols="1–20";
+    if(Object.keys(e).length){setErrs(e);return;}
+    const now=Date.now();
+    const {cabinetId,drawerId}=editDrawer;
+    setCabinets(prev=>prev.map(c=>{
+      if(c.id!==cabinetId) return c;
+      const drawers=drawerId
+        ?c.drawers.map(d=>d.id===drawerId?{...d,...drawerForm,rows:parseInt(drawerForm.rows),cols:parseInt(drawerForm.cols),number:String(drawerForm.number).trim()}:d)
+        :[...(c.drawers||[]),{id:now,...drawerForm,rows:parseInt(drawerForm.rows),cols:parseInt(drawerForm.cols),number:String(drawerForm.number).trim()}];
+      return {...c,drawers};
+    }));
+    setView("list");saveNow&&saveNow();
+  };
+  const deleteDrawer=(cabId,drawerId)=>{
+    setCabinets(prev=>prev.map(c=>c.id===cabId?{...c,drawers:(c.drawers||[]).filter(d=>d.id!==drawerId)}:c));
+    saveNow&&saveNow();
+  };
+
+  if(view==="cabinet") return(
+    <div>
+      <button style={{...btn("outline",false,true),marginBottom:14,display:"flex",alignItems:"center",gap:6}} onClick={()=>setView("list")}><i className="ti ti-arrow-left"/> Back</button>
+      <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>{editCabId?"Edit Cabinet":"Add Cabinet"}</div>
+      <div style={{marginBottom:12}}>
+        <label style={label}>Cabinet Name *</label>
+        <input style={{...inp(errs.name)}} value={cabForm.name} onChange={e=>setCabForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Cabinet A or Main Tool Cabinet"/>
+        {errs.name&&<div style={errMsg}>{errs.name}</div>}
+      </div>
+      <button style={btn("success",true)} onClick={saveCabinet}><i className="ti ti-check"/> {editCabId?"Save Changes":"Add Cabinet"}</button>
+    </div>
+  );
+
+  if(view==="drawer") return(
+    <div>
+      <button style={{...btn("outline",false,true),marginBottom:14,display:"flex",alignItems:"center",gap:6}} onClick={()=>setView("list")}><i className="ti ti-arrow-left"/> Back</button>
+      <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>{editDrawer?.drawerId?"Edit Drawer":"Add Drawer"}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div>
+          <label style={label}>Drawer Number *</label>
+          <input style={inp(errs.number)} value={drawerForm.number} onChange={e=>setDrawerForm(p=>({...p,number:e.target.value}))} placeholder="e.g. 1 or A"/>
+          {errs.number&&<div style={errMsg}>{errs.number}</div>}
+        </div>
+        <div>
+          <label style={label}>Label (optional)</label>
+          <input style={inp()} value={drawerForm.label} onChange={e=>setDrawerForm(p=>({...p,label:e.target.value}))} placeholder="e.g. Turning Inserts"/>
+        </div>
+      </div>
+      <div style={{marginBottom:14}}>
+        <label style={label}>Grid Size</label>
+        <div style={{background:C.raised,borderRadius:10,padding:"14px",marginTop:6}}>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+            <div>
+              <label style={{...label,marginBottom:4}}>Rows (A–?)</label>
+              <input type="number" min="1" max="26" style={{...inp(errs.rows),textAlign:"center",fontSize:16,color:C.amber}} value={drawerForm.rows} onChange={e=>setDrawerForm(p=>({...p,rows:e.target.value,rows_changed:true}))}/>
+              {errs.rows&&<div style={errMsg}>{errs.rows}</div>}
+              <div style={{fontSize:9,color:C.muted,marginTop:3,textAlign:"center"}}>A–{String.fromCharCode(64+(parseInt(drawerForm.rows)||1))}</div>
+            </div>
+            <div>
+              <label style={{...label,marginBottom:4}}>Columns (1–?)</label>
+              <input type="number" min="1" max="20" style={{...inp(errs.cols),textAlign:"center",fontSize:16,color:C.amber}} value={drawerForm.cols} onChange={e=>setDrawerForm(p=>({...p,cols:e.target.value}))}/>
+              {errs.cols&&<div style={errMsg}>{errs.cols}</div>}
+              <div style={{fontSize:9,color:C.muted,marginTop:3,textAlign:"center"}}>1–{parseInt(drawerForm.cols)||1}</div>
+            </div>
+          </div>
+          {(()=>{
+            const r=Math.min(Math.max(parseInt(drawerForm.rows)||1,1),26);
+            const c=Math.min(Math.max(parseInt(drawerForm.cols)||1,1),20);
+            const rows=Array.from({length:r},(_,i)=>String.fromCharCode(65+i));
+            const cols=Array.from({length:c},(_,i)=>i+1);
+            return(
+              <div style={{overflowX:"auto"}}>
+                <div style={{display:"grid",gridTemplateColumns:`16px repeat(${c},18px)`,gap:2,marginBottom:2,minWidth:"fit-content"}}>
+                  <div/>{cols.map(n=><div key={n} style={{textAlign:"center",fontSize:7,color:C.muted}}>{n}</div>)}
+                </div>
+                {rows.map(rv=>(
+                  <div key={rv} style={{display:"grid",gridTemplateColumns:`16px repeat(${c},18px)`,gap:2,marginBottom:2,minWidth:"fit-content"}}>
+                    <div style={{fontSize:7,color:C.muted,display:"flex",alignItems:"center",justifyContent:"center"}}>{rv}</div>
+                    {cols.map(n=><div key={n} style={{width:18,height:18,borderRadius:3,background:"rgba(255,255,255,.07)",border:"1px solid rgba(255,255,255,.1)"}}/>)}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
+          <div style={{fontSize:10,color:C.muted,textAlign:"center",marginTop:8}}>{(parseInt(drawerForm.rows)||1)*(parseInt(drawerForm.cols)||1)} positions total</div>
+        </div>
+      </div>
+      <button style={btn("success",true)} onClick={saveDrawer}><i className="ti ti-check"/> {editDrawer?.drawerId?"Save Changes":"Add Drawer"}</button>
+    </div>
+  );
+
+  return(
+    <div>
+      <button style={{...btn("primary",false,true),marginBottom:14}} onClick={openAddCabinet}><i className="ti ti-plus"/> Add Cabinet</button>
+      {(cabinets||[]).length===0&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No cabinets yet. Add one to start organising your tools.</div>}
+      {(cabinets||[]).map(cab=>(
+        <div key={cab.id} style={{...card(),marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+            <i className="ti ti-archive" style={{fontSize:16,color:C.amber,flexShrink:0}}/>
+            <div style={{flex:1,fontSize:14,color:C.text,fontWeight:700}}>{cab.name}</div>
+            <button style={{...btn("outline",false,true),padding:"6px 8px"}} onClick={()=>openEditCabinet(cab)}><i className="ti ti-edit"/></button>
+            <button style={{...btn("danger",false,true),padding:"6px 8px"}} onClick={()=>deleteCabinet(cab.id)}><i className="ti ti-trash"/></button>
+          </div>
+          <div style={{paddingLeft:6}}>
+            {(cab.drawers||[]).length===0&&<div style={{fontSize:11,color:C.muted,marginBottom:8}}>No drawers yet</div>}
+            {(cab.drawers||[]).map(d=>{
+              const rows=Array.from({length:d.rows},(_,i)=>String.fromCharCode(65+i));
+              const colCount=d.cols;
+              return(
+                <div key={d.id} style={{display:"flex",alignItems:"center",gap:8,padding:"7px 10px",background:C.raised,borderRadius:8,marginBottom:6}}>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:12,color:C.text,fontWeight:600}}>Drawer {d.number}{d.label?<span style={{color:C.muted,fontWeight:400}}> — {d.label}</span>:""}</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:2}}>Grid: A–{String.fromCharCode(64+d.rows)} × 1–{d.cols} ({d.rows*d.cols} positions)</div>
+                  </div>
+                  <button style={{...btn("outline",false,true),padding:"5px 7px",fontSize:11}} onClick={()=>openEditDrawer(cab.id,d)}><i className="ti ti-edit"/></button>
+                  <button style={{...btn("danger",false,true),padding:"5px 7px",fontSize:11}} onClick={()=>deleteDrawer(cab.id,d.id)}><i className="ti ti-trash"/></button>
+                </div>
+              );
+            })}
+            <button style={{...btn("outline",false,true),marginTop:4,fontSize:11}} onClick={()=>openAddDrawer(cab.id)}><i className="ti ti-plus"/> Add Drawer</button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -2840,7 +3006,7 @@ function ManageMachines({machines,setMachines}){
 // ═══════════════════════════════════════════════════════
 // TOOLS TAB — operator view
 // ═══════════════════════════════════════════════════════
-function ToolsTab({user,tools,setTools,toolLog,setToolLog,saveNow}){
+function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
   const [search,setSearch]=useState("");
   const [selectedId,setSelectedId]=useState(null);
   const [takeQty,setTakeQty]=useState(1);
@@ -2926,32 +3092,40 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,saveNow}){
               </div>
             )}
             {selectedTool.description&&<div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.55}}>{selectedTool.description}</div>}
-            {(selectedTool.drawer||selectedTool.drawerPosition||selectedTool.location)&&(
-              <div style={{background:C.raised,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
-                <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Location</div>
-                {selectedTool.drawer&&<div style={{fontSize:14,color:C.text,fontWeight:600,marginBottom:selectedTool.drawerPosition?10:0}}>{selectedTool.drawer}</div>}
-                {selectedTool.drawerPosition?(
-                  <div style={{display:"flex",alignItems:"flex-start",gap:14}}>
-                    <div>
-                      <div style={{display:"grid",gridTemplateColumns:"16px repeat(7,20px)",gap:3,marginBottom:3}}>
-                        <div/>
-                        {DRAWER_COLS.map(c=><div key={c} style={{textAlign:"center",fontSize:8,color:C.muted,fontWeight:600}}>{c}</div>)}
-                      </div>
-                      {DRAWER_ROWS.map(r=>(
-                        <div key={r} style={{display:"grid",gridTemplateColumns:"16px repeat(7,20px)",gap:3,marginBottom:3}}>
-                          <div style={{fontSize:8,color:C.muted,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>
-                          {DRAWER_COLS.map(c=>{const pos=`${r}${c}`;const active=selectedTool.drawerPosition===pos;return <div key={c} style={{width:20,height:20,borderRadius:3,background:active?C.amber:"rgba(255,255,255,.06)",border:`1px solid ${active?C.amber:"rgba(255,255,255,.08)"}`}}/>;  })}
+            {(()=>{
+              const cab=(cabinets||[]).find(c=>String(c.id)===String(selectedTool.cabinetId));
+              const drawer=cab?(cab.drawers||[]).find(d=>String(d.id)===String(selectedTool.drawerId)):null;
+              const cabinetName=cab?.name||(selectedTool.drawer||null);
+              const rows=drawer?Array.from({length:drawer.rows},(_,i)=>String.fromCharCode(65+i)):DRAWER_ROWS;
+              const cols=drawer?Array.from({length:drawer.cols},(_,i)=>i+1):DRAWER_COLS;
+              if(!cabinetName&&!selectedTool.drawerPosition&&!selectedTool.location) return null;
+              return(
+                <div style={{background:C.raised,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+                  <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Location</div>
+                  {cabinetName&&<div style={{fontSize:14,color:C.text,fontWeight:600,lineHeight:1.3,marginBottom:2}}>{cabinetName}</div>}
+                  {drawer&&<div style={{fontSize:11,color:C.muted,marginBottom:selectedTool.drawerPosition?10:0}}>Drawer {drawer.number}{drawer.label?` — ${drawer.label}`:""}</div>}
+                  {selectedTool.drawerPosition?(
+                    <div style={{display:"flex",alignItems:"flex-start",gap:14}}>
+                      <div>
+                        <div style={{display:"grid",gridTemplateColumns:`16px repeat(${cols.length},20px)`,gap:3,marginBottom:3}}>
+                          <div/>{cols.map(c=><div key={c} style={{textAlign:"center",fontSize:8,color:C.muted,fontWeight:600}}>{c}</div>)}
                         </div>
-                      ))}
+                        {rows.map(r=>(
+                          <div key={r} style={{display:"grid",gridTemplateColumns:`16px repeat(${cols.length},20px)`,gap:3,marginBottom:3}}>
+                            <div style={{fontSize:8,color:C.muted,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>
+                            {cols.map(c=>{const pos=`${r}${c}`;const active=selectedTool.drawerPosition===pos;return <div key={c} style={{width:20,height:20,borderRadius:3,background:active?C.amber:"rgba(255,255,255,.06)",border:`1px solid ${active?C.amber:"rgba(255,255,255,.08)"}`}}/>;  })}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{paddingTop:6}}>
+                        <div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Position</div>
+                        <div style={{fontSize:34,fontWeight:700,color:C.amber,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{selectedTool.drawerPosition}</div>
+                      </div>
                     </div>
-                    <div style={{paddingTop:6}}>
-                      <div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Position</div>
-                      <div style={{fontSize:34,fontWeight:700,color:C.amber,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{selectedTool.drawerPosition}</div>
-                    </div>
-                  </div>
-                ):<div style={{fontSize:12,color:C.text}}>{selectedTool.location}</div>}
-              </div>
-            )}
+                  ):(selectedTool.location&&<div style={{fontSize:12,color:C.text}}>{selectedTool.location}</div>)}
+                </div>
+              );
+            })()}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
               <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>In Stock</div><div style={{fontSize:18,fontWeight:700,color:selectedTool.quantity<=(selectedTool.minQuantity||0)?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.quantity}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> pcs</span></div></div>
               {selectedTool.recommendedSpeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Speed</div><div style={{fontSize:12,color:C.text}}>{selectedTool.recommendedSpeed}</div></div>}
@@ -2980,13 +3154,13 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,saveNow}){
 // ═══════════════════════════════════════════════════════
 // MANAGE TOOLS — admin view
 // ═══════════════════════════════════════════════════════
-function ManageTools({tools,setTools,toolLog,saveNow,users,machines}){
+function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
   const [subview,setSubview]=useState("list");
   const [editId,setEditId]=useState(null);
   const [restockId,setRestockId]=useState(null);
   const [restockQty,setRestockQty]=useState("");
   const [selectedId,setSelectedId]=useState(null);
-  const blank={name:"",department:"",drawer:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
+  const blank={name:"",department:"",cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
   const photoRef=useRef();
@@ -3005,7 +3179,8 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines}){
   const save=()=>{
     const e={};
     if(!form.name.trim()) e.name="Required";
-    if(!form.drawer.trim()) e.drawer="Required";
+    if(!form.cabinetId) e.cabinetId="Select a cabinet";
+    if(!form.drawerId)  e.drawerId ="Select a drawer";
     if(form.quantity===""||isNaN(parseInt(form.quantity))) e.quantity="Required";
     if(Object.keys(e).length){setErrs(e);return;}
     const now=Date.now();
@@ -3047,35 +3222,61 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines}){
         <div style={{fontSize:10,color:C.muted,marginTop:4}}>Leave blank to show to all operators</div>
       </div>
       <div style={{marginBottom:10}}>
-        <label style={label}>Cabinet / Drawer Name</label>
-        <input style={fi("drawer")} value={form.drawer||""} onChange={e=>setForm(p=>({...p,drawer:e.target.value}))} placeholder="e.g. Cabinet 1 or Tool Drawer A"/>
-        {errs.drawer&&<div style={errMsg}>{errs.drawer}</div>}
+        <label style={label}>Cabinet *</label>
+        {(cabinets||[]).length===0
+          ?<div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:8,padding:"10px 12px"}}>No cabinets configured yet — go to <strong>Cabinets</strong> tab to add one first.</div>
+          :<select style={{...fi("cabinetId"),color:form.cabinetId?C.text:C.muted}} value={form.cabinetId} onChange={e=>setForm(p=>({...p,cabinetId:e.target.value,drawerId:"",drawerPosition:""}))}>
+            <option value="">Select cabinet…</option>
+            {(cabinets||[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>}
+        {errs.cabinetId&&<div style={errMsg}>{errs.cabinetId}</div>}
       </div>
-      <div style={{marginBottom:16}}>
-        <label style={label}>Position in Drawer</label>
-        <div style={{marginTop:8,background:C.raised,borderRadius:10,padding:"12px 10px"}}>
-          <div style={{display:"grid",gridTemplateColumns:"18px repeat(7,1fr)",gap:4,marginBottom:4}}>
-            <div/>
-            {DRAWER_COLS.map(c=><div key={c} style={{textAlign:"center",fontSize:9,color:C.muted,fontWeight:600}}>{c}</div>)}
+      {form.cabinetId&&(()=>{
+        const cab=(cabinets||[]).find(c=>String(c.id)===String(form.cabinetId));
+        const drawers=cab?.drawers||[];
+        return(
+          <div style={{marginBottom:10}}>
+            <label style={label}>Drawer *</label>
+            {drawers.length===0
+              ?<div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:8,padding:"10px 12px"}}>This cabinet has no drawers — go to Cabinets to add drawers.</div>
+              :<select style={{...fi("drawerId"),color:form.drawerId?C.text:C.muted}} value={form.drawerId} onChange={e=>setForm(p=>({...p,drawerId:e.target.value,drawerPosition:""}))}>
+                <option value="">Select drawer…</option>
+                {drawers.map(d=><option key={d.id} value={d.id}>Drawer {d.number}{d.label?` — ${d.label}`:""} ({String.fromCharCode(64+d.rows)}1–{d.cols})</option>)}
+              </select>}
+            {errs.drawerId&&<div style={errMsg}>{errs.drawerId}</div>}
           </div>
-          {DRAWER_ROWS.map(r=>(
-            <div key={r} style={{display:"grid",gridTemplateColumns:"18px repeat(7,1fr)",gap:4,marginBottom:4}}>
-              <div style={{fontSize:9,color:C.muted,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>
-              {DRAWER_COLS.map(c=>{
-                const pos=`${r}${c}`;
-                const on=form.drawerPosition===pos;
-                return(
-                  <div key={c} onClick={()=>setForm(p=>({...p,drawerPosition:on?"":pos}))}
-                    style={{aspectRatio:"1",borderRadius:4,background:on?C.amber:"rgba(255,255,255,.06)",border:`1.5px solid ${on?C.amber:"rgba(255,255,255,.09)"}`,cursor:"pointer",transition:"all .12s"}}/>
-                );
-              })}
+        );
+      })()}
+      {form.cabinetId&&form.drawerId&&(()=>{
+        const cab=(cabinets||[]).find(c=>String(c.id)===String(form.cabinetId));
+        const drawer=(cab?.drawers||[]).find(d=>String(d.id)===String(form.drawerId));
+        if(!drawer) return null;
+        const rows=Array.from({length:drawer.rows},(_,i)=>String.fromCharCode(65+i));
+        const cols=Array.from({length:drawer.cols},(_,i)=>i+1);
+        return(
+          <div style={{marginBottom:16}}>
+            <label style={label}>Position in Drawer</label>
+            <div style={{marginTop:8,background:C.raised,borderRadius:10,padding:"12px 10px"}}>
+              <div style={{display:"grid",gridTemplateColumns:`18px repeat(${drawer.cols},1fr)`,gap:4,marginBottom:4}}>
+                <div/>
+                {cols.map(c=><div key={c} style={{textAlign:"center",fontSize:9,color:C.muted,fontWeight:600}}>{c}</div>)}
+              </div>
+              {rows.map(r=>(
+                <div key={r} style={{display:"grid",gridTemplateColumns:`18px repeat(${drawer.cols},1fr)`,gap:4,marginBottom:4}}>
+                  <div style={{fontSize:9,color:C.muted,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>
+                  {cols.map(c=>{
+                    const pos=`${r}${c}`;const on=form.drawerPosition===pos;
+                    return <div key={c} onClick={()=>setForm(p=>({...p,drawerPosition:on?"":pos}))} style={{aspectRatio:"1",borderRadius:4,background:on?C.amber:"rgba(255,255,255,.06)",border:`1.5px solid ${on?C.amber:"rgba(255,255,255,.09)"}`,cursor:"pointer",transition:"all .12s"}}/>;
+                  })}
+                </div>
+              ))}
+              {form.drawerPosition
+                ?<div style={{fontSize:12,color:C.amber,fontWeight:700,textAlign:"center",marginTop:6,fontFamily:"'Share Tech Mono',monospace",letterSpacing:2}}>Position {form.drawerPosition}</div>
+                :<div style={{fontSize:10,color:C.muted,textAlign:"center",marginTop:6}}>Tap a cell to mark the insert position</div>}
             </div>
-          ))}
-          {form.drawerPosition
-            ?<div style={{fontSize:12,color:C.amber,fontWeight:700,textAlign:"center",marginTop:6,fontFamily:"'Share Tech Mono',monospace",letterSpacing:2}}>Position {form.drawerPosition}</div>
-            :<div style={{fontSize:10,color:C.muted,textAlign:"center",marginTop:6}}>Tap a cell to mark the insert position</div>}
-        </div>
-      </div>
+          </div>
+        );
+      })()}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div>
           <label style={label}>Current Stock (pcs) *</label>
@@ -3232,32 +3433,40 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines}){
               </div>
             )}
             {selectedTool.description&&<div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.55}}>{selectedTool.description}</div>}
-            {(selectedTool.drawer||selectedTool.drawerPosition||selectedTool.location)&&(
-              <div style={{background:C.raised,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
-                <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Location</div>
-                {selectedTool.drawer&&<div style={{fontSize:14,color:C.text,fontWeight:600,marginBottom:selectedTool.drawerPosition?10:0}}>{selectedTool.drawer}</div>}
-                {selectedTool.drawerPosition?(
-                  <div style={{display:"flex",alignItems:"flex-start",gap:14}}>
-                    <div>
-                      <div style={{display:"grid",gridTemplateColumns:"16px repeat(7,20px)",gap:3,marginBottom:3}}>
-                        <div/>
-                        {DRAWER_COLS.map(c=><div key={c} style={{textAlign:"center",fontSize:8,color:C.muted,fontWeight:600}}>{c}</div>)}
-                      </div>
-                      {DRAWER_ROWS.map(r=>(
-                        <div key={r} style={{display:"grid",gridTemplateColumns:"16px repeat(7,20px)",gap:3,marginBottom:3}}>
-                          <div style={{fontSize:8,color:C.muted,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>
-                          {DRAWER_COLS.map(c=>{const pos=`${r}${c}`;const active=selectedTool.drawerPosition===pos;return <div key={c} style={{width:20,height:20,borderRadius:3,background:active?C.amber:"rgba(255,255,255,.06)",border:`1px solid ${active?C.amber:"rgba(255,255,255,.08)"}`}}/>;  })}
+            {(()=>{
+              const cab=(cabinets||[]).find(c=>String(c.id)===String(selectedTool.cabinetId));
+              const drawer=cab?(cab.drawers||[]).find(d=>String(d.id)===String(selectedTool.drawerId)):null;
+              const cabinetName=cab?.name||(selectedTool.drawer||null);
+              const rows=drawer?Array.from({length:drawer.rows},(_,i)=>String.fromCharCode(65+i)):DRAWER_ROWS;
+              const cols=drawer?Array.from({length:drawer.cols},(_,i)=>i+1):DRAWER_COLS;
+              if(!cabinetName&&!selectedTool.drawerPosition&&!selectedTool.location) return null;
+              return(
+                <div style={{background:C.raised,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+                  <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Location</div>
+                  {cabinetName&&<div style={{fontSize:14,color:C.text,fontWeight:600,lineHeight:1.3,marginBottom:2}}>{cabinetName}</div>}
+                  {drawer&&<div style={{fontSize:11,color:C.muted,marginBottom:selectedTool.drawerPosition?10:0}}>Drawer {drawer.number}{drawer.label?` — ${drawer.label}`:""}</div>}
+                  {selectedTool.drawerPosition?(
+                    <div style={{display:"flex",alignItems:"flex-start",gap:14}}>
+                      <div>
+                        <div style={{display:"grid",gridTemplateColumns:`16px repeat(${cols.length},20px)`,gap:3,marginBottom:3}}>
+                          <div/>{cols.map(c=><div key={c} style={{textAlign:"center",fontSize:8,color:C.muted,fontWeight:600}}>{c}</div>)}
                         </div>
-                      ))}
+                        {rows.map(r=>(
+                          <div key={r} style={{display:"grid",gridTemplateColumns:`16px repeat(${cols.length},20px)`,gap:3,marginBottom:3}}>
+                            <div style={{fontSize:8,color:C.muted,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>
+                            {cols.map(c=>{const pos=`${r}${c}`;const active=selectedTool.drawerPosition===pos;return <div key={c} style={{width:20,height:20,borderRadius:3,background:active?C.amber:"rgba(255,255,255,.06)",border:`1px solid ${active?C.amber:"rgba(255,255,255,.08)"}`}}/>;  })}
+                          </div>
+                        ))}
+                      </div>
+                      <div style={{paddingTop:6}}>
+                        <div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Position</div>
+                        <div style={{fontSize:34,fontWeight:700,color:C.amber,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{selectedTool.drawerPosition}</div>
+                      </div>
                     </div>
-                    <div style={{paddingTop:6}}>
-                      <div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Position</div>
-                      <div style={{fontSize:34,fontWeight:700,color:C.amber,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{selectedTool.drawerPosition}</div>
-                    </div>
-                  </div>
-                ):<div style={{fontSize:12,color:C.text}}>{selectedTool.location}</div>}
-              </div>
-            )}
+                  ):(selectedTool.location&&<div style={{fontSize:12,color:C.text}}>{selectedTool.location}</div>)}
+                </div>
+              );
+            })()}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
               {selectedTool.department&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Department</div><div style={{fontSize:12,color:C.blue}}>{selectedTool.department}</div></div>}
               <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>In Stock</div><div style={{fontSize:18,fontWeight:700,color:selectedTool.quantity<=(selectedTool.minQuantity||0)?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.quantity}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> pcs</span></div></div>
