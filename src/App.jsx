@@ -83,6 +83,8 @@ const ISO_MAT=[
   {code:"S",name:"Super Alloys",  color:"#e67e22",bg:"rgba(230,126,34,.18)"},
   {code:"H",name:"Hardened",      color:"#8b5cf6",bg:"rgba(139,92,246,.18)"},
 ];
+const DRAWER_ROWS=["A","B","C","D","E","F"];
+const DRAWER_COLS=[1,2,3,4,5,6,7];
 
 // ─── STYLE HELPERS ────────────────────────────────────────────────────────────
 const card  =(accent)=>({background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"14px 16px",marginBottom:10,borderLeft:accent?`4px solid ${accent}`:`1px solid ${C.border}`});
@@ -2851,9 +2853,6 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,saveNow}){
     return true;
   });
 
-  const byLoc={};
-  visible.forEach(t=>{const loc=t.location||"Other";if(!byLoc[loc])byLoc[loc]=[];byLoc[loc].push(t);});
-  const locs=Object.keys(byLoc).sort();
   const lowCount=visible.filter(t=>t.quantity<=(t.minQuantity||0)).length;
   const selectedTool=selectedId?tools.find(t=>t.id===selectedId):null;
 
@@ -2877,43 +2876,36 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,saveNow}){
       )}
       <div style={{position:"relative",marginBottom:14}}>
         <i className="ti ti-search" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:14,pointerEvents:"none"}}/>
-        <input style={{...inp(),paddingLeft:32}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name, drawer or article number…"/>
+        <input style={{...inp(),paddingLeft:32}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or article number…"/>
       </div>
-      {locs.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools found.</div>}
-      {locs.map(loc=>(
-        <div key={loc} style={{marginBottom:22}}>
-          <div style={{fontSize:9,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
-            <i className="ti ti-box-seam"/> {loc}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-            {byLoc[loc].map(tool=>{
-              const isLow=tool.quantity<=(tool.minQuantity||0);
-              const isOut=tool.quantity===0;
-              const qColor=isOut?C.red:isLow?C.amber:C.green;
-              return(
-                <div key={tool.id} onClick={()=>{setSelectedId(tool.id);setTakeQty(1);}}
-                  style={{background:C.surface,borderRadius:10,border:`1px solid ${isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
-                  <div style={{position:"relative",width:"100%",aspectRatio:"1",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    {tool.photoData
-                      ?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                      :<i className="ti ti-tool" style={{fontSize:28,color:C.muted,opacity:0.3}}/>}
-                    <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:5,padding:"1px 5px",fontSize:11,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.4"}}>{tool.quantity}</div>
-                    {isLow&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"2px 0",textAlign:"center",fontSize:7,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+      {visible.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools found.</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
+        {visible.map(tool=>{
+          const isLow=tool.quantity<=(tool.minQuantity||0);
+          const isOut=tool.quantity===0;
+          const qColor=isOut?C.red:isLow?C.amber:C.green;
+          return(
+            <div key={tool.id} onClick={()=>{setSelectedId(tool.id);setTakeQty(1);}}
+              style={{background:C.surface,borderRadius:10,border:`1px solid ${isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
+              <div style={{position:"relative",width:"100%",aspectRatio:"1",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {tool.photoData
+                  ?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                  :<i className="ti ti-tool" style={{fontSize:28,color:C.muted,opacity:0.3}}/>}
+                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:5,padding:"1px 5px",fontSize:11,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.4"}}>{tool.quantity}</div>
+                {isLow&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"2px 0",textAlign:"center",fontSize:7,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+              </div>
+              <div style={{padding:"7px 7px 9px"}}>
+                <div style={{fontSize:11,color:C.text,fontWeight:700,lineHeight:1.25,marginBottom:4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
+                {Array.isArray(tool.material)&&tool.material.length>0&&(
+                  <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
+                    {tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:8,fontWeight:700,color:m.color,background:m.bg,padding:"1px 4px",borderRadius:3,letterSpacing:.5}}>{code}</span>:null;})}
                   </div>
-                  <div style={{padding:"7px 7px 9px"}}>
-                    <div style={{fontSize:11,color:C.text,fontWeight:700,lineHeight:1.25,marginBottom:4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
-                    {Array.isArray(tool.material)&&tool.material.length>0&&(
-                      <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                        {tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:8,fontWeight:700,color:m.color,background:m.bg,padding:"1px 4px",borderRadius:3,letterSpacing:.5}}>{code}</span>:null;})}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ))}
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       {selectedTool&&(
         <div onClick={e=>{if(e.target===e.currentTarget)closeModal();}}
@@ -2934,8 +2926,33 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,saveNow}){
               </div>
             )}
             {selectedTool.description&&<div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.55}}>{selectedTool.description}</div>}
+            {(selectedTool.drawer||selectedTool.drawerPosition||selectedTool.location)&&(
+              <div style={{background:C.raised,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+                <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Location</div>
+                {selectedTool.drawer&&<div style={{fontSize:14,color:C.text,fontWeight:600,marginBottom:selectedTool.drawerPosition?10:0}}>{selectedTool.drawer}</div>}
+                {selectedTool.drawerPosition?(
+                  <div style={{display:"flex",alignItems:"flex-start",gap:14}}>
+                    <div>
+                      <div style={{display:"grid",gridTemplateColumns:"16px repeat(7,20px)",gap:3,marginBottom:3}}>
+                        <div/>
+                        {DRAWER_COLS.map(c=><div key={c} style={{textAlign:"center",fontSize:8,color:C.muted,fontWeight:600}}>{c}</div>)}
+                      </div>
+                      {DRAWER_ROWS.map(r=>(
+                        <div key={r} style={{display:"grid",gridTemplateColumns:"16px repeat(7,20px)",gap:3,marginBottom:3}}>
+                          <div style={{fontSize:8,color:C.muted,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>
+                          {DRAWER_COLS.map(c=>{const pos=`${r}${c}`;const active=selectedTool.drawerPosition===pos;return <div key={c} style={{width:20,height:20,borderRadius:3,background:active?C.amber:"rgba(255,255,255,.06)",border:`1px solid ${active?C.amber:"rgba(255,255,255,.08)"}`}}/>;  })}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{paddingTop:6}}>
+                      <div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Position</div>
+                      <div style={{fontSize:34,fontWeight:700,color:C.amber,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{selectedTool.drawerPosition}</div>
+                    </div>
+                  </div>
+                ):<div style={{fontSize:12,color:C.text}}>{selectedTool.location}</div>}
+              </div>
+            )}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-              {selectedTool.location&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Location</div><div style={{fontSize:12,color:C.text,fontWeight:600}}>{selectedTool.location}</div></div>}
               <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>In Stock</div><div style={{fontSize:18,fontWeight:700,color:selectedTool.quantity<=(selectedTool.minQuantity||0)?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.quantity}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> pcs</span></div></div>
               {selectedTool.recommendedSpeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Speed</div><div style={{fontSize:12,color:C.text}}>{selectedTool.recommendedSpeed}</div></div>}
               {selectedTool.recommendedFeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Feed</div><div style={{fontSize:12,color:C.text}}>{selectedTool.recommendedFeed}</div></div>}
@@ -2969,7 +2986,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines}){
   const [restockId,setRestockId]=useState(null);
   const [restockQty,setRestockQty]=useState("");
   const [selectedId,setSelectedId]=useState(null);
-  const blank={name:"",department:"",location:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
+  const blank={name:"",department:"",drawer:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
   const photoRef=useRef();
@@ -2988,7 +3005,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines}){
   const save=()=>{
     const e={};
     if(!form.name.trim()) e.name="Required";
-    if(!form.location.trim()) e.location="Required";
+    if(!form.drawer.trim()) e.drawer="Required";
     if(form.quantity===""||isNaN(parseInt(form.quantity))) e.quantity="Required";
     if(Object.keys(e).length){setErrs(e);return;}
     const now=Date.now();
@@ -3030,9 +3047,34 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines}){
         <div style={{fontSize:10,color:C.muted,marginTop:4}}>Leave blank to show to all operators</div>
       </div>
       <div style={{marginBottom:10}}>
-        <label style={label}>Drawer / Location *</label>
-        <input style={fi("location")} value={form.location} onChange={e=>setForm(p=>({...p,location:e.target.value}))} placeholder="e.g. Drawer A3"/>
-        {errs.location&&<div style={errMsg}>{errs.location}</div>}
+        <label style={label}>Cabinet / Drawer Name</label>
+        <input style={fi("drawer")} value={form.drawer||""} onChange={e=>setForm(p=>({...p,drawer:e.target.value}))} placeholder="e.g. Cabinet 1 or Tool Drawer A"/>
+        {errs.drawer&&<div style={errMsg}>{errs.drawer}</div>}
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={label}>Position in Drawer</label>
+        <div style={{marginTop:8,background:C.raised,borderRadius:10,padding:"12px 10px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"18px repeat(7,1fr)",gap:4,marginBottom:4}}>
+            <div/>
+            {DRAWER_COLS.map(c=><div key={c} style={{textAlign:"center",fontSize:9,color:C.muted,fontWeight:600}}>{c}</div>)}
+          </div>
+          {DRAWER_ROWS.map(r=>(
+            <div key={r} style={{display:"grid",gridTemplateColumns:"18px repeat(7,1fr)",gap:4,marginBottom:4}}>
+              <div style={{fontSize:9,color:C.muted,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>
+              {DRAWER_COLS.map(c=>{
+                const pos=`${r}${c}`;
+                const on=form.drawerPosition===pos;
+                return(
+                  <div key={c} onClick={()=>setForm(p=>({...p,drawerPosition:on?"":pos}))}
+                    style={{aspectRatio:"1",borderRadius:4,background:on?C.amber:"rgba(255,255,255,.06)",border:`1.5px solid ${on?C.amber:"rgba(255,255,255,.09)"}`,cursor:"pointer",transition:"all .12s"}}/>
+                );
+              })}
+            </div>
+          ))}
+          {form.drawerPosition
+            ?<div style={{fontSize:12,color:C.amber,fontWeight:700,textAlign:"center",marginTop:6,fontFamily:"'Share Tech Mono',monospace",letterSpacing:2}}>Position {form.drawerPosition}</div>
+            :<div style={{fontSize:10,color:C.muted,textAlign:"center",marginTop:6}}>Tap a cell to mark the insert position</div>}
+        </div>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
         <div>
@@ -3190,8 +3232,33 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines}){
               </div>
             )}
             {selectedTool.description&&<div style={{fontSize:12,color:C.muted,marginBottom:12,lineHeight:1.55}}>{selectedTool.description}</div>}
+            {(selectedTool.drawer||selectedTool.drawerPosition||selectedTool.location)&&(
+              <div style={{background:C.raised,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+                <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Location</div>
+                {selectedTool.drawer&&<div style={{fontSize:14,color:C.text,fontWeight:600,marginBottom:selectedTool.drawerPosition?10:0}}>{selectedTool.drawer}</div>}
+                {selectedTool.drawerPosition?(
+                  <div style={{display:"flex",alignItems:"flex-start",gap:14}}>
+                    <div>
+                      <div style={{display:"grid",gridTemplateColumns:"16px repeat(7,20px)",gap:3,marginBottom:3}}>
+                        <div/>
+                        {DRAWER_COLS.map(c=><div key={c} style={{textAlign:"center",fontSize:8,color:C.muted,fontWeight:600}}>{c}</div>)}
+                      </div>
+                      {DRAWER_ROWS.map(r=>(
+                        <div key={r} style={{display:"grid",gridTemplateColumns:"16px repeat(7,20px)",gap:3,marginBottom:3}}>
+                          <div style={{fontSize:8,color:C.muted,fontWeight:600,display:"flex",alignItems:"center",justifyContent:"center"}}>{r}</div>
+                          {DRAWER_COLS.map(c=>{const pos=`${r}${c}`;const active=selectedTool.drawerPosition===pos;return <div key={c} style={{width:20,height:20,borderRadius:3,background:active?C.amber:"rgba(255,255,255,.06)",border:`1px solid ${active?C.amber:"rgba(255,255,255,.08)"}`}}/>;  })}
+                        </div>
+                      ))}
+                    </div>
+                    <div style={{paddingTop:6}}>
+                      <div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}>Position</div>
+                      <div style={{fontSize:34,fontWeight:700,color:C.amber,fontFamily:"'Share Tech Mono',monospace",lineHeight:1}}>{selectedTool.drawerPosition}</div>
+                    </div>
+                  </div>
+                ):<div style={{fontSize:12,color:C.text}}>{selectedTool.location}</div>}
+              </div>
+            )}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-              {selectedTool.location&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Location</div><div style={{fontSize:12,color:C.text,fontWeight:600}}>{selectedTool.location}</div></div>}
               {selectedTool.department&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Department</div><div style={{fontSize:12,color:C.blue}}>{selectedTool.department}</div></div>}
               <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>In Stock</div><div style={{fontSize:18,fontWeight:700,color:selectedTool.quantity<=(selectedTool.minQuantity||0)?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.quantity}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> pcs</span></div></div>
               <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Reorder Below</div><div style={{fontSize:14,fontWeight:700,color:C.red,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.minQuantity||0}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> pcs</span></div></div>
