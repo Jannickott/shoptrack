@@ -168,6 +168,7 @@ export default function App(){
   const [tools,      setTools]         =useState([]);
   const [toolLog,    setToolLog]       =useState([]);
   const [cabinets,   setCabinets]      =useState([]);
+  const [departments,setDepartments]   =useState([]);
 
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
@@ -199,6 +200,7 @@ export default function App(){
           if(data.tools)        setTools(data.tools);
           if(data.toolLog)      setToolLog(data.toolLog);
           if(data.cabinets)     setCabinets(data.cabinets);
+          if(data.departments)  setDepartments(data.departments);
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
             workHours:data.workHours,
@@ -208,6 +210,7 @@ export default function App(){
             tools:data.tools,
             toolLog:data.toolLog,
             cabinets:data.cabinets,
+            departments:data.departments,
           };
         }
       })
@@ -220,7 +223,7 @@ export default function App(){
   const lastServerRef=useRef({});
   const dataLoadedRef=useRef(false); // prevents saving before server data is loaded
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets};
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments};
   },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog]);
 
   // Save to server every 3 seconds — only after data has been loaded
@@ -277,8 +280,9 @@ export default function App(){
         if(data.tools      &&s(data.tools)      !==s(last.tools))      setTools(data.tools);
         if(data.toolLog    &&s(data.toolLog)    !==s(last.toolLog))    setToolLog(data.toolLog);
         if(data.cabinets   &&s(data.cabinets)   !==s(last.cabinets))   setCabinets(data.cabinets);
+        if(data.departments&&s(data.departments)!==s(last.departments)) setDepartments(data.departments);
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments};
       }).catch(()=>{});
     },5000);
     return()=>clearInterval(t);
@@ -491,25 +495,26 @@ export default function App(){
       {/* NAV */}
       {user.role==="operator"&&(
         <div style={{display:"flex",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-          {[["new","plus","New Job"],["quick","bolt","Quick Entry"],["active","player-play","Active"],["machines","alert-triangle","Machines"],["tools","package","Tools"],["history","list","History"]].map(([t,ic,lb])=>{
-            const userDepts=user.departments||[];
-            const lowTools=tools.filter(tl=>tl.active&&tl.quantity<=tl.minQuantity&&(userDepts.length===0||!tl.department||userDepts.includes(tl.department))).length;
-            return(
+          {[["new","plus","New Job"],["quick","bolt","Quick Entry"],["active","player-play","Active"],["machines","alert-triangle","Machines"],["tools","package","Tools"],["history","list","History"]].map(([t,ic,lb])=>(
             <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
               <i className={`ti ti-${ic}`}/> {lb}
               {t==="active"&&activeCnt>0&&<span style={{background:C.amber,color:"#1a1a1a",borderRadius:20,fontSize:9,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{activeCnt}</span>}
               {t==="machines"&&Object.keys(machineIssues).length>0&&<span style={{background:C.red,color:"white",borderRadius:20,fontSize:9,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{Object.keys(machineIssues).length}</span>}
-              {t==="tools"&&lowTools>0&&<span style={{background:C.red,color:"white",borderRadius:20,fontSize:9,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{lowTools}</span>}
             </button>
-            );
-          })}
+          ))}
         </div>
       )}
       {user.role==="admin"&&(
         <div style={{display:"flex",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-          {[["admin","layout-dashboard","Dashboard"],["alljobs","tool","All Jobs"],["machdata","cpu","Machines"],["reports","chart-bar","Reports"],["manage","settings","Manage"]].map(([t,ic,lb])=>(
-            <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}><i className={`ti ti-${ic}`}/> {lb}</button>
-          ))}
+          {[["admin","layout-dashboard","Dashboard"],["alljobs","tool","All Jobs"],["machdata","cpu","Machines"],["admintools","package","Tools"],["reports","chart-bar","Reports"],["manage","settings","Manage"]].map(([t,ic,lb])=>{
+            const lowCnt=t==="admintools"?tools.filter(tl=>tl.active&&tl.quantity<=(tl.minQuantity||0)).length:0;
+            return(
+              <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
+                <i className={`ti ti-${ic}`}/> {lb}
+                {t==="admintools"&&lowCnt>0&&<span style={{background:C.red,color:"white",borderRadius:20,fontSize:9,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{lowCnt}</span>}
+              </button>
+            );
+          })}
         </div>
       )}
 
@@ -524,7 +529,8 @@ export default function App(){
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
-      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} saveNow={saveNow}/>}
+      {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow}/>}
+      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
     </div>
@@ -1588,7 +1594,7 @@ function DonutChart({title,segments}){
   );
 }
 
-function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,machines}){
+function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,machines,tools}){
   const done=jobs.filter(j=>j.status==="done"); const active=sortActive(jobs.filter(j=>j.status!=="done"));
   const totalPieces=done.reduce((s,j)=>s+j.pieces,0);
   const avgRun=done.length?(done.reduce((s,j)=>s+j.runSec,0)/done.length/60).toFixed(1):0;
@@ -1661,6 +1667,22 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
           ))}
         </div>
       </>}
+      {(()=>{const lowT=(tools||[]).filter(t=>t.active&&t.quantity<=(t.minQuantity||0));if(!lowT.length)return null;return(<>
+        <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${C.amber}40`}}>
+          <i className="ti ti-tool"/> Tools Needing Reorder · {lowT.length}
+        </div>
+        <div style={{marginBottom:16}}>
+          {lowT.map(t=>(
+            <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,background:C.raised,borderRadius:8,padding:"8px 10px",marginBottom:6,border:`1px solid ${t.ordered?"#3b82f640":C.amber+"30"}`}}>
+              <div style={{flex:1,fontSize:12,color:C.text,fontWeight:600}}>{t.name}</div>
+              {t.ordered
+                ?<span style={{fontSize:9,fontWeight:700,color:"#3b82f6",background:"rgba(59,130,246,.15)",borderRadius:4,padding:"2px 6px",letterSpacing:.5,whiteSpace:"nowrap"}}><i className="ti ti-checks"/> ORDERED</span>
+                :<span style={{fontSize:9,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.15)",borderRadius:4,padding:"2px 6px",letterSpacing:.5,whiteSpace:"nowrap"}}>NEEDS ORDER</span>}
+              <div style={{fontSize:11,color:C.red,fontFamily:"'Share Tech Mono',monospace",fontWeight:700,whiteSpace:"nowrap"}}>{t.quantity} left</div>
+            </div>
+          ))}
+        </div>
+      </>);})()}
       {active.length>0&&<>
         <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Live Active Jobs · {active.length}</div>
         <ActiveJobsGrid jobs={active} renderCard={j=>{
@@ -2481,22 +2503,34 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues}){
 // ═══════════════════════════════════════════════════════
 // MANAGE TAB
 // ═══════════════════════════════════════════════════════
-function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,tools,setTools,toolLog,cabinets,setCabinets,saveNow}){
+function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,departments,setDepartments,saveNow}){
   const [view,setView]=useState("operators");
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",gap:8,marginBottom:16,flexWrap:"wrap"}}>
-        <button style={tag(view==="operators")} onClick={()=>setView("operators")}><i className="ti ti-users"/> Operators</button>
-        <button style={tag(view==="machines")}  onClick={()=>setView("machines")} ><i className="ti ti-robot"/> Machines</button>
-        <button style={tag(view==="tools")}     onClick={()=>setView("tools")}    ><i className="ti ti-package"/> Tools</button>
-        <button style={tag(view==="cabinets")}  onClick={()=>setView("cabinets")} ><i className="ti ti-archive"/> Cabinets</button>
-        <button style={tag(view==="settings")}  onClick={()=>setView("settings")} ><i className="ti ti-adjustments"/> Settings</button>
+        <button style={tag(view==="operators")}   onClick={()=>setView("operators")}  ><i className="ti ti-users"/> Operators</button>
+        <button style={tag(view==="machines")}    onClick={()=>setView("machines")}   ><i className="ti ti-robot"/> Machines</button>
+        <button style={tag(view==="departments")} onClick={()=>setView("departments")}><i className="ti ti-tag"/> Departments</button>
+        <button style={tag(view==="settings")}    onClick={()=>setView("settings")}   ><i className="ti ti-adjustments"/> Settings</button>
       </div>
-      {view==="operators"&&<ManageOperators users={users} setUsers={setUsers} machines={machines}/>}
-      {view==="machines" &&<ManageMachines  machines={machines} setMachines={setMachines}/>}
-      {view==="tools"    &&<ManageTools     tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets}/>}
-      {view==="cabinets" &&<ManageCabinets  cabinets={cabinets} setCabinets={setCabinets} saveNow={saveNow}/>}
-      {view==="settings" &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours}/>}
+      {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments}/>}
+      {view==="machines"   &&<ManageMachines    machines={machines} setMachines={setMachines} departments={departments}/>}
+      {view==="departments"&&<ManageDepartments departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
+      {view==="settings"   &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours}/>}
+    </div>
+  );
+}
+
+function AdminToolsTab({tools,setTools,toolLog,cabinets,setCabinets,departments,users,machines,saveNow}){
+  const [view,setView]=useState("tools");
+  return(
+    <div style={{padding:"14px 16px"}}>
+      <div style={{display:"flex",gap:8,marginBottom:16}}>
+        <button style={tag(view==="tools")}    onClick={()=>setView("tools")}   ><i className="ti ti-package"/> Tools</button>
+        <button style={tag(view==="cabinets")} onClick={()=>setView("cabinets")}><i className="ti ti-archive"/> Cabinets</button>
+      </div>
+      {view==="tools"    &&<ManageTools    tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets}/>}
+      {view==="cabinets" &&<ManageCabinets cabinets={cabinets} setCabinets={setCabinets} departments={departments} saveNow={saveNow}/>}
     </div>
   );
 }
@@ -2504,23 +2538,23 @@ function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,t
 // ═══════════════════════════════════════════════════════
 // MANAGE CABINETS — admin configures cabinets & drawers
 // ═══════════════════════════════════════════════════════
-function ManageCabinets({cabinets,setCabinets,saveNow}){
+function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
   const [view,setView]=useState("list"); // "list"|"cabinet"|"drawer"
   const [editCabId,setEditCabId]=useState(null);
-  const [cabForm,setCabForm]=useState({name:""});
+  const [cabForm,setCabForm]=useState({name:"",departments:[]});
   const [editDrawer,setEditDrawer]=useState(null); // {cabinetId, drawerId|null}
   const [drawerForm,setDrawerForm]=useState({number:"",label:"",rows:6,cols:7});
   const [errs,setErrs]=useState({});
 
-  const openAddCabinet=()=>{setCabForm({name:""});setEditCabId(null);setErrs({});setView("cabinet");};
-  const openEditCabinet=c=>{setCabForm({name:c.name});setEditCabId(c.id);setErrs({});setView("cabinet");};
+  const openAddCabinet=()=>{setCabForm({name:"",departments:[]});setEditCabId(null);setErrs({});setView("cabinet");};
+  const openEditCabinet=c=>{setCabForm({name:c.name,departments:c.departments||[]});setEditCabId(c.id);setErrs({});setView("cabinet");};
   const saveCabinet=()=>{
     if(!cabForm.name.trim()){setErrs({name:"Required"});return;}
     const now=Date.now();
     if(editCabId){
-      setCabinets(prev=>prev.map(c=>c.id===editCabId?{...c,name:cabForm.name.trim()}:c));
+      setCabinets(prev=>prev.map(c=>c.id===editCabId?{...c,name:cabForm.name.trim(),departments:cabForm.departments||[]}:c));
     } else {
-      setCabinets(prev=>[...prev,{id:now,name:cabForm.name.trim(),drawers:[]}]);
+      setCabinets(prev=>[...prev,{id:now,name:cabForm.name.trim(),departments:cabForm.departments||[],drawers:[]}]);
     }
     setView("list");saveNow&&saveNow();
   };
@@ -2562,6 +2596,23 @@ function ManageCabinets({cabinets,setCabinets,saveNow}){
         <label style={label}>Cabinet Name *</label>
         <input style={{...inp(errs.name)}} value={cabForm.name} onChange={e=>setCabForm(p=>({...p,name:e.target.value}))} placeholder="e.g. Cabinet A or Main Tool Cabinet"/>
         {errs.name&&<div style={errMsg}>{errs.name}</div>}
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={label}>Departments</label>
+        <div style={{fontSize:10,color:C.muted,marginBottom:8}}>Operators in these departments will see tools from this cabinet. Leave blank to show to everyone.</div>
+        {(departments||[]).length===0
+          ?<div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:8,padding:"10px 12px"}}>No departments configured — go to Manage → Departments first.</div>
+          :<div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+            {(departments||[]).map(d=>{
+              const on=(cabForm.departments||[]).includes(d);
+              return(
+                <button key={d} type="button" onClick={()=>setCabForm(p=>{const ds=p.departments||[];return{...p,departments:on?ds.filter(x=>x!==d):[...ds,d]};})}
+                  style={{padding:"6px 12px",borderRadius:8,border:`1.5px solid ${on?C.amber:"rgba(255,255,255,.15)"}`,background:on?"rgba(240,165,0,.15)":"transparent",cursor:"pointer",fontFamily:"inherit",color:on?C.amber:C.muted,fontSize:12,fontWeight:on?700:400,transition:"all .12s"}}>
+                  {d}
+                </button>
+              );
+            })}
+          </div>}
       </div>
       <button style={btn("success",true)} onClick={saveCabinet}><i className="ti ti-check"/> {editCabId?"Save Changes":"Add Cabinet"}</button>
     </div>
@@ -2631,12 +2682,17 @@ function ManageCabinets({cabinets,setCabinets,saveNow}){
       {(cabinets||[]).length===0&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No cabinets yet. Add one to start organising your tools.</div>}
       {(cabinets||[]).map(cab=>(
         <div key={cab.id} style={{...card(),marginBottom:10}}>
-          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:(cab.departments||[]).length>0?6:10}}>
             <i className="ti ti-archive" style={{fontSize:16,color:C.amber,flexShrink:0}}/>
             <div style={{flex:1,fontSize:14,color:C.text,fontWeight:700}}>{cab.name}</div>
             <button style={{...btn("outline",false,true),padding:"6px 8px"}} onClick={()=>openEditCabinet(cab)}><i className="ti ti-edit"/></button>
             <button style={{...btn("danger",false,true),padding:"6px 8px"}} onClick={()=>deleteCabinet(cab.id)}><i className="ti ti-trash"/></button>
           </div>
+          {(cab.departments||[]).length>0&&(
+            <div style={{display:"flex",gap:5,flexWrap:"wrap",marginBottom:10,paddingLeft:26}}>
+              {(cab.departments||[]).map(d=><span key={d} style={{fontSize:10,color:C.amber,background:"rgba(240,165,0,.12)",padding:"2px 8px",borderRadius:6,border:"1px solid rgba(240,165,0,.25)"}}>{d}</span>)}
+            </div>
+          )}
           <div style={{paddingLeft:6}}>
             {(cab.drawers||[]).length===0&&<div style={{fontSize:11,color:C.muted,marginBottom:8}}>No drawers yet</div>}
             {(cab.drawers||[]).map(d=>{
@@ -2739,7 +2795,53 @@ function WorkHoursSettings({workHours,setWorkHours}){
   );
 }
 
-function ManageOperators({users,setUsers,machines}){
+function ManageDepartments({departments,setDepartments,saveNow}){
+  const [adding,setAdding]=useState(false);
+  const [newName,setNewName]=useState("");
+  const [err,setErr]=useState("");
+
+  const add=()=>{
+    const name=newName.trim();
+    if(!name){setErr("Required");return;}
+    if((departments||[]).includes(name)){setErr("Already exists");return;}
+    setDepartments(prev=>[...(prev||[]),name].sort());
+    setNewName("");setAdding(false);setErr("");
+    saveNow&&saveNow();
+  };
+  const remove=name=>{
+    setDepartments(prev=>(prev||[]).filter(d=>d!==name));
+    saveNow&&saveNow();
+  };
+
+  return(
+    <div>
+      <button style={{...btn("primary",false,true),marginBottom:14}} onClick={()=>{setAdding(true);setNewName("");setErr("");}}>
+        <i className="ti ti-plus"/> Add Department
+      </button>
+      {adding&&(
+        <div style={{...card(),marginBottom:10}}>
+          <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>New Department</div>
+          <input style={inp(err)} value={newName} onChange={e=>{setNewName(e.target.value);setErr("");}} placeholder="e.g. Turning" autoFocus onKeyDown={e=>{if(e.key==="Enter")add();if(e.key==="Escape"){setAdding(false);setErr("");}}}/>
+          {err&&<div style={errMsg}>{err}</div>}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginTop:10}}>
+            <button style={btn("outline",true)} onClick={()=>{setAdding(false);setErr("");}}>Cancel</button>
+            <button style={btn("success",true)} onClick={add}><i className="ti ti-check"/> Add</button>
+          </div>
+        </div>
+      )}
+      {(departments||[]).length===0&&!adding&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No departments yet. Add one to start organising operators, machines and cabinets.</div>}
+      {(departments||[]).map(d=>(
+        <div key={d} style={{...card(),marginBottom:6,display:"flex",alignItems:"center",gap:10}}>
+          <i className="ti ti-tag" style={{color:C.amber,flexShrink:0}}/>
+          <div style={{flex:1,fontSize:14,color:C.text,fontWeight:600}}>{d}</div>
+          <button style={{...btn("danger",false,true),padding:"6px 8px"}} onClick={()=>remove(d)}><i className="ti ti-trash"/></button>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ManageOperators({users,setUsers,machines,departments}){
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [pin,setPin]=useState(""); const [errs,setErrs]=useState({});
   const [editId,setEditId]=useState(null); const [editPin,setEditPin]=useState(""); const [editErr,setEditErr]=useState("");
   const [editDeptId,setEditDeptId]=useState(null);
@@ -2747,8 +2849,7 @@ function ManageOperators({users,setUsers,machines}){
   const [showRemoved,setShowRemoved]=useState(false);
   const operators=users.filter(u=>u.role==="operator"&&!u.removed);
   const removed=users.filter(u=>u.role==="operator"&&u.removed);
-  // All unique departments from machines
-  const allDepts=[...new Set(machines.map(m=>m.department||"").filter(Boolean))].sort();
+  const allDepts=(departments||[]).length>0?(departments||[]):[...new Set(machines.map(m=>m.department||"").filter(Boolean))].sort();
   const save=()=>{
     const e={};
     if(!name.trim()) e.name="Name required";
@@ -2907,12 +3008,11 @@ function ManageOperators({users,setUsers,machines}){
   );
 }
 
-function ManageMachines({machines,setMachines}){
+function ManageMachines({machines,setMachines,departments}){
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [dept,setDept]=useState(""); const [err,setErr]=useState("");
   const [editTargetId,setEditTargetId]=useState(null); const [editTargetHours,setEditTargetHours]=useState("");
   const [editDeptId,setEditDeptId]=useState(null); const [editDeptVal,setEditDeptVal]=useState("");
-  // All unique departments across machines (for datalist suggestions)
-  const allDepts=[...new Set(machines.map(m=>m.department||"").filter(Boolean))].sort();
+  const allDepts=(departments||[]).length>0?(departments||[]):[...new Set(machines.map(m=>m.department||"").filter(Boolean))].sort();
   const save=()=>{
     if(!name.trim()){setErr("Name required");return;}
     if(machines.find(m=>m.name.toLowerCase()===name.trim().toLowerCase())){setErr("Machine already exists");return;}
@@ -2943,8 +3043,10 @@ function ManageMachines({machines,setMachines}){
           <div style={{marginBottom:10}}><label style={label}>Machine Name *</label><input style={inp(!!err)} value={name} onChange={e=>setName(e.target.value)} placeholder="e.g. CNC Mill #3"/>{err&&<div style={errMsg}>{err}</div>}</div>
           <div style={{marginBottom:12}}>
             <label style={label}>Department</label>
-            <input style={inp()} value={dept} onChange={e=>setDept(e.target.value)} placeholder="e.g. Milling" list="dept-suggestions"/>
-            <datalist id="dept-suggestions">{allDepts.map(d=><option key={d} value={d}/>)}</datalist>
+            <select style={{...inp(),color:dept?C.text:C.muted}} value={dept} onChange={e=>setDept(e.target.value)}>
+              <option value="">No department (visible to all)</option>
+              {allDepts.map(d=><option key={d} value={d}>{d}</option>)}
+            </select>
             <div style={{fontSize:10,color:C.muted,marginTop:4}}>Optional — used to restrict which operators see this machine</div>
           </div>
           <button style={btn("success",true)} onClick={save}><i className="ti ti-plus"/> Add Machine</button>
@@ -2978,8 +3080,10 @@ function ManageMachines({machines,setMachines}){
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Department — {m.name}</div>
               <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Operators assigned to this department will see this machine. Leave blank to show to everyone.</div>
               <div style={{display:"flex",gap:8,alignItems:"center"}}>
-                <input style={{...inp(),flex:1}} value={editDeptVal} onChange={e=>setEditDeptVal(e.target.value)} placeholder="e.g. Milling" list="dept-suggestions2"/>
-                <datalist id="dept-suggestions2">{allDepts.map(d=><option key={d} value={d}/>)}</datalist>
+                <select style={{...inp(),flex:1,color:editDeptVal?C.text:C.muted}} value={editDeptVal} onChange={e=>setEditDeptVal(e.target.value)}>
+                  <option value="">No department (visible to all)</option>
+                  {allDepts.map(d=><option key={d} value={d}>{d}</option>)}
+                </select>
                 <button style={btn("primary",false,false)} onClick={()=>saveDept(m.id)}>Save</button>
                 {m.department&&<button style={btn("danger",false,true)} onClick={()=>{setMachines(prev=>prev.map(x=>x.id===m.id?{...x,department:""}:x));setEditDeptId(null);}}>Clear</button>}
               </div>
@@ -3008,18 +3112,24 @@ function ManageMachines({machines,setMachines}){
 // ═══════════════════════════════════════════════════════
 function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
   const [search,setSearch]=useState("");
+  const [typeFilter,setTypeFilter]=useState("");
   const [selectedId,setSelectedId]=useState(null);
   const [takeQty,setTakeQty]=useState(1);
 
   const userDepts=user.departments||[];
+  const allTypes=[...new Set(tools.filter(t=>t.active&&t.toolType).map(t=>t.toolType))].sort();
   const visible=tools.filter(t=>{
     if(!t.active) return false;
-    if(userDepts.length>0&&t.department&&!userDepts.includes(t.department)) return false;
-    if(search.trim()){const q=search.trim().toLowerCase();return(t.name||"").toLowerCase().includes(q)||(t.location||"").toLowerCase().includes(q)||(t.articleNumber||"").toLowerCase().includes(q);}
+    if(userDepts.length>0){
+      const cab=(cabinets||[]).find(c=>String(c.id)===String(t.cabinetId));
+      const cabDepts=cab?.departments||[];
+      if(cabDepts.length>0&&!cabDepts.some(d=>userDepts.includes(d))) return false;
+    }
+    if(typeFilter&&t.toolType!==typeFilter) return false;
+    if(search.trim()){const q=search.trim().toLowerCase();return(t.name||"").toLowerCase().includes(q)||(t.articleNumber||"").toLowerCase().includes(q);}
     return true;
   });
 
-  const lowCount=visible.filter(t=>t.quantity<=(t.minQuantity||0)).length;
   const selectedTool=selectedId?tools.find(t=>t.id===selectedId):null;
 
   const doTake=()=>{
@@ -3035,15 +3145,18 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
 
   return(
     <div style={{padding:"14px 16px"}}>
-      {lowCount>0&&(
-        <div style={{background:"rgba(231,76,60,.1)",border:`1px solid ${C.red}`,borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.red}}>
-          <i className="ti ti-alert-triangle"/> {lowCount} tool{lowCount>1?"s":""} running low — notify admin to reorder
-        </div>
-      )}
-      <div style={{position:"relative",marginBottom:14}}>
+      <div style={{position:"relative",marginBottom:allTypes.length>0?8:14}}>
         <i className="ti ti-search" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:14,pointerEvents:"none"}}/>
         <input style={{...inp(),paddingLeft:32}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or article number…"/>
       </div>
+      {allTypes.length>0&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
+          <button style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1px solid ${!typeFilter?C.amber:C.border}`,background:!typeFilter?C.amber+"22":C.raised,color:!typeFilter?C.amber:C.muted,cursor:"pointer",fontWeight:!typeFilter?700:400}} onClick={()=>setTypeFilter("")}>All</button>
+          {allTypes.map(t=>(
+            <button key={t} style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1px solid ${typeFilter===t?C.amber:C.border}`,background:typeFilter===t?C.amber+"22":C.raised,color:typeFilter===t?C.amber:C.muted,cursor:"pointer",fontWeight:typeFilter===t?700:400}} onClick={()=>setTypeFilter(typeFilter===t?"":t)}>{t}</button>
+          ))}
+        </div>
+      )}
       {visible.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools found.</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
         {visible.map(tool=>{
@@ -3053,20 +3166,20 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
           return(
             <div key={tool.id} onClick={()=>{setSelectedId(tool.id);setTakeQty(1);}}
               style={{background:C.surface,borderRadius:10,border:`1px solid ${isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
-              <div style={{position:"relative",width:"100%",aspectRatio:"1",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <div style={{position:"relative",width:"100%",aspectRatio:"3/2",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
                 {tool.photoData
                   ?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                  :<i className="ti ti-tool" style={{fontSize:28,color:C.muted,opacity:0.3}}/>}
+                  :<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
                 <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:5,padding:"1px 5px",fontSize:11,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.4"}}>{tool.quantity}</div>
-                {isLow&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"2px 0",textAlign:"center",fontSize:7,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+                {isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"2px 0",textAlign:"center",fontSize:7,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+                {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ON ORDER</div></div>}
               </div>
-              <div style={{padding:"7px 7px 9px"}}>
-                <div style={{fontSize:11,color:C.text,fontWeight:700,lineHeight:1.25,marginBottom:4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
-                {Array.isArray(tool.material)&&tool.material.length>0&&(
-                  <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                    {tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:8,fontWeight:700,color:m.color,background:m.bg,padding:"1px 4px",borderRadius:3,letterSpacing:.5}}>{code}</span>:null;})}
-                  </div>
-                )}
+              <div style={{padding:"8px 8px 10px"}}>
+                <div style={{fontSize:13,color:C.text,fontWeight:700,lineHeight:1.3,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                  {tool.toolType&&<span style={{fontSize:10,fontWeight:600,color:"#94a3b8",background:"rgba(148,163,184,.15)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>{tool.toolType}</span>}
+                  {Array.isArray(tool.material)&&tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
+                </div>
               </div>
             </div>
           );
@@ -3081,8 +3194,12 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
               <div style={{width:36,height:4,background:C.raised,borderRadius:2,margin:"0 auto"}}/>
             </div>
             {selectedTool.photoData&&<img src={selectedTool.photoData} style={{width:"100%",maxHeight:200,objectFit:"contain",borderRadius:10,background:C.raised,marginBottom:14,border:`1px solid ${C.border}`,display:"block"}}/>}
-            <div style={{fontSize:18,color:C.text,fontWeight:700,marginBottom:2,lineHeight:1.3}}>{selectedTool.name}</div>
-            {selectedTool.articleNumber&&<div style={{fontSize:11,color:C.muted,marginBottom:10}}>{selectedTool.articleNumber}</div>}
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
+              <div style={{fontSize:18,color:C.text,fontWeight:700,lineHeight:1.3}}>{selectedTool.name}</div>
+              {selectedTool.toolType&&<span style={{fontSize:11,fontWeight:600,color:"#94a3b8",background:"rgba(148,163,184,.15)",padding:"3px 9px",borderRadius:20,border:"1px solid rgba(148,163,184,.25)",whiteSpace:"nowrap"}}>{selectedTool.toolType}</span>}
+            </div>
+            {selectedTool.articleNumber&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>{selectedTool.articleNumber}</div>}
+            {selectedTool.ordered&&<div style={{background:"rgba(59,130,246,.12)",border:"1px solid rgba(59,130,246,.4)",borderRadius:8,padding:"7px 10px",marginBottom:10,fontSize:11,color:"#3b82f6",display:"flex",alignItems:"center",gap:6}}><i className="ti ti-checks"/><span>On order — admin has already placed an order for this tool</span></div>}
             {Array.isArray(selectedTool.material)&&selectedTool.material.length>0&&(
               <div style={{marginBottom:12}}>
                 <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Material</div>
@@ -3160,12 +3277,11 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
   const [restockId,setRestockId]=useState(null);
   const [restockQty,setRestockQty]=useState("");
   const [selectedId,setSelectedId]=useState(null);
-  const blank={name:"",department:"",cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
+  const [toolFilter,setToolFilter]=useState("all");
+  const blank={name:"",toolType:"",cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
   const photoRef=useRef();
-
-  const allDepts=[...new Set([...(users||[]).map(u=>u.departments||[]).flat(),...(machines||[]).map(m=>m.department).filter(Boolean)])].sort();
 
   const openAdd=()=>{setForm(blank);setEditId(null);setErrs({});setSubview("form");};
   const openEdit=t=>{
@@ -3195,7 +3311,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
   const doRestock=tool=>{
     const qty=parseInt(restockQty)||0;
     if(qty<1) return;
-    setTools(prev=>prev.map(t=>t.id===tool.id?{...t,quantity:t.quantity+qty}:t));
+    setTools(prev=>prev.map(t=>t.id===tool.id?{...t,quantity:t.quantity+qty,ordered:t.quantity+qty>(t.minQuantity||0)?false:t.ordered}:t));
     setRestockId(null);setRestockQty("");
     saveNow&&saveNow();
   };
@@ -3216,10 +3332,13 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
         </div>
       ))}
       <div style={{marginBottom:10}}>
-        <label style={label}>Department</label>
-        <input style={fi("department")} value={form.department} onChange={e=>setForm(p=>({...p,department:e.target.value}))} placeholder="e.g. Turning" list="tool-dept-list"/>
-        <datalist id="tool-dept-list">{allDepts.map(d=><option key={d} value={d}/>)}</datalist>
-        <div style={{fontSize:10,color:C.muted,marginTop:4}}>Leave blank to show to all operators</div>
+        <label style={label}>Tool Type</label>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:6}}>
+          {["Endmill","Drill","Insert","Turning Tool","Boring Bar","Reamer","Tap","Thread Mill","Face Mill","Grooving Tool","Countersink","Center Drill"].map(t=>(
+            <button key={t} type="button" style={{fontSize:10,padding:"4px 10px",borderRadius:20,border:`1px solid ${form.toolType===t?C.amber:C.border}`,background:form.toolType===t?C.amber+"22":C.raised,color:form.toolType===t?C.amber:C.muted,cursor:"pointer",fontWeight:form.toolType===t?700:400}} onClick={()=>setForm(p=>({...p,toolType:p.toolType===t?"":t}))}>{t}</button>
+          ))}
+        </div>
+        <input style={{...fi("toolType"),marginTop:2}} value={form.toolType} onChange={e=>setForm(p=>({...p,toolType:e.target.value}))} placeholder="Or type a custom type…"/>
       </div>
       <div style={{marginBottom:10}}>
         <label style={label}>Cabinet *</label>
@@ -3362,49 +3481,50 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
   );
 
   const lowTools=tools.filter(t=>t.active&&t.quantity<=(t.minQuantity||0));
+  const orderedTools=tools.filter(t=>t.ordered);
+  const filteredTools=toolFilter==="low"?lowTools:toolFilter==="ordered"?orderedTools:tools;
   const selectedTool=selectedId?tools.find(t=>t.id===selectedId):null;
   const closeModal=()=>{setSelectedId(null);setRestockId(null);setRestockQty("");};
 
   return(
     <div>
-      <div style={{display:"flex",gap:8,marginBottom:14}}>
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
         <button style={btn("primary",false,true)} onClick={openAdd}><i className="ti ti-plus"/> Add Tool</button>
         <button style={btn("outline",false,true)} onClick={()=>setSubview("log")}><i className="ti ti-history"/> Usage Log</button>
-      </div>
-      {lowTools.length>0&&(
-        <div style={{background:"rgba(231,76,60,.1)",border:`1px solid ${C.red}`,borderRadius:8,padding:"10px 12px",marginBottom:14}}>
-          <div style={{fontSize:10,color:C.red,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}><i className="ti ti-alert-triangle"/> Needs Reordering</div>
-          {lowTools.map(t=>(
-            <div key={t.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
-              <div style={{flex:1,fontSize:12,color:C.text}}>{t.name}</div>
-              <div style={{fontSize:12,color:C.red,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{t.quantity} left</div>
-              {t.articleNumber&&<div style={{fontSize:10,color:C.muted}}>{t.articleNumber}</div>}
-            </div>
+        <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+          {[["all","All"],["low","Low Stock"],["ordered","Ordered"]].map(([f,lb])=>(
+            <button key={f} style={{...btn(toolFilter===f?"blue":"outline",false,true),position:"relative"}} onClick={()=>setToolFilter(f)}>
+              {lb}
+              {f==="low"&&lowTools.length>0&&<span style={{background:C.red,color:"white",borderRadius:20,fontSize:8,padding:"0px 5px",marginLeft:5,fontWeight:700}}>{lowTools.length}</span>}
+              {f==="ordered"&&orderedTools.length>0&&<span style={{background:"#3b82f6",color:"white",borderRadius:20,fontSize:8,padding:"0px 5px",marginLeft:5,fontWeight:700}}>{orderedTools.length}</span>}
+            </button>
           ))}
         </div>
-      )}
+      </div>
       {tools.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No tools yet. Use Add Tool to get started.</div>}
+      {filteredTools.length===0&&tools.length>0&&<div style={{textAlign:"center",padding:"20px",color:C.muted,fontSize:12}}>No tools match this filter.</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-        {tools.map(tool=>{
+        {filteredTools.map(tool=>{
           const isLow=tool.active&&tool.quantity<=(tool.minQuantity||0);
           const isOut=tool.quantity===0;
           const qColor=isOut?C.red:isLow?C.amber:C.green;
           return(
             <div key={tool.id} onClick={()=>setSelectedId(tool.id)}
               style={{background:C.surface,borderRadius:10,border:`1px solid ${isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer",opacity:tool.active?1:0.45}}>
-              <div style={{position:"relative",width:"100%",aspectRatio:"1",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <div style={{position:"relative",width:"100%",aspectRatio:"3/2",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
                 {tool.photoData
                   ?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                  :<i className="ti ti-tool" style={{fontSize:28,color:C.muted,opacity:0.3}}/>}
+                  :<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
                 <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:5,padding:"1px 5px",fontSize:11,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.4"}}>{tool.quantity}</div>
                 {!tool.active&&<div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center"}}><i className="ti ti-eye-off" style={{fontSize:18,color:"rgba(255,255,255,.6)"}}/></div>}
-                {tool.active&&isLow&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"2px 0",textAlign:"center",fontSize:7,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+                {tool.active&&isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"2px 0",textAlign:"center",fontSize:7,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+                {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ORDERED</div></div>}
               </div>
-              <div style={{padding:"7px 7px 9px"}}>
-                <div style={{fontSize:11,color:C.text,fontWeight:700,lineHeight:1.25,marginBottom:4,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
+              <div style={{padding:"8px 8px 10px"}}>
+                <div style={{fontSize:13,color:C.text,fontWeight:700,lineHeight:1.3,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
                 {Array.isArray(tool.material)&&tool.material.length>0&&(
-                  <div style={{display:"flex",gap:3,flexWrap:"wrap"}}>
-                    {tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:8,fontWeight:700,color:m.color,background:m.bg,padding:"1px 4px",borderRadius:3,letterSpacing:.5}}>{code}</span>:null;})}
+                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                    {tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
                   </div>
                 )}
               </div>
@@ -3421,7 +3541,10 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
               <div style={{width:36,height:4,background:C.raised,borderRadius:2,margin:"0 auto"}}/>
             </div>
             {selectedTool.photoData&&<img src={selectedTool.photoData} style={{width:"100%",maxHeight:180,objectFit:"contain",borderRadius:10,background:C.raised,marginBottom:14,border:`1px solid ${C.border}`,display:"block"}}/>}
-            <div style={{fontSize:18,color:C.text,fontWeight:700,marginBottom:2,lineHeight:1.3}}>{selectedTool.name}</div>
+            <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap",marginBottom:2}}>
+              <div style={{fontSize:18,color:C.text,fontWeight:700,lineHeight:1.3}}>{selectedTool.name}</div>
+              {selectedTool.toolType&&<span style={{fontSize:11,fontWeight:600,color:"#94a3b8",background:"rgba(148,163,184,.15)",padding:"3px 9px",borderRadius:20,border:"1px solid rgba(148,163,184,.25)",whiteSpace:"nowrap"}}>{selectedTool.toolType}</span>}
+            </div>
             {selectedTool.articleNumber&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>{selectedTool.articleNumber}</div>}
             {!selectedTool.active&&<div style={{...badge("down"),display:"inline-flex",marginBottom:8,fontSize:9}}>HIDDEN FROM OPERATORS</div>}
             {Array.isArray(selectedTool.material)&&selectedTool.material.length>0&&(
@@ -3468,7 +3591,6 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
               );
             })()}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-              {selectedTool.department&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Department</div><div style={{fontSize:12,color:C.blue}}>{selectedTool.department}</div></div>}
               <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>In Stock</div><div style={{fontSize:18,fontWeight:700,color:selectedTool.quantity<=(selectedTool.minQuantity||0)?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.quantity}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> pcs</span></div></div>
               <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Reorder Below</div><div style={{fontSize:14,fontWeight:700,color:C.red,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.minQuantity||0}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> pcs</span></div></div>
               {selectedTool.recommendedSpeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Speed</div><div style={{fontSize:12,color:C.text}}>{selectedTool.recommendedSpeed}</div></div>}
@@ -3486,6 +3608,11 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
                   </div>
                 </div>
               ):<button style={btn("success",true)} onClick={()=>{setRestockId(selectedTool.id);setRestockQty("");}}><i className="ti ti-package-import"/> Restock</button>}
+              {selectedTool.quantity<=(selectedTool.minQuantity||0)&&(
+                <button style={btn(selectedTool.ordered?"blue":"outline",true)} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,ordered:!t.ordered}:t));saveNow&&saveNow();}}>
+                  <i className={`ti ti-${selectedTool.ordered?"checks":"shopping-cart"}`}/> {selectedTool.ordered?"Ordered — click to unmark":"Mark as Ordered"}
+                </button>
+              )}
               <button style={btn("outline",true)} onClick={()=>{closeModal();openEdit(selectedTool);}}><i className="ti ti-edit"/> Edit Tool</button>
               <button style={btn(selectedTool.active?"danger":"outline",true)} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,active:!t.active}:t));closeModal();saveNow&&saveNow();}}>
                 <i className={`ti ti-${selectedTool.active?"eye-off":"eye"}`}/> {selectedTool.active?"Hide from Operators":"Make Visible"}
