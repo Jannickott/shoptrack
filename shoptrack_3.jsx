@@ -485,7 +485,7 @@ export default function App(){
       )}
 
       {/* CONTENT */}
-      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs}/>}
+      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
@@ -577,14 +577,33 @@ function LoginScreen({users,onLogin}){
 // ═══════════════════════════════════════════════════════
 // NEW JOB
 // ═══════════════════════════════════════════════════════
-function NewJobTab({user,machines,setJobs}){
+function NewJobTab({user,machines,setJobs,jobs}){
   const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const [machine,setMachine]=useState(""); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
   const [twoSided,setTwoSided]=useState(false);
+  const [showSuggestions,setShowSuggestions]=useState(true);
+
+  // Past completed jobs matching the typed part number (min 2 chars)
+  const suggestions=job.trim().length>=2
+    ?(jobs||[]).filter(j=>j.status==="done"&&j.job.toLowerCase().includes(job.trim().toLowerCase()))
+       .sort((a,b)=>(b.completedAt||0)-(a.completedAt||0))
+       .slice(0,5)
+    :[];
+
+  const applyJob=prev=>{
+    setCustomer(prev.customer||"");
+    setMachine(prev.machine||"");
+    setOp(prev.op||"");
+    setTwoSided(!!prev.twoSided);
+    setJob(prev.job||"");
+    setErrs({});
+    setShowSuggestions(false);
+  };
+
   const start=()=>{
     const e={};if(!customer.trim())e.customer="Required";if(!job.trim())e.job="Required";if(!machine)e.machine="Required";
     if(Object.keys(e).length){setErrs(e);return;}
     const now=Date.now();setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now},...prev]);
-    setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);
+    setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);
   };
   return(
     <div style={{padding:"14px 16px"}}>
@@ -627,8 +646,33 @@ function NewJobTab({user,machines,setJobs}){
       </div>
       <div style={{marginBottom:12}}>
         <label style={label}>Part Number *</label>
-        <input style={inp(errs.job)} value={job} onChange={e=>setJob(e.target.value)} placeholder="e.g. JOB-2025-0451"/>
+        <input style={inp(errs.job)} value={job}
+          onChange={e=>{setJob(e.target.value);setShowSuggestions(true);}}
+          placeholder="e.g. JOB-2025-0451"/>
         {errs.job&&<div style={errMsg}>{errs.job}</div>}
+        {/* Previous job suggestions */}
+        {showSuggestions&&suggestions.length>0&&(
+          <div style={{marginTop:8,border:`1px solid ${C.amber}`,borderRadius:8,overflow:"hidden"}}>
+            <div style={{background:"rgba(240,165,0,.1)",padding:"6px 10px",fontSize:9,color:C.amber,letterSpacing:2,textTransform:"uppercase"}}>
+              <i className="ti ti-history"/> Previous runs — tap to load
+            </div>
+            {suggestions.map((s,i)=>(
+              <div key={s.id} style={{padding:"10px 12px",borderTop:i>0?`1px solid ${C.border}`:"none",display:"flex",alignItems:"center",gap:10,cursor:"pointer",background:"transparent"}}
+                onClick={()=>applyJob(s)}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,color:C.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.job}</div>
+                  <div style={{fontSize:10,color:C.muted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                    {s.customer} · {s.machine}{s.op?` · ${s.op}`:""}
+                  </div>
+                  <div style={{fontSize:9,color:C.muted,marginTop:1,letterSpacing:1}}>{fmtDate(s.completedAt)}</div>
+                </div>
+                <div style={{flexShrink:0,background:C.amber,color:"#1a1a1a",borderRadius:6,padding:"4px 10px",fontSize:9,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}>
+                  Load
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       <div style={{marginBottom:12}}>
         <label style={label}>Machine *</label>
