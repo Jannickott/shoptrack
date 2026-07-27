@@ -3170,8 +3170,8 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
                 {tool.photoData
                   ?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                   :<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
-                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:5,padding:"1px 5px",fontSize:11,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.4"}}>{tool.quantity}</div>
-                {isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"2px 0",textAlign:"center",fontSize:7,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{tool.quantity}</div>
+                {isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
                 {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ON ORDER</div></div>}
               </div>
               <div style={{padding:"8px 8px 10px"}}>
@@ -3515,9 +3515,9 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
                 {tool.photoData
                   ?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                   :<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
-                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:5,padding:"1px 5px",fontSize:11,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.4"}}>{tool.quantity}</div>
+                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{tool.quantity}</div>
                 {!tool.active&&<div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center"}}><i className="ti ti-eye-off" style={{fontSize:18,color:"rgba(255,255,255,.6)"}}/></div>}
-                {tool.active&&isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"2px 0",textAlign:"center",fontSize:7,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+                {tool.active&&isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
                 {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ORDERED</div></div>}
               </div>
               <div style={{padding:"8px 8px 10px"}}>
