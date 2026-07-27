@@ -3150,12 +3150,15 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
     setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:1,action:"checkout",timestamp:now}]);
     setSelectedId(null);setTakeQty(1);saveNow();
   };
-  const doReturn=()=>{
+  const doReturn=(regrinded=null)=>{
     if(!selectedTool||!selectedTool.returnable) return;
     if((selectedTool.checkedOutCount||0)<1) return;
     const now=Date.now();
-    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,checkedOutCount:Math.max(0,(t.checkedOutCount||0)-1)}:t));
-    setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:1,action:"return",timestamp:now}]);
+    const updates={checkedOutCount:Math.max(0,(selectedTool.checkedOutCount||0)-1)};
+    if(selectedTool.regrindable&&regrinded!==null) updates.needsRegrinding=!regrinded;
+    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,...updates}:t));
+    const action=regrinded===true?"return-regrinded":regrinded===false?"return-needs-regrind":"return";
+    setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:1,action,timestamp:now}]);
     setSelectedId(null);setTakeQty(1);saveNow();
   };
   const closeModal=()=>{setSelectedId(null);setTakeQty(1);};
@@ -3193,7 +3196,8 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
                 <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{available}</div>
                 {tool.returnable&&checkedOut>0&&!allInUse&&<div style={{position:"absolute",top:5,left:5,background:"rgba(0,0,0,.7)",borderRadius:5,padding:"2px 6px",fontSize:9,fontWeight:700,color:C.amber,letterSpacing:.5,textTransform:"uppercase"}}>{checkedOut} in use</div>}
                 {isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
-                {allInUse&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(231,76,60,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-clock" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ALL IN USE</div></div>}
+                {tool.regrindable&&tool.needsRegrinding&&!allInUse&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.92)",color:"#1a1a1a"}}><i className="ti ti-tool"/> Needs Regrinding</div>}
+                {allInUse&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(231,76,60,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-clock" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ALL IN USE</div>{tool.needsRegrinding&&<div style={{fontSize:9,color:"rgba(255,255,255,.8)",letterSpacing:.5,textTransform:"uppercase"}}>⚠ needs regrinding</div>}</div>}
                 {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ON ORDER</div></div>}
               </div>
               <div style={{padding:"8px 8px 10px"}}>
@@ -3291,7 +3295,15 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
                 {(selectedTool.quantity-(selectedTool.checkedOutCount||0))>0
                   ?<button style={btn("primary",true)} onClick={doCheckout}><i className="ti ti-logout"/> Check Out</button>
                   :<div style={{...badge("down"),textAlign:"center",padding:"10px",fontSize:11,display:"block"}}>ALL IN USE — wait for someone to return it</div>}
-                {(selectedTool.checkedOutCount||0)>0&&<button style={btn("success",true)} onClick={doReturn}><i className="ti ti-login"/> Return to Cabinet</button>}
+                {(selectedTool.checkedOutCount||0)>0&&(selectedTool.regrindable?(
+                  <div>
+                    <div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Return to cabinet — condition?</div>
+                    <div style={{display:"flex",gap:8}}>
+                      <button style={{...btn("success",false,false),flex:1}} onClick={()=>doReturn(true)}><i className="ti ti-check"/> Regrinded</button>
+                      <button style={{...btn("outline",false,false),flex:1,color:C.amber,borderColor:C.amber}} onClick={()=>doReturn(false)}><i className="ti ti-alert-triangle"/> Needs Regrinding</button>
+                    </div>
+                  </div>
+                ):<button style={btn("success",true)} onClick={()=>doReturn()}><i className="ti ti-login"/> Return to Cabinet</button>)}
               </div>
             ):selectedTool.quantity>0?(
               <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
@@ -3323,7 +3335,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
   const [selectedId,setSelectedId]=useState(null);
   const [toolFilter,setToolFilter]=useState("all");
   const [deleteConfirm,setDeleteConfirm]=useState(false);
-  const blank={name:"",toolType:"",returnable:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
+  const blank={name:"",toolType:"",returnable:false,regrindable:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
   const photoRef=useRef();
@@ -3387,13 +3399,23 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
       </div>
       <div style={{marginBottom:14}}>
         <button type="button" onClick={()=>setForm(p=>({...p,returnable:!p.returnable}))}
-          style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:form.returnable?"rgba(59,130,246,.12)":C.raised,border:`1px solid ${form.returnable?"#3b82f6":C.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",textAlign:"left"}}>
+          style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:form.returnable?"rgba(59,130,246,.12)":C.raised,border:`1px solid ${form.returnable?"#3b82f6":C.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",textAlign:"left",marginBottom:8}}>
           <div style={{width:20,height:20,borderRadius:4,border:`2px solid ${form.returnable?"#3b82f6":C.border}`,background:form.returnable?"#3b82f6":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             {form.returnable&&<i className="ti ti-check" style={{fontSize:12,color:"#fff"}}/>}
           </div>
           <div>
             <div style={{fontSize:12,color:form.returnable?"#3b82f6":C.text,fontWeight:600}}>Returnable tool</div>
             <div style={{fontSize:10,color:C.muted,marginTop:1}}>Tool is borrowed and returned after use — stock is not consumed</div>
+          </div>
+        </button>
+        <button type="button" onClick={()=>setForm(p=>({...p,regrindable:!p.regrindable}))}
+          style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:form.regrindable?"rgba(240,165,0,.1)":C.raised,border:`1px solid ${form.regrindable?C.amber:C.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",textAlign:"left"}}>
+          <div style={{width:20,height:20,borderRadius:4,border:`2px solid ${form.regrindable?C.amber:C.border}`,background:form.regrindable?C.amber:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            {form.regrindable&&<i className="ti ti-check" style={{fontSize:12,color:"#1a1a1a"}}/>}
+          </div>
+          <div>
+            <div style={{fontSize:12,color:form.regrindable?C.amber:C.text,fontWeight:600}}>Regrindable tool</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:1}}>When returned, operator selects: regrinded or needs regrinding</div>
           </div>
         </button>
       </div>
@@ -3579,7 +3601,8 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
                 {tool.returnable&&checkedOut>0&&!allInUse&&<div style={{position:"absolute",top:5,left:5,background:"rgba(0,0,0,.7)",borderRadius:5,padding:"2px 6px",fontSize:9,fontWeight:700,color:C.amber,letterSpacing:.5,textTransform:"uppercase"}}>{checkedOut} in use</div>}
                 {!tool.active&&<div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center"}}><i className="ti ti-eye-off" style={{fontSize:18,color:"rgba(255,255,255,.6)"}}/></div>}
                 {tool.active&&isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
-                {tool.active&&allInUse&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(231,76,60,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-clock" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ALL IN USE</div></div>}
+                {tool.active&&tool.regrindable&&tool.needsRegrinding&&!allInUse&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.92)",color:"#1a1a1a"}}><i className="ti ti-tool"/> Needs Regrinding</div>}
+                {tool.active&&allInUse&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(231,76,60,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-clock" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ALL IN USE</div>{tool.needsRegrinding&&<div style={{fontSize:9,color:"rgba(255,255,255,.8)",letterSpacing:.5,textTransform:"uppercase"}}>⚠ needs regrinding</div>}</div>}
                 {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ORDERED</div></div>}
               </div>
               <div style={{padding:"8px 8px 10px"}}>
@@ -3670,6 +3693,11 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
                   </div>
                 </div>
               ):<button style={btn("success",true)} onClick={()=>{setRestockId(selectedTool.id);setRestockQty("");}}><i className="ti ti-package-import"/> Restock</button>}
+              {selectedTool.regrindable&&selectedTool.needsRegrinding&&(
+                <button style={{...btn("outline",true),borderColor:C.amber,color:C.amber}} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,needsRegrinding:false}:t));saveNow&&saveNow();}}>
+                  <i className="ti ti-check"/> Mark as Regrinded
+                </button>
+              )}
               {selectedTool.quantity<=(selectedTool.minQuantity||0)&&(
                 <button style={btn(selectedTool.ordered?"blue":"outline",true)} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,ordered:!t.ordered}:t));saveNow&&saveNow();}}>
                   <i className={`ti ti-${selectedTool.ordered?"checks":"shopping-cart"}`}/> {selectedTool.ordered?"Ordered — click to unmark":"Mark as Ordered"}
