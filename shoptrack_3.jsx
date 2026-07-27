@@ -3112,24 +3112,34 @@ function ManageMachines({machines,setMachines,departments}){
 // ═══════════════════════════════════════════════════════
 function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
   const [search,setSearch]=useState("");
-  const [typeFilter,setTypeFilter]=useState("");
+  const [selectedType,setSelectedType]=useState(null);
   const [selectedId,setSelectedId]=useState(null);
   const [takeQty,setTakeQty]=useState(1);
 
   const userDepts=user.departments||[];
-  const allTypes=[...new Set(tools.filter(t=>t.active&&t.toolType).map(t=>t.toolType))].sort();
-  const visible=tools.filter(t=>{
+
+  // All tools visible to this operator (dept filter)
+  const deptVisible=tools.filter(t=>{
     if(!t.active) return false;
     if(userDepts.length>0){
       const cab=(cabinets||[]).find(c=>String(c.id)===String(t.cabinetId));
       const cabDepts=cab?.departments||[];
       if(cabDepts.length>0&&!cabDepts.some(d=>userDepts.includes(d))) return false;
     }
-    if(typeFilter&&t.toolType!==typeFilter) return false;
-    if(search.trim()){const q=search.trim().toLowerCase();return(t.name||"").toLowerCase().includes(q)||(t.articleNumber||"").toLowerCase().includes(q);}
     return true;
   });
 
+  // Group by toolType, sort each group A→Z
+  const grouped={};
+  deptVisible.forEach(t=>{const key=t.toolType||"Other";if(!grouped[key])grouped[key]=[];grouped[key].push(t);});
+  Object.values(grouped).forEach(arr=>arr.sort((a,b)=>(a.name||"").localeCompare(b.name)));
+  const categories=Object.keys(grouped).sort((a,b)=>{if(a==="Other")return 1;if(b==="Other")return -1;return a.localeCompare(b);});
+
+  // If searching, show all matching tools across types sorted A→Z
+  const searchQ=search.trim().toLowerCase();
+  const searchResults=searchQ?deptVisible.filter(t=>(t.name||"").toLowerCase().includes(searchQ)||(t.articleNumber||"").toLowerCase().includes(searchQ)).sort((a,b)=>(a.name||"").localeCompare(b.name)):[];
+
+  const typeTools=selectedType?(grouped[selectedType]||[]):[];
   const selectedTool=selectedId?tools.find(t=>t.id===selectedId):null;
 
   const doTake=()=>{
@@ -3163,55 +3173,94 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
   };
   const closeModal=()=>{setSelectedId(null);setTakeQty(1);};
 
+  // Reusable tool card renderer
+  const renderToolCard=(tool)=>{
+    const checkedOut=tool.returnable?(tool.checkedOutCount||0):0;
+    const available=tool.returnable?tool.quantity-checkedOut:tool.quantity;
+    const isLow=!tool.returnable&&tool.quantity<=(tool.minQuantity||0);
+    const isOut=available<=0;
+    const allInUse=tool.returnable&&isOut;
+    const qColor=isOut?C.red:isLow?C.amber:C.green;
+    return(
+      <div key={tool.id} onClick={()=>{setSelectedId(tool.id);setTakeQty(1);}}
+        style={{background:C.surface,borderRadius:10,border:`1px solid ${allInUse?C.red:isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
+        <div style={{position:"relative",width:"100%",aspectRatio:"3/2",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          {tool.photoData?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>:<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
+          <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{available}</div>
+          {tool.returnable&&checkedOut>0&&!allInUse&&<div style={{position:"absolute",top:5,left:5,background:"rgba(0,0,0,.7)",borderRadius:5,padding:"2px 6px",fontSize:9,fontWeight:700,color:C.amber,letterSpacing:.5,textTransform:"uppercase"}}>{checkedOut} in use</div>}
+          {isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+          {tool.regrindable&&tool.needsRegrinding&&!allInUse&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.92)",color:"#1a1a1a"}}><i className="ti ti-tool"/> Needs Regrinding</div>}
+          {allInUse&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(231,76,60,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-clock" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ALL IN USE</div>{tool.needsRegrinding&&<div style={{fontSize:9,color:"rgba(255,255,255,.8)",letterSpacing:.5,textTransform:"uppercase"}}>⚠ needs regrinding</div>}</div>}
+          {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ON ORDER</div></div>}
+        </div>
+        <div style={{padding:"8px 8px 10px"}}>
+          <div style={{fontSize:13,color:C.text,fontWeight:700,lineHeight:1.3,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+            {tool.returnable&&<span style={{fontSize:10,fontWeight:600,color:"#22d3ee",background:"rgba(34,211,238,.1)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>↩ Returnable</span>}
+            {Array.isArray(tool.material)&&tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
+          </div>
+        </div>
+      </div>
+    );
+  };
+
   return(
     <div style={{padding:"14px 16px"}}>
-      <div style={{position:"relative",marginBottom:allTypes.length>0?8:14}}>
-        <i className="ti ti-search" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:14,pointerEvents:"none"}}/>
-        <input style={{...inp(),paddingLeft:32}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search by name or article number…"/>
-      </div>
-      {allTypes.length>0&&(
-        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>
-          <button style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1px solid ${!typeFilter?C.amber:C.border}`,background:!typeFilter?C.amber+"22":C.raised,color:!typeFilter?C.amber:C.muted,cursor:"pointer",fontWeight:!typeFilter?700:400}} onClick={()=>setTypeFilter("")}>All</button>
-          {allTypes.map(t=>(
-            <button key={t} style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1px solid ${typeFilter===t?C.amber:C.border}`,background:typeFilter===t?C.amber+"22":C.raised,color:typeFilter===t?C.amber:C.muted,cursor:"pointer",fontWeight:typeFilter===t?700:400}} onClick={()=>setTypeFilter(typeFilter===t?"":t)}>{t}</button>
-          ))}
+      {/* Search — always visible */}
+      <div style={{position:"relative",marginBottom:14,display:"flex",gap:8,alignItems:"center"}}>
+        {selectedType&&!searchQ&&(
+          <button style={{flexShrink:0,padding:"8px 12px",background:C.raised,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,cursor:"pointer",fontSize:14}} onClick={()=>setSelectedType(null)}>
+            <i className="ti ti-arrow-left"/>
+          </button>
+        )}
+        <div style={{position:"relative",flex:1}}>
+          <i className="ti ti-search" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:14,pointerEvents:"none"}}/>
+          <input style={{...inp(),paddingLeft:32,width:"100%"}} value={search} onChange={e=>setSearch(e.target.value)} placeholder={selectedType&&!searchQ?`Search in ${selectedType}…`:"Search tools…"}/>
         </div>
-      )}
-      {visible.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools found.</div>}
-      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
-        {visible.map(tool=>{
-          const checkedOut=tool.returnable?(tool.checkedOutCount||0):0;
-          const available=tool.returnable?tool.quantity-checkedOut:tool.quantity;
-          const isLow=!tool.returnable&&tool.quantity<=(tool.minQuantity||0);
-          const isOut=available<=0;
-          const allInUse=tool.returnable&&isOut;
-          const qColor=isOut?C.red:isLow?C.amber:C.green;
-          return(
-            <div key={tool.id} onClick={()=>{setSelectedId(tool.id);setTakeQty(1);}}
-              style={{background:C.surface,borderRadius:10,border:`1px solid ${allInUse?C.red:isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
-              <div style={{position:"relative",width:"100%",aspectRatio:"3/2",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
-                {tool.photoData
-                  ?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                  :<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
-                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{available}</div>
-                {tool.returnable&&checkedOut>0&&!allInUse&&<div style={{position:"absolute",top:5,left:5,background:"rgba(0,0,0,.7)",borderRadius:5,padding:"2px 6px",fontSize:9,fontWeight:700,color:C.amber,letterSpacing:.5,textTransform:"uppercase"}}>{checkedOut} in use</div>}
-                {isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
-                {tool.regrindable&&tool.needsRegrinding&&!allInUse&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.92)",color:"#1a1a1a"}}><i className="ti ti-tool"/> Needs Regrinding</div>}
-                {allInUse&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(231,76,60,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-clock" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ALL IN USE</div>{tool.needsRegrinding&&<div style={{fontSize:9,color:"rgba(255,255,255,.8)",letterSpacing:.5,textTransform:"uppercase"}}>⚠ needs regrinding</div>}</div>}
-                {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ON ORDER</div></div>}
-              </div>
-              <div style={{padding:"8px 8px 10px"}}>
-                <div style={{fontSize:13,color:C.text,fontWeight:700,lineHeight:1.3,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
-                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                  {tool.toolType&&<span style={{fontSize:10,fontWeight:600,color:"#94a3b8",background:"rgba(148,163,184,.15)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>{tool.toolType}</span>}
-                  {tool.returnable&&<span style={{fontSize:10,fontWeight:600,color:"#22d3ee",background:"rgba(34,211,238,.1)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>↩ Returnable</span>}
-                  {Array.isArray(tool.material)&&tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
-                </div>
-              </div>
-            </div>
-          );
-        })}
       </div>
+
+      {/* Category view */}
+      {!searchQ&&!selectedType&&(
+        <>
+          {categories.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools added yet.</div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12}}>
+            {categories.map(type=>{
+              const group=grouped[type];
+              const photo=group.find(t=>t.photoData)?.photoData;
+              const hasAlert=group.some(t=>(!t.returnable&&t.quantity<=(t.minQuantity||0))||(t.returnable&&t.quantity-(t.checkedOutCount||0)<=0)||t.needsRegrinding);
+              return(
+                <div key={type} onClick={()=>setSelectedType(type)} style={{background:C.surface,borderRadius:12,border:`1px solid ${hasAlert?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
+                  <div style={{position:"relative",width:"100%",aspectRatio:"4/3",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {photo?<img src={photo} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>:<i className="ti ti-tool" style={{fontSize:36,color:C.muted,opacity:0.2}}/>}
+                    <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,.7))",padding:"20px 12px 8px"}}>
+                      <div style={{fontSize:16,fontWeight:800,color:"#fff",letterSpacing:.3}}>{type}</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,.7)"}}>{group.length} tool{group.length!==1?"s":""}</div>
+                    </div>
+                    {hasAlert&&<div style={{position:"absolute",top:8,right:8,background:C.amber,borderRadius:20,width:10,height:10}}/>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Type drill-down view */}
+      {!searchQ&&selectedType&&(
+        <>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>{selectedType} · {typeTools.length} tool{typeTools.length!==1?"s":""}</div>
+          {typeTools.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No tools in this category.</div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>{typeTools.map(renderToolCard)}</div>
+        </>
+      )}
+
+      {/* Global search results */}
+      {searchQ&&(
+        <>
+          {searchResults.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools found.</div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>{searchResults.map(renderToolCard)}</div>
+        </>
+      )}
 
       {selectedTool&&(
         <div onClick={e=>{if(e.target===e.currentTarget)closeModal();}}
