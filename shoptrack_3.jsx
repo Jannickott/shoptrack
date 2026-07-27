@@ -3322,6 +3322,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
   const [restockQty,setRestockQty]=useState("");
   const [selectedId,setSelectedId]=useState(null);
   const [toolFilter,setToolFilter]=useState("all");
+  const [deleteConfirm,setDeleteConfirm]=useState(false);
   const blank={name:"",toolType:"",returnable:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
@@ -3540,7 +3541,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
   const orderedTools=tools.filter(t=>t.ordered);
   const filteredTools=toolFilter==="low"?lowTools:toolFilter==="ordered"?orderedTools:tools;
   const selectedTool=selectedId?tools.find(t=>t.id===selectedId):null;
-  const closeModal=()=>{setSelectedId(null);setRestockId(null);setRestockQty("");};
+  const closeModal=()=>{setSelectedId(null);setRestockId(null);setRestockQty("");setDeleteConfirm(false);};
 
   return(
     <div>
@@ -3678,6 +3679,15 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
               <button style={btn(selectedTool.active?"danger":"outline",true)} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,active:!t.active}:t));closeModal();saveNow&&saveNow();}}>
                 <i className={`ti ti-${selectedTool.active?"eye-off":"eye"}`}/> {selectedTool.active?"Hide from Operators":"Make Visible"}
               </button>
+              {!deleteConfirm
+                ?<button style={{...btn("outline",true),borderColor:"rgba(231,76,60,.4)",color:C.red}} onClick={()=>setDeleteConfirm(true)}><i className="ti ti-trash"/> Delete Tool</button>
+                :<div style={{background:"rgba(231,76,60,.1)",border:`1px solid ${C.red}`,borderRadius:8,padding:"10px 12px"}}>
+                  <div style={{fontSize:11,color:C.red,marginBottom:10,fontWeight:600}}>Delete "{selectedTool.name}" permanently?</div>
+                  <div style={{display:"flex",gap:8}}>
+                    <button style={{...btn("danger",false,false),flex:1}} onClick={()=>{setTools(prev=>prev.filter(t=>t.id!==selectedTool.id));closeModal();saveNow&&saveNow();}}><i className="ti ti-trash"/> Yes, delete</button>
+                    <button style={btn("outline",false,true)} onClick={()=>setDeleteConfirm(false)}>Cancel</button>
+                  </div>
+                </div>}
             </div>
             <button style={{...btn("outline",true,true),marginTop:10}} onClick={closeModal}>Close</button>
           </div>
