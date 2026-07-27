@@ -3141,6 +3141,23 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
     setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:qty,action:"take",timestamp:now}]);
     setSelectedId(null);setTakeQty(1);saveNow();
   };
+  const doCheckout=()=>{
+    if(!selectedTool||!selectedTool.returnable) return;
+    const available=selectedTool.quantity-(selectedTool.checkedOutCount||0);
+    if(available<1) return;
+    const now=Date.now();
+    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,checkedOutCount:(t.checkedOutCount||0)+1}:t));
+    setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:1,action:"checkout",timestamp:now}]);
+    setSelectedId(null);setTakeQty(1);saveNow();
+  };
+  const doReturn=()=>{
+    if(!selectedTool||!selectedTool.returnable) return;
+    if((selectedTool.checkedOutCount||0)<1) return;
+    const now=Date.now();
+    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,checkedOutCount:Math.max(0,(t.checkedOutCount||0)-1)}:t));
+    setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:1,action:"return",timestamp:now}]);
+    setSelectedId(null);setTakeQty(1);saveNow();
+  };
   const closeModal=()=>{setSelectedId(null);setTakeQty(1);};
 
   return(
@@ -3160,24 +3177,30 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
       {visible.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools found.</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
         {visible.map(tool=>{
-          const isLow=tool.quantity<=(tool.minQuantity||0);
-          const isOut=tool.quantity===0;
+          const checkedOut=tool.returnable?(tool.checkedOutCount||0):0;
+          const available=tool.returnable?tool.quantity-checkedOut:tool.quantity;
+          const isLow=!tool.returnable&&tool.quantity<=(tool.minQuantity||0);
+          const isOut=available<=0;
+          const allInUse=tool.returnable&&isOut;
           const qColor=isOut?C.red:isLow?C.amber:C.green;
           return(
             <div key={tool.id} onClick={()=>{setSelectedId(tool.id);setTakeQty(1);}}
-              style={{background:C.surface,borderRadius:10,border:`1px solid ${isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
+              style={{background:C.surface,borderRadius:10,border:`1px solid ${allInUse?C.red:isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
               <div style={{position:"relative",width:"100%",aspectRatio:"3/2",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
                 {tool.photoData
                   ?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                   :<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
-                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{tool.quantity}</div>
+                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{available}</div>
+                {tool.returnable&&checkedOut>0&&!allInUse&&<div style={{position:"absolute",top:5,left:5,background:"rgba(0,0,0,.7)",borderRadius:5,padding:"2px 6px",fontSize:9,fontWeight:700,color:C.amber,letterSpacing:.5,textTransform:"uppercase"}}>{checkedOut} in use</div>}
                 {isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+                {allInUse&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(231,76,60,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-clock" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ALL IN USE</div></div>}
                 {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ON ORDER</div></div>}
               </div>
               <div style={{padding:"8px 8px 10px"}}>
                 <div style={{fontSize:13,color:C.text,fontWeight:700,lineHeight:1.3,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
                 <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
                   {tool.toolType&&<span style={{fontSize:10,fontWeight:600,color:"#94a3b8",background:"rgba(148,163,184,.15)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>{tool.toolType}</span>}
+                  {tool.returnable&&<span style={{fontSize:10,fontWeight:600,color:"#22d3ee",background:"rgba(34,211,238,.1)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>↩ Returnable</span>}
                   {Array.isArray(tool.material)&&tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
                 </div>
               </div>
@@ -3243,13 +3266,34 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
                 </div>
               );
             })()}
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
-              <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>In Stock</div><div style={{fontSize:18,fontWeight:700,color:selectedTool.quantity<=(selectedTool.minQuantity||0)?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.quantity}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> pcs</span></div></div>
-              {selectedTool.recommendedSpeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Speed</div><div style={{fontSize:12,color:C.text}}>{selectedTool.recommendedSpeed}</div></div>}
-              {selectedTool.recommendedFeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Feed</div><div style={{fontSize:12,color:C.text}}>{selectedTool.recommendedFeed}</div></div>}
-              {selectedTool.supplier&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Supplier</div><div style={{fontSize:12,color:C.text}}>{selectedTool.supplier}</div></div>}
-            </div>
-            {selectedTool.quantity>0?(
+            {(()=>{
+              const checkedOut=selectedTool.returnable?(selectedTool.checkedOutCount||0):0;
+              const available=selectedTool.returnable?selectedTool.quantity-checkedOut:selectedTool.quantity;
+              return(
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                  {selectedTool.returnable?(
+                    <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}>
+                      <div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Available</div>
+                      <div style={{fontSize:18,fontWeight:700,color:available<=0?C.red:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{available}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> / {selectedTool.quantity} total</span></div>
+                      {checkedOut>0&&<div style={{fontSize:10,color:C.amber,marginTop:2}}>{checkedOut} currently in use</div>}
+                    </div>
+                  ):(
+                    <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>In Stock</div><div style={{fontSize:18,fontWeight:700,color:selectedTool.quantity<=(selectedTool.minQuantity||0)?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.quantity}<span style={{fontSize:10,fontWeight:400,color:C.muted}}> pcs</span></div></div>
+                  )}
+                  {selectedTool.recommendedSpeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Speed</div><div style={{fontSize:12,color:C.text}}>{selectedTool.recommendedSpeed}</div></div>}
+                  {selectedTool.recommendedFeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Feed</div><div style={{fontSize:12,color:C.text}}>{selectedTool.recommendedFeed}</div></div>}
+                  {selectedTool.supplier&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:8,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Supplier</div><div style={{fontSize:12,color:C.text}}>{selectedTool.supplier}</div></div>}
+                </div>
+              );
+            })()}
+            {selectedTool.returnable?(
+              <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
+                {(selectedTool.quantity-(selectedTool.checkedOutCount||0))>0
+                  ?<button style={btn("primary",true)} onClick={doCheckout}><i className="ti ti-logout"/> Check Out</button>
+                  :<div style={{...badge("down"),textAlign:"center",padding:"10px",fontSize:11,display:"block"}}>ALL IN USE — wait for someone to return it</div>}
+                {(selectedTool.checkedOutCount||0)>0&&<button style={btn("success",true)} onClick={doReturn}><i className="ti ti-login"/> Return to Cabinet</button>}
+              </div>
+            ):selectedTool.quantity>0?(
               <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
                 <div style={{fontSize:9,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:10}}>How many are you taking?</div>
                 <div style={{display:"flex",gap:12,alignItems:"center",justifyContent:"center",marginBottom:14}}>
@@ -3278,7 +3322,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
   const [restockQty,setRestockQty]=useState("");
   const [selectedId,setSelectedId]=useState(null);
   const [toolFilter,setToolFilter]=useState("all");
-  const blank={name:"",toolType:"",cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
+  const blank={name:"",toolType:"",returnable:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
   const photoRef=useRef();
@@ -3339,6 +3383,18 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
           ))}
         </div>
         <input style={{...fi("toolType"),marginTop:2}} value={form.toolType} onChange={e=>setForm(p=>({...p,toolType:e.target.value}))} placeholder="Or type a custom type…"/>
+      </div>
+      <div style={{marginBottom:14}}>
+        <button type="button" onClick={()=>setForm(p=>({...p,returnable:!p.returnable}))}
+          style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:form.returnable?"rgba(59,130,246,.12)":C.raised,border:`1px solid ${form.returnable?"#3b82f6":C.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",textAlign:"left"}}>
+          <div style={{width:20,height:20,borderRadius:4,border:`2px solid ${form.returnable?"#3b82f6":C.border}`,background:form.returnable?"#3b82f6":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            {form.returnable&&<i className="ti ti-check" style={{fontSize:12,color:"#fff"}}/>}
+          </div>
+          <div>
+            <div style={{fontSize:12,color:form.returnable?"#3b82f6":C.text,fontWeight:600}}>Returnable tool</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:1}}>Tool is borrowed and returned after use — stock is not consumed</div>
+          </div>
+        </button>
       </div>
       <div style={{marginBottom:10}}>
         <label style={label}>Cabinet *</label>
@@ -3505,28 +3561,33 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
       {filteredTools.length===0&&tools.length>0&&<div style={{textAlign:"center",padding:"20px",color:C.muted,fontSize:12}}>No tools match this filter.</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
         {filteredTools.map(tool=>{
-          const isLow=tool.active&&tool.quantity<=(tool.minQuantity||0);
-          const isOut=tool.quantity===0;
+          const checkedOut=tool.returnable?(tool.checkedOutCount||0):0;
+          const available=tool.returnable?tool.quantity-checkedOut:tool.quantity;
+          const isLow=tool.active&&!tool.returnable&&tool.quantity<=(tool.minQuantity||0);
+          const isOut=available<=0;
+          const allInUse=tool.returnable&&isOut;
           const qColor=isOut?C.red:isLow?C.amber:C.green;
           return(
             <div key={tool.id} onClick={()=>setSelectedId(tool.id)}
-              style={{background:C.surface,borderRadius:10,border:`1px solid ${isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer",opacity:tool.active?1:0.45}}>
+              style={{background:C.surface,borderRadius:10,border:`1px solid ${allInUse?C.red:isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer",opacity:tool.active?1:0.45}}>
               <div style={{position:"relative",width:"100%",aspectRatio:"3/2",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
                 {tool.photoData
                   ?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                   :<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
-                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{tool.quantity}</div>
+                <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{available}</div>
+                {tool.returnable&&checkedOut>0&&!allInUse&&<div style={{position:"absolute",top:5,left:5,background:"rgba(0,0,0,.7)",borderRadius:5,padding:"2px 6px",fontSize:9,fontWeight:700,color:C.amber,letterSpacing:.5,textTransform:"uppercase"}}>{checkedOut} in use</div>}
                 {!tool.active&&<div style={{position:"absolute",inset:0,background:"rgba(0,0,0,.45)",display:"flex",alignItems:"center",justifyContent:"center"}}><i className="ti ti-eye-off" style={{fontSize:18,color:"rgba(255,255,255,.6)"}}/></div>}
                 {tool.active&&isLow&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:isOut?"rgba(231,76,60,.88)":"rgba(240,165,0,.88)",color:isOut?"#fff":"#1a1a1a"}}>{isOut?"OUT OF STOCK":"LOW STOCK"}</div>}
+                {tool.active&&allInUse&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(231,76,60,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-clock" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ALL IN USE</div></div>}
                 {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ORDERED</div></div>}
               </div>
               <div style={{padding:"8px 8px 10px"}}>
                 <div style={{fontSize:13,color:C.text,fontWeight:700,lineHeight:1.3,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
-                {Array.isArray(tool.material)&&tool.material.length>0&&(
-                  <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
-                    {tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
-                  </div>
-                )}
+                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                  {tool.toolType&&<span style={{fontSize:10,fontWeight:600,color:"#94a3b8",background:"rgba(148,163,184,.15)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>{tool.toolType}</span>}
+                  {tool.returnable&&<span style={{fontSize:10,fontWeight:600,color:"#22d3ee",background:"rgba(34,211,238,.1)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>↩ Returnable</span>}
+                  {Array.isArray(tool.material)&&tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
+                </div>
               </div>
             </div>
           );
