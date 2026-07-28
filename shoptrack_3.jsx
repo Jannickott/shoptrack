@@ -481,7 +481,7 @@ export default function App(){
 
       {/* HEADER */}
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{fontSize:13,letterSpacing:3,textTransform:"uppercase",color:C.amber,fontWeight:700}}>⚙ ShopTrack</div>
+        <div style={{fontSize:13,letterSpacing:3,textTransform:"uppercase",color:C.amber,fontWeight:700,cursor:"pointer",userSelect:"none"}} onClick={()=>setTab(user.role==="admin"?"admin":"new")}>⚙ ShopTrack</div>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <div style={{fontSize:19,letterSpacing:3}}>{clock}</div>
           <div style={{fontSize:11,textAlign:"right"}}>
