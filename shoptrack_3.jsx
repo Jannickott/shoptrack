@@ -774,9 +774,11 @@ function QuickEntryTab({user,machines,setJobs,setTab,saveNow}){
     const runSec  =(parseInt(runH)||0)*3600+(parseInt(runM)||0)*60;
     const completedAt=Date.now();
     const date=new Date(completedAt);
-    const dateStr=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+    const year=date.getFullYear();
+    const month=String(date.getMonth()+1).padStart(2,"0");
+    const dateStr=`${year}-${month}-${String(date.getDate()).padStart(2,"0")}`;
     const safeName=(s)=>s.replace(/[^a-z0-9]/gi,"_");
-    const filename=`quality_${safeName(customer.trim())}_${safeName(job.trim())}_${dateStr}.jpg`;
+    const filename=`${year}/${month}/quality_${safeName(customer.trim())}_${safeName(job.trim())}_${dateStr}.jpg`;
     // Upload photo to server (falls back to base64 if offline)
     const photoUrl=await uploadPhoto(photo,filename);
     setJobs(prev=>[{
@@ -1201,7 +1203,9 @@ function CompleteModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
     const date=new Date(now);
     const dateStr=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
     const safeName=(s)=>s.replace(/[^a-z0-9]/gi,"_");
-    const base=`quality_${safeName(j.customer||"unknown")}_${safeName(j.job)}_${dateStr}`;
+    const runDate=new Date(j.createdAt||now);
+    const folder=`${runDate.getFullYear()}/${String(runDate.getMonth()+1).padStart(2,"0")}`;
+    const base=`${folder}/quality_${safeName(j.customer||"unknown")}_${safeName(j.job)}_${dateStr}`;
 
     if(isSide1Completion){
       // Save side 1 data, auto-advance to side2_setup
