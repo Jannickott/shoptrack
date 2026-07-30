@@ -169,6 +169,7 @@ export default function App(){
   const [toolLog,    setToolLog]       =useState([]);
   const [cabinets,   setCabinets]      =useState([]);
   const [departments,setDepartments]   =useState([]);
+  const [setupSheets,setSetupSheets]   =useState([]);
 
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
@@ -201,6 +202,7 @@ export default function App(){
           if(data.toolLog)      setToolLog(data.toolLog);
           if(data.cabinets)     setCabinets(data.cabinets);
           if(data.departments)  setDepartments(data.departments);
+          if(data.setupSheets)  setSetupSheets(data.setupSheets);
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
             workHours:data.workHours,
@@ -211,6 +213,7 @@ export default function App(){
             toolLog:data.toolLog,
             cabinets:data.cabinets,
             departments:data.departments,
+            setupSheets:data.setupSheets,
           };
         }
       })
@@ -223,7 +226,7 @@ export default function App(){
   const lastServerRef=useRef({});
   const dataLoadedRef=useRef(false); // prevents saving before server data is loaded
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments};
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets};
   },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog]);
 
   // Save to server every 3 seconds — only after data has been loaded
@@ -281,8 +284,9 @@ export default function App(){
         if(data.toolLog    &&s(data.toolLog)    !==s(last.toolLog))    setToolLog(data.toolLog);
         if(data.cabinets   &&s(data.cabinets)   !==s(last.cabinets))   setCabinets(data.cabinets);
         if(data.departments&&s(data.departments)!==s(last.departments)) setDepartments(data.departments);
+        if(data.setupSheets&&s(data.setupSheets)!==s(last.setupSheets)) setSetupSheets(data.setupSheets);
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets};
       }).catch(()=>{});
     },5000);
     return()=>clearInterval(t);
@@ -495,7 +499,7 @@ export default function App(){
       {/* NAV */}
       {user.role==="operator"&&(
         <div style={{display:"flex",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-          {[["new","plus","New Job"],["quick","bolt","Quick Entry"],["active","player-play","Active"],["machines","alert-triangle","Machines"],["tools","package","Tools"],["history","list","History"]].map(([t,ic,lb])=>(
+          {[["new","plus","New Job"],["quick","bolt","Quick Entry"],["active","player-play","Active"],["machines","alert-triangle","Machines"],["tools","package","Tools"],["setup","clipboard-list","Setup"],["history","list","History"]].map(([t,ic,lb])=>(
             <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
               <i className={`ti ti-${ic}`}/> {lb}
               {t==="active"&&activeCnt>0&&<span style={{background:C.amber,color:"#1a1a1a",borderRadius:20,fontSize:9,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{activeCnt}</span>}
@@ -506,7 +510,7 @@ export default function App(){
       )}
       {user.role==="admin"&&(
         <div style={{display:"flex",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-          {[["admin","layout-dashboard","Dashboard"],["alljobs","tool","All Jobs"],["machdata","cpu","Machines"],["admintools","package","Tools"],["reports","chart-bar","Reports"],["manage","settings","Manage"]].map(([t,ic,lb])=>{
+          {[["admin","layout-dashboard","Dashboard"],["alljobs","tool","All Jobs"],["machdata","cpu","Machines"],["admintools","package","Tools"],["setup","clipboard-list","Setup"],["reports","chart-bar","Reports"],["manage","settings","Manage"]].map(([t,ic,lb])=>{
             const lowCnt=t==="admintools"?tools.filter(tl=>tl.active&&tl.quantity<=(tl.minQuantity||0)).length:0;
             return(
               <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
@@ -519,7 +523,7 @@ export default function App(){
       )}
 
       {/* CONTENT */}
-      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs}/>}
+      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
@@ -530,6 +534,7 @@ export default function App(){
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
@@ -613,7 +618,7 @@ function LoginScreen({users,onLogin}){
 // ═══════════════════════════════════════════════════════
 // NEW JOB
 // ═══════════════════════════════════════════════════════
-function NewJobTab({user,machines,setJobs,jobs}){
+function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab}){
   const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const [machine,setMachine]=useState(""); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
   const [twoSided,setTwoSided]=useState(false);
   const [showSuggestions,setShowSuggestions]=useState(true);
@@ -732,6 +737,30 @@ function NewJobTab({user,machines,setJobs,jobs}){
         <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Logged in as</div>
         <div style={{display:"flex",alignItems:"center",gap:12}}><div style={avatar()}>{initials(user.name)}</div><div style={{fontSize:14,color:C.text}}>{user.name}</div></div>
       </div>
+      {(()=>{
+        if(!job.trim()||!machine) return null;
+        const sheet=(setupSheets||[]).find(s=>s.partNumber.trim().toLowerCase()===job.trim().toLowerCase()&&s.machine===machine);
+        if(sheet) return(
+          <div style={{background:"rgba(59,130,246,.1)",border:"1px solid rgba(59,130,246,.4)",borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+            <i className="ti ti-clipboard-list" style={{fontSize:18,color:"#3b82f6",flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:"#3b82f6"}}>Setup Sheet Found</div>
+              <div style={{fontSize:10,color:C.muted,marginTop:1}}>{sheet.partNumber} · {sheet.machine}{sheet.operation?` · Op ${sheet.operation}`:""}</div>
+            </div>
+            <button style={{...btn("outline",false,true),borderColor:"rgba(59,130,246,.5)",color:"#3b82f6",flexShrink:0,padding:"6px 12px",fontSize:11}} onClick={()=>setTab&&setTab("setup")}>View</button>
+          </div>
+        );
+        return(
+          <div style={{background:"rgba(240,165,0,.08)",border:"1px solid rgba(240,165,0,.3)",borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+            <i className="ti ti-clipboard-x" style={{fontSize:18,color:C.amber,flexShrink:0}}/>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:12,fontWeight:700,color:C.amber}}>No Setup Sheet</div>
+              <div style={{fontSize:10,color:C.muted,marginTop:1}}>No sheet found for {job.trim()} on {machine}</div>
+            </div>
+            <button style={{...btn("outline",false,true),borderColor:"rgba(240,165,0,.5)",color:C.amber,flexShrink:0,padding:"6px 12px",fontSize:11}} onClick={()=>setTab&&setTab("setup")}>Create</button>
+          </div>
+        );
+      })()}
       <button style={btn("primary",true)} onClick={start}><i className="ti ti-player-play"/> &nbsp;Begin Setup Timer</button>
     </div>
   );
@@ -3864,6 +3893,211 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// SETUP SHEETS — list + detail + form (turning)
+// ═══════════════════════════════════════════════════════
+function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow}){
+  const [view,setView]=useState("list");
+  const [selectedId,setSelectedId]=useState(null);
+  const [search,setSearch]=useState("");
+  const [machineFilt,setMachineFilt]=useState("all");
+  const selected=selectedId?(setupSheets||[]).find(s=>s.id===selectedId):null;
+  const machineNames=[...new Set((setupSheets||[]).map(s=>s.machine).filter(Boolean))].sort();
+  const filtered=(setupSheets||[]).filter(s=>{
+    if(machineFilt!=="all"&&s.machine!==machineFilt) return false;
+    const q=search.trim().toLowerCase();
+    if(q&&!(s.partNumber||"").toLowerCase().includes(q)&&!(s.customer||"").toLowerCase().includes(q)) return false;
+    return true;
+  }).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
+  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{if(selected){setSetupSheets(prev=>prev.map(s=>s.id===sheet.id?sheet:s));}else{setSetupSheets(prev=>[sheet,...prev]);}saveNow&&saveNow();setSelectedId(sheet.id);setView("detail");}}/>);
+  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onDelete={()=>{setSetupSheets(prev=>prev.filter(s=>s.id!==selected.id));saveNow&&saveNow();setView("list");setSelectedId(null);}}/>);
+  return(
+    <div style={{padding:"14px 16px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+        <div style={{flex:1,position:"relative"}}>
+          <i className="ti ti-search" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:14,pointerEvents:"none"}}/>
+          <input style={{...inp(),paddingLeft:32}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search part number or customer…"/>
+        </div>
+        <button style={btn("primary",false,true)} onClick={()=>{setSelectedId(null);setView("edit");}}><i className="ti ti-plus"/></button>
+      </div>
+      {machineNames.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>{["all",...machineNames].map(m=><button key={m} style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1px solid ${machineFilt===m?C.amber:C.border}`,background:machineFilt===m?C.amber+"22":C.raised,color:machineFilt===m?C.amber:C.muted,cursor:"pointer",fontWeight:machineFilt===m?700:400}} onClick={()=>setMachineFilt(m)}>{m==="all"?"All Machines":m}</button>)}</div>}
+      {filtered.length===0&&<div style={{textAlign:"center",padding:"50px 20px",color:C.muted}}><i className="ti ti-clipboard-list" style={{fontSize:40,display:"block",marginBottom:12,opacity:.25}}/><div style={{fontSize:13,marginBottom:6}}>No setup sheets yet.</div><div style={{fontSize:11,color:C.amber,cursor:"pointer"}} onClick={()=>{setSelectedId(null);setView("edit");}}>+ Create your first setup sheet</div></div>}
+      <div style={{display:"flex",flexDirection:"column",gap:10}}>
+        {filtered.map(s=>(
+          <div key={s.id} onClick={()=>{setSelectedId(s.id);setView("detail");}} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",cursor:"pointer"}}>
+            <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}}>
+              <div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:2}}>{s.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[s.customer,s.material].filter(Boolean).join(" · ")}</div></div>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",padding:"3px 8px",borderRadius:6}}>{s.machine}</span>{s.operation&&<span style={{fontSize:9,color:C.muted}}>Op {s.operation}</span>}</div>
+            </div>
+            <div style={{display:"flex",gap:12,fontSize:9,color:C.muted,letterSpacing:.5}}>
+              <span><i className="ti ti-tool"/> {(s.tools||[]).filter(t=>t.description).length} tools</span>
+              {(s.opsMain||[]).filter(o=>o.operation).length>0&&<span><i className="ti ti-list-numbers"/> {(s.opsMain||[]).filter(o=>o.operation).length} ops</span>}
+              <span><i className="ti ti-calendar"/> {fmtDate(s.updatedAt||s.createdAt)}</span>
+              {s.createdBy&&<span><i className="ti ti-user"/> {s.createdBy}</span>}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SetupSheetDetail({sheet,onBack,onEdit,onDelete}){
+  const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
+  const rc=pos=>{if(!pos)return"";return(sheet.restartPrefix||"NAT")+String(pos).padStart(sheet.restartPad||2,"0");};
+  const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
+  const mainOps=(sheet.opsMain||[]).filter(o=>o.operation);
+  return(
+    <div style={{padding:"14px 16px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+        <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onBack}><i className="ti ti-arrow-left"/></button>
+        <div style={{flex:1,minWidth:0}}><div style={{fontSize:18,fontWeight:700,color:C.text}}>{sheet.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[sheet.customer,sheet.machine,sheet.operation&&`Op ${sheet.operation}`].filter(Boolean).join(" · ")}</div></div>
+        <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onEdit}><i className="ti ti-edit"/></button>
+      </div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {[["Machine",sheet.machine],["Material",sheet.material],["Operation",sheet.operation],["Revision",sheet.revision],["Sub Program",sheet.subProgram],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>{k}</div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v}</div></div>))}
+        </div>
+      </div>
+      {filledTools.length>0&&(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List</div>
+          <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+            {filledTools.map((t,i)=>(
+              <div key={t.position} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<filledTools.length-1?`1px solid ${C.border}`:"none"}}>
+                <div style={{width:30,height:30,borderRadius:6,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:C.amber,flexShrink:0}}>{t.position}</div>
+                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{t.description}</div>{t.label&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.label}</div>}</div>
+                <div style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{rc(t.position)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {mainOps.length>0&&(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Operations Sequence — Main Spindle</div>
+          <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+            <div style={{display:"grid",gridTemplateColumns:"50px 1fr 70px",borderBottom:`1px solid ${C.border}`}}>{["Tool","Operation","Restart"].map(h=><div key={h} style={{padding:"6px 10px",fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase"}}>{h}</div>)}</div>
+            {mainOps.map((o,i)=>(
+              <div key={i} style={{display:"grid",gridTemplateColumns:"50px 1fr 70px",borderBottom:i<mainOps.length-1?`1px solid rgba(255,255,255,.04)`:"none"}}>
+                <div style={{padding:"10px",fontSize:12,fontWeight:700,color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>T{String(o.toolPosition||0).padStart(2,"0")}</div>
+                <div style={{padding:"10px",fontSize:12,color:C.text}}>{o.operation}</div>
+                <div style={{padding:"10px",fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace"}}>{rc(o.toolPosition)}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+      {(sheet.chuckName||sheet.clampingPressure||sheet.zeroPoint||sheet.workpieceStop)&&(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Setup Parameters</div>
+          <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"14px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              {[["Chuck Name",sheet.chuckName],["Chuck Overhang",sheet.chuckOverhang],["Clamping Pressure",sheet.clampingPressure],["Zero Point",sheet.zeroPoint],["Workpiece Stop",sheet.workpieceStop]].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>{k}</div><div style={{fontSize:20,fontWeight:700,color:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{v}</div></div>))}
+            </div>
+          </div>
+        </div>
+      )}
+      {sheet.notes&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Notes</div><div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",fontSize:12,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{sheet.notes}</div></div>}
+      <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
+        <button style={btn("outline",true)} onClick={onEdit}><i className="ti ti-edit"/> Edit Setup Sheet</button>
+        {!deleteConfirmSS
+          ?<button style={{...btn("outline",true),borderColor:"rgba(231,76,60,.4)",color:C.red}} onClick={()=>setDeleteConfirmSS(true)}><i className="ti ti-trash"/> Delete</button>
+          :<div style={{background:"rgba(231,76,60,.1)",border:`1px solid ${C.red}`,borderRadius:8,padding:"10px 12px"}}>
+            <div style={{fontSize:11,color:C.red,marginBottom:10,fontWeight:600}}>Delete "{sheet.partNumber}" on {sheet.machine}?</div>
+            <div style={{display:"flex",gap:8}}>
+              <button style={{...btn("danger",false,false),flex:1}} onClick={onDelete}><i className="ti ti-trash"/> Yes, delete</button>
+              <button style={btn("outline",false,true)} onClick={()=>setDeleteConfirmSS(false)}>Cancel</button>
+            </div>
+          </div>}
+      </div>
+    </div>
+  );
+}
+
+function SetupSheetForm({sheet,machines,user,onBack,onSave}){
+  const blank={id:null,partNumber:"",customer:"",machine:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],opsMain:[],chuckName:"",chuckOverhang:"",clampingPressure:"",zeroPoint:"",workpieceStop:"",notes:""};
+  const [form,setForm]=useState(sheet?{...blank,...sheet}:blank);
+  const [errs,setErrs]=useState({});
+  const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
+  const rc=pos=>{if(!pos)return"";return(form.restartPrefix||"NAT")+String(pos).padStart(form.restartPad||2,"0");};
+  const usedPositions=new Set((form.tools||[]).map(t=>t.position));
+  const availablePositions=[...Array(32)].map((_,i)=>i+1).filter(n=>!usedPositions.has(n));
+  const setTool=(pos,field,val)=>setForm(p=>{const tools=[...(p.tools||[])];const idx=tools.findIndex(t=>t.position===pos);if(idx>=0)tools[idx]={...tools[idx],[field]:val};return{...p,tools};});
+  const removeTool=pos=>setForm(p=>({...p,tools:(p.tools||[]).filter(t=>t.position!==pos)}));
+  const addTool=()=>{const pos=availablePositions[0];if(!pos)return;setForm(p=>({...p,tools:[...(p.tools||[]),{position:pos,description:"",label:""}].sort((a,b)=>a.position-b.position)}));};
+  const changeToolPos=(oldPos,newPos)=>{const n=parseInt(newPos);if(!n||usedPositions.has(n))return;setForm(p=>({...p,tools:p.tools.map(t=>t.position===oldPos?{...t,position:n}:t).sort((a,b)=>a.position-b.position)}));};
+  const setOp=(idx,field,val)=>setForm(p=>{const ops=[...(p.opsMain||[])];ops[idx]={...ops[idx],[field]:field==="toolPosition"?parseInt(val)||"":val};return{...p,opsMain:ops};});
+  const addOp=()=>setForm(p=>({...p,opsMain:[...(p.opsMain||[]),{toolPosition:"",operation:""}]}));
+  const removeOp=idx=>setForm(p=>({...p,opsMain:(p.opsMain||[]).filter((_,i)=>i!==idx)}));
+  const save=()=>{
+    const e={};
+    if(!form.partNumber.trim()) e.partNumber="Required";
+    if(!form.machine) e.machine="Required";
+    if(Object.keys(e).length){setErrs(e);return;}
+    const now=Date.now();
+    onSave({...form,id:form.id||now,createdAt:form.createdAt||now,updatedAt:now,createdBy:form.createdBy||user.name});
+  };
+  return(
+    <div style={{padding:"14px 16px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
+        <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onBack}><i className="ti ti-arrow-left"/></button>
+        <div style={{fontSize:12,color:C.amber,letterSpacing:2,textTransform:"uppercase"}}>{sheet?"Edit Setup Sheet":"New Setup Sheet"}</div>
+      </div>
+      <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Identity</div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
+        <div style={{marginBottom:10}}><label style={label}>Part Number *</label><input style={inp(errs.partNumber)} value={form.partNumber} onChange={e=>setF("partNumber",e.target.value)} placeholder="e.g. CV-155"/>{errs.partNumber&&<div style={errMsg}>{errs.partNumber}</div>}</div>
+        <div style={{marginBottom:10}}><label style={label}>Machine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>setF("machine",e.target.value)}><option value="">— Select Machine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
+        {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["operation","Operation","e.g. 1/2"],["subProgram","Sub Program",""],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
+      </div>
+      <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Restart Code Format</div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:8}}>
+          <div><label style={label}>Prefix</label><input style={inp()} value={form.restartPrefix||"NAT"} onChange={e=>setF("restartPrefix",e.target.value)} placeholder="e.g. NAT"/></div>
+          <div><label style={label}>Digit Padding</label><select style={sel()} value={form.restartPad||2} onChange={e=>setF("restartPad",parseInt(e.target.value))}>{[1,2,3,4].map(n=><option key={n} value={n}>{n} digits</option>)}</select></div>
+        </div>
+        <div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:6,padding:"6px 10px"}}>Tool 8 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(8)}</span>&nbsp;·&nbsp;Tool 1 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(1)}</span></div>
+      </div>
+      <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool List</div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+        {(form.tools||[]).length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No tools added yet</div>}
+        {(form.tools||[]).map(t=>(
+          <div key={t.position} style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"flex-start"}}>
+            <select style={{...sel(),width:60,flexShrink:0,fontWeight:700,color:C.amber}} value={t.position} onChange={e=>changeToolPos(t.position,e.target.value)}><option value={t.position}>{t.position}</option>{availablePositions.map(n=><option key={n} value={n}>{n}</option>)}</select>
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
+              <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Tool description (e.g. SKRUB 0.8)"/>
+              <input style={{...inp(),fontSize:10}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Label (e.g. DREJE UDV) — optional"/>
+            </div>
+            <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,padding:"4px 2px",flexShrink:0,marginTop:4}} onClick={()=>removeTool(t.position)}><i className="ti ti-x"/></button>
+          </div>
+        ))}
+        <div style={{padding:"10px 12px"}}><button style={{background:"none",border:"none",color:C.amber,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={addTool} disabled={availablePositions.length===0}><i className="ti ti-plus"/> Add Tool{availablePositions.length>0?` (next: pos ${availablePositions[0]})`:" (all 32 filled)"}</button></div>
+      </div>
+      <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Operations Sequence — Main Spindle</div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+        {(form.opsMain||[]).length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No steps added yet</div>}
+        {(form.opsMain||[]).map((o,i)=>(
+          <div key={i} style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"center"}}>
+            <select style={{...sel(),width:70,flexShrink:0}} value={o.toolPosition||""} onChange={e=>setOp(i,"toolPosition",e.target.value)}><option value="">T—</option>{(form.tools||[]).map(t=><option key={t.position} value={t.position}>T{String(t.position).padStart(2,"0")}</option>)}</select>
+            <input style={{...inp(),flex:1}} value={o.operation||""} onChange={e=>setOp(i,"operation",e.target.value)} placeholder="Operation name"/>
+            <div style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace",minWidth:52,textAlign:"right",flexShrink:0}}>{rc(o.toolPosition)}</div>
+            <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,padding:"4px 2px",flexShrink:0}} onClick={()=>removeOp(i)}><i className="ti ti-x"/></button>
+          </div>
+        ))}
+        <div style={{padding:"10px 12px"}}><button style={{background:"none",border:"none",color:C.amber,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={addOp}><i className="ti ti-plus"/> Add Step</button></div>
+      </div>
+      <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Setup Parameters (Turning)</div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+          {[["chuckName","Chuck Name","e.g. Q"],["chuckOverhang","Chuck Overhang",""],["clampingPressure","Clamping Pressure","e.g. 1.8"],["zeroPoint","Zero Point","e.g. 16567.762"],["workpieceStop","Workpiece Stop","e.g. 55"]].map(([k,lbl,ph])=>(<div key={k}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
+        </div>
+      </div>
+      <div style={{marginBottom:20}}><label style={label}>Notes</label><textarea style={{...inp(),minHeight:80,resize:"vertical",display:"block"}} value={form.notes||""} onChange={e=>setF("notes",e.target.value)} placeholder="e.g. EMNE TID 1 MINUT OG 22 SEKUNDER"/></div>
+      <button style={btn("primary",true)} onClick={save}><i className="ti ti-check"/> Save Setup Sheet</button>
     </div>
   );
 }
