@@ -28,7 +28,7 @@ function initials(n){ return n.split(" ").map(x=>x[0]).join("").slice(0,2).toUpp
 function liveTime(j){
   const now=Date.now();
   const ts=j.phaseStartedAt;
-  const active=ts&&!j.paused&&!j.logoutPaused;
+  const active=ts&&!j.paused&&!j.logoutPaused&&!j.operatorPaused;
   // For night mode, cap elapsed at when night run ended
   const elapsed=active?Math.floor(((j.nightModeEndsAt&&now>j.nightModeEndsAt?j.nightModeEndsAt:now)-ts)/1000):0;
   return{
@@ -428,7 +428,7 @@ export default function App(){
     // Compute synchronously from stateRef so saveNow() gets correct state immediately
     const n=Date.now();
     const updatedJobs=(stateRef.current.jobs||[]).map(j=>{
-      if(j.operatorId!==u.id||!j.logoutPaused) return j;
+      if(j.operatorId!==u.id||!j.logoutPaused||j.operatorPaused) return j;
       if(j.nightModeDone) return{...j,logoutPaused:false,nightMode:false,nightModeDone:false,nightModeDuration:0,nightModeEndsAt:null,lastModifiedAt:n};
       return{...j,logoutPaused:false,nightModeWaiting:false,phaseStartedAt:n,lastModifiedAt:n};
     });
@@ -976,10 +976,11 @@ function QuickEntryTab({user,machines,setJobs,setTab,saveNow}){
 // ═══════════════════════════════════════════════════════
 // ACTIVE
 // ═══════════════════════════════════════════════════════
-function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring}){
+function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,pauseJob,resumeJob}){
     const [nmForm,setNmForm]=useState(false);
     const [nmH,setNmH]=useState(""); const [nmM,setNmM]=useState("");
-    const anyPaused=j.paused||j.logoutPaused;
+    const [pauseConfirm,setPauseConfirm]=useState(false);
+    const anyPaused=j.paused||j.logoutPaused||j.operatorPaused;
     const nightColor="#7c5cbf";
     const nightArmed=j.nightMode&&!j.nightModeEndsAt&&!j.nightModeDone;
     const nightActive=j.nightMode&&j.nightModeEndsAt&&!j.nightModeDone;
@@ -988,7 +989,7 @@ function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring}){
     const isRun=j.status==="run"||j.status==="side2_run";
     const lt=liveTime(j);
     const isSide2=j.status==="side2_setup"||j.status==="side2_run";
-    const color=j.paused?C.red:j.logoutPaused?C.muted:j.nightMode?nightColor:isDebur?C.deburr:isSetup?C.amber:C.green;
+    const color=j.operatorPaused?C.red:j.paused?C.red:j.logoutPaused?C.muted:j.nightMode?nightColor:isDebur?C.deburr:isSetup?C.amber:C.green;
     const remainingSec=nightActive?Math.max(0,Math.round((j.nightModeEndsAt-Date.now())/1000)):0;
 
     const activateNightMode=()=>{
@@ -1018,8 +1019,16 @@ function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring}){
         <div style={{fontSize:11,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><i className="ti ti-hash"/> {j.job}</div>
         {j.op&&<div style={{fontSize:10,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.op}</div>}
         {j.paused&&<div style={{background:"rgba(231,76,60,0.12)",borderRadius:6,padding:"6px 8px",fontSize:10,color:C.red}}><i className="ti ti-player-pause"/> Timer paused — machine down</div>}
-        {j.logoutPaused&&!j.nightModeDone&&<div style={{background:"rgba(138,155,181,0.1)",borderRadius:6,padding:"6px 8px",fontSize:10,color:C.muted}}><i className="ti ti-moon"/> Timer paused — operator away</div>}
+        {j.logoutPaused&&!j.nightModeDone&&!j.operatorPaused&&<div style={{background:"rgba(138,155,181,0.1)",borderRadius:6,padding:"6px 8px",fontSize:10,color:C.muted}}><i className="ti ti-moon"/> Timer paused — operator away</div>}
         {j.logoutPaused&&j.nightModeDone&&<div style={{background:"rgba(124,92,191,0.12)",borderRadius:6,padding:"6px 8px",fontSize:10,color:nightColor}}><i className="ti ti-moon-stars"/> Night run complete — resumes on login</div>}
+        {j.operatorPaused&&(
+          <div style={{background:"rgba(231,76,60,0.15)",border:`2px solid ${C.red}`,borderRadius:8,padding:"12px 10px",textAlign:"center"}}>
+            <div style={{fontSize:16,fontWeight:800,color:C.red,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>
+              <i className="ti ti-player-pause"/> JOB PAUSED
+            </div>
+            <div style={{fontSize:10,color:"rgba(231,76,60,.7)",letterSpacing:.5}}>Timer is stopped. Press Resume to continue.</div>
+          </div>
+        )}
         {nightArmed&&<div style={{background:"rgba(124,92,191,0.12)",borderRadius:6,padding:"6px 8px",fontSize:10,color:nightColor}}>
           <i className="ti ti-moon-stars"/> Night mode armed — runs {fmtHM(j.nightModeDuration||0)} after you log out
         </div>}
@@ -1078,21 +1087,46 @@ function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring}){
             </div>
           </div>
         )}
+        {j.operatorPaused&&(
+          <button style={{...btn("outline",true,true),borderColor:C.green,color:C.green,marginTop:2,fontWeight:700}} onClick={()=>resumeJob&&resumeJob(j.id)}>
+            <i className="ti ti-player-play"/> Resume Job
+          </button>
+        )}
         {!anyPaused&&!j.nightMode&&(
           isDebur
             ?<button style={{...btn("primary",true,true),marginTop:2,background:C.deburr,borderColor:C.deburr}} onClick={()=>completeDeburring&&completeDeburring(j.id)}>
                <i className="ti ti-check"/> Done Deburring
              </button>
             :isSetup
-              ?<button style={{...btn("primary",true,true),marginTop:2,...(isSide2?{background:C.blue,borderColor:C.blue}:{})}} onClick={()=>startRun(j.id)}>
-                 <i className="ti ti-player-play"/> {isSide2?"Start Side 2 Run":"Start Run"}
-               </button>
+              ?<div style={{display:"flex",flexDirection:"column",gap:6,marginTop:2}}>
+                <button style={{...btn("primary",true,true),...(isSide2?{background:C.blue,borderColor:C.blue}:{})}} onClick={()=>startRun(j.id)}>
+                  <i className="ti ti-player-play"/> {isSide2?"Start Side 2 Run":"Start Run"}
+                </button>
+                <button style={{...btn("outline",true,true),borderColor:"rgba(231,76,60,.4)",color:C.red,fontSize:11}} onClick={()=>{setPauseConfirm(true);setNmForm(false);}}>
+                  <i className="ti ti-player-pause"/> Pause Setup
+                </button>
+              </div>
               :<div style={{display:"flex",flexDirection:"column",gap:6,marginTop:2}}>
                 <button style={{...btn("success",true,true),...(isSide2?{background:C.blue,borderColor:C.blue}:{})}} onClick={()=>setCompleteId(j.id)}>
                   <i className="ti ti-check"/> {isSide2?"Complete Side 2":j.twoSided?"Complete Side 1":"Complete Job"}
                 </button>
+                <button style={{...btn("outline",true,true),borderColor:"rgba(231,76,60,.4)",color:C.red,fontSize:11}} onClick={()=>{setPauseConfirm(true);setNmForm(false);}}>
+                  <i className="ti ti-player-pause"/> Pause Job
+                </button>
                 {!isSide2&&<button style={{...btn("outline",true,true),color:nightColor,borderColor:nightColor}} onClick={()=>setNmForm(f=>!f)}><i className="ti ti-moon"/> Night Mode</button>}
               </div>
+        )}
+        {pauseConfirm&&(
+          <div style={{background:"rgba(231,76,60,.1)",border:`1px solid rgba(231,76,60,.5)`,borderRadius:8,padding:"14px 12px",marginTop:2}}>
+            <div style={{fontSize:13,color:C.red,fontWeight:700,textAlign:"center",marginBottom:6}}><i className="ti ti-player-pause"/> Pause this job?</div>
+            <div style={{fontSize:10,color:"rgba(231,76,60,.75)",textAlign:"center",marginBottom:12,lineHeight:1.5}}>The timer will stop completely.<br/>The job will NOT resume when you log back in — you must press Resume yourself.</div>
+            <div style={{display:"flex",gap:8}}>
+              <button style={{...btn("outline",false,false),flex:1,borderColor:C.red,color:C.red,fontWeight:700}} onClick={()=>{pauseJob&&pauseJob(j.id);setPauseConfirm(false);}}>
+                <i className="ti ti-player-pause"/> Yes, Pause
+              </button>
+              <button style={{...btn("outline",false,true),flexShrink:0}} onClick={()=>setPauseConfirm(false)}>Cancel</button>
+            </div>
+          </div>
         )}
         {nightArmed&&(
           <button style={btn("outline",true,true)} onClick={cancelNightMode}><i className="ti ti-x"/> Cancel Night Mode</button>
@@ -1131,6 +1165,29 @@ function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
   const deburJobs =visible.filter(j=>j.status==="deburring");
   const startRun=id=>setStartRunId(id);
 
+  const pauseJob=id=>{
+    const n=Date.now();
+    const updatedJobs=(stateRef.current.jobs||[]).map(j=>{
+      if(j.id!==id) return j;
+      const lt=liveTime(j);
+      return{...j,operatorPaused:true,setupSec:lt.setup,runSec:lt.run,setupSec2:lt.setup2,runSec2:lt.run2,deburSec:lt.debur,phaseStartedAt:null,lastModifiedAt:n};
+    });
+    stateRef.current={...stateRef.current,jobs:updatedJobs};
+    setJobs(updatedJobs);
+    saveNow&&saveNow();
+  };
+
+  const resumeJob=id=>{
+    const n=Date.now();
+    const updatedJobs=(stateRef.current.jobs||[]).map(j=>{
+      if(j.id!==id) return j;
+      return{...j,operatorPaused:false,logoutPaused:false,phaseStartedAt:n,lastModifiedAt:n};
+    });
+    stateRef.current={...stateRef.current,jobs:updatedJobs};
+    setJobs(updatedJobs);
+    saveNow&&saveNow();
+  };
+
   if(!active.length) return <div style={{padding:"14px 16px"}}><div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12,letterSpacing:1}}><i className="ti ti-tool" style={{fontSize:34,display:"block",marginBottom:10,opacity:0.3}}/> No active jobs.</div></div>;
 
   const completeDeburring=id=>{
@@ -1159,7 +1216,7 @@ function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
             <i className="ti ti-tool"/> Deburring · {deburJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {deburJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring}/>)}
+            {deburJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}
@@ -1169,7 +1226,7 @@ function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
             <i className="ti ti-settings"/> Setting Up · {setupJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {setupJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring}/>)}
+            {setupJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}
@@ -1179,7 +1236,7 @@ function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
             <i className="ti ti-player-play"/> Running · {runJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            {runJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring}/>)}
+            {runJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}
