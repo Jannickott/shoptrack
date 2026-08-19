@@ -1122,27 +1122,14 @@ function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring}){
 
 function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
   const [machineFilt,setMachineFilt]=useState("all");
+  const [startRunId,setStartRunId]=useState(null);
   const active=jobs.filter(j=>j.status!=="done"&&j.operatorId===user.id);
   const machines=[...new Set(active.map(j=>j.machine))].sort();
   const visible=active.filter(j=>machineFilt==="all"||j.machine===machineFilt);
   const setupJobs =visible.filter(j=>j.status==="setup"||j.status==="side2_setup").sort((a,b)=>(b.setupSec+b.setupSec2||0)-(a.setupSec+a.setupSec2||0));
   const runJobs   =visible.filter(j=>j.status==="run"  ||j.status==="side2_run")  .sort((a,b)=>(b.runSec+b.runSec2||0)-(a.runSec+a.runSec2||0));
   const deburJobs =visible.filter(j=>j.status==="deburring");
-  const startRun=id=>{
-    const n=Date.now();
-    const updatedJobs=(stateRef.current.jobs||[]).map(j=>{
-      if(j.id!==id) return j;
-      const newStatus=j.status==="side2_setup"?"side2_run":"run";
-      const lt=liveTime(j);
-      const patch=j.status==="side2_setup"
-        ?{setupSec2:lt.setup2}
-        :{setupSec:lt.setup};
-      return{...j,...patch,status:newStatus,phaseStartedAt:n,lastModifiedAt:n};
-    });
-    stateRef.current={...stateRef.current,jobs:updatedJobs};
-    setJobs(updatedJobs);
-    saveNow&&saveNow();
-  };
+  const startRun=id=>setStartRunId(id);
 
   if(!active.length) return <div style={{padding:"14px 16px"}}><div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12,letterSpacing:1}}><i className="ti ti-tool" style={{fontSize:34,display:"block",marginBottom:10,opacity:0.3}}/> No active jobs.</div></div>;
 
@@ -1196,6 +1183,7 @@ function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
           </div>
         </>
       )}
+      {startRunId&&<StartRunModal jobId={startRunId} jobs={jobs} setJobs={setJobs} onClose={()=>setStartRunId(null)} saveNow={saveNow} stateRef={stateRef}/>}
     </div>
   );
 }
@@ -1206,11 +1194,9 @@ function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
 function CompleteModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
   const j=jobs.find(x=>x.id===jobId);
   const [pieces,setPieces]=useState("");
-  const [photoData,setPhotoData]=useState(null);
   const [errs,setErrs]=useState({});
   const [saving,setSaving]=useState(false);
   const [deburring,setDeburring]=useState(false);
-  const fileRef=useRef();
   if(!j) return null;
 
   // Which phase are we completing?
@@ -1220,79 +1206,57 @@ function CompleteModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
   const ltModal=liveTime(j);
   const sideLabel=isSide1Completion?"Side 1 Complete — Start Side 2":isSide2Completion?"Side 2 — Final Complete":"Complete Job";
 
-  const handlePhoto=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setPhotoData(ev.target.result);r.readAsDataURL(f);};
-
   const submit=async()=>{
     const e={};
     if(!pieces||parseInt(pieces)<1) e.pieces="Enter number of pieces produced";
-    if(!photoData) e.photo=`Quality photo required${isSide1Completion?" for Side 1":isSide2Completion?" for Side 2":""}`;
     if(Object.keys(e).length){setErrs(e);return;}
     setSaving(true);
     const now=Date.now();
-    const date=new Date(now);
-    const dateStr=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
-    const safeName=(s)=>s.replace(/[^a-z0-9]/gi,"_");
-    const runDate=new Date(j.createdAt||now);
-    const folder=`${runDate.getFullYear()}/${String(runDate.getMonth()+1).padStart(2,"0")}`;
-    const base=`${folder}/quality_${safeName(j.customer||"unknown")}_${safeName(j.job)}_${dateStr}`;
 
     if(isSide1Completion){
-      // Save side 1 data, auto-advance to side2_setup
-      const filename=`${base}_side1.jpg`;
-      const photoUrl=await uploadPhoto(photoData,filename);
       const updatedJobs=(stateRef?stateRef.current.jobs:jobs).map(x=>x.id===jobId?{
         ...x,
         status:"side2_setup",
-        pieces:parseInt(pieces),       // side 1 pieces
-        photoData:photoUrl,            // side 1 photo
-        setupSec2:0, runSec2:0,        // reset side 2 timers
-        runSec:ltModal.run,            // freeze side1 run time
-        phaseStartedAt:now,            // start side2 setup timer
+        pieces:parseInt(pieces),
+        setupSec2:0, runSec2:0,
+        runSec:ltModal.run,
+        phaseStartedAt:now,
         side1CompletedAt:now,
         lastModifiedAt:now,
       }:x);
       if(stateRef) stateRef.current={...stateRef.current,jobs:updatedJobs};
       setJobs(updatedJobs);
-      const a=document.createElement("a");a.href=photoData;a.download=filename;a.click();
       saveNow&&saveNow();
       setSaving(false);
       onClose();
     } else if(deburring){
-      // Start manual deburring timer — freeze run, save photo/pieces, then deburr phase begins
-      const filename=isSide2Completion?`${base}_side2.jpg`:`${base}.jpg`;
-      const photoUrl=await uploadPhoto(photoData,filename);
       const updatedJobs=(stateRef?stateRef.current.jobs:jobs).map(x=>x.id===jobId?{
         ...x,
         status:"deburring",
         ...(isSide2Completion
-          ? {pieces2:parseInt(pieces), photoData2:photoUrl, runSec2:ltModal.run2}
-          : {pieces:parseInt(pieces),  photoData:photoUrl,  runSec:ltModal.run}),
+          ? {pieces2:parseInt(pieces), runSec2:ltModal.run2}
+          : {pieces:parseInt(pieces),  runSec:ltModal.run}),
         deburSec:0,
         phaseStartedAt:now,
         lastModifiedAt:now,
       }:x);
       if(stateRef) stateRef.current={...stateRef.current,jobs:updatedJobs};
       setJobs(updatedJobs);
-      const a=document.createElement("a");a.href=photoData;a.download=filename;a.click();
       saveNow&&saveNow();
       setSaving(false);
       onClose();
     } else {
-      // Final completion (single-sided or side 2)
-      const filename=isSide2Completion?`${base}_side2.jpg`:`${base}.jpg`;
-      const photoUrl=await uploadPhoto(photoData,filename);
       const updatedJobs=(stateRef?stateRef.current.jobs:jobs).map(x=>x.id===jobId?{
         ...x,
         status:"done",
         ...(isSide2Completion
-          ? {pieces2:parseInt(pieces), photoData2:photoUrl, runSec2:ltModal.run2}   // side 2
-          : {pieces:parseInt(pieces),  photoData:photoUrl,  runSec:ltModal.run}),  // single-sided
+          ? {pieces2:parseInt(pieces), runSec2:ltModal.run2}
+          : {pieces:parseInt(pieces),  runSec:ltModal.run}),
         phaseStartedAt:null,
         completedAt:now, lastModifiedAt:now,
       }:x);
       if(stateRef) stateRef.current={...stateRef.current,jobs:updatedJobs};
       setJobs(updatedJobs);
-      const a=document.createElement("a");a.href=photoData;a.download=filename;a.click();
       saveNow&&saveNow();
       setSaving(false);
       onClose();
@@ -1349,21 +1313,6 @@ function CompleteModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
           {errs.pieces&&<div style={errMsg}><i className="ti ti-alert-triangle"/> {errs.pieces}</div>}
         </div>
 
-        {/* Photo */}
-        <div style={{marginBottom:16}}>
-          <label style={label}>
-            {isSide1Completion?"Side 1 — Quality Photo":isSide2Completion?"Side 2 — Quality Photo":"Quality Photo"} <span style={{color:C.red}}>*</span> &nbsp;
-            <span style={{color:photoData?C.green:C.red}}>{photoData?"✓ Attached":"Required"}</span>
-          </label>
-          <div style={{border:`2px dashed ${errs.photo&&!photoData?C.red:photoData?C.green:"rgba(255,255,255,.12)"}`,borderRadius:8,padding:16,textAlign:"center",cursor:"pointer",background:photoData?"rgba(39,174,96,.05)":"transparent"}} onClick={()=>fileRef.current.click()}>
-            {photoData
-              ?<><img src={photoData} style={{maxHeight:90,borderRadius:6,display:"block",margin:"0 auto 8px"}}/><div style={{fontSize:11,color:C.green,letterSpacing:1}}>Photo attached ✓ — tap to replace</div></>
-              :<><i className="ti ti-camera" style={{fontSize:26,opacity:0.4,display:"block",marginBottom:8}}/><div style={{fontSize:11,color:C.muted,letterSpacing:1}}>Tap to take or upload quality photo</div></>}
-          </div>
-          <input type="file" ref={fileRef} accept="image/*" capture="environment" style={{display:"none"}} onChange={handlePhoto}/>
-          {errs.photo&&!photoData&&<div style={errMsg}><i className="ti ti-alert-triangle"/> {errs.photo}</div>}
-        </div>
-
         {isSide1Completion&&(
           <div style={{background:"rgba(59,130,246,.08)",border:`1px solid rgba(59,130,246,.25)`,borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.blue}}>
             <i className="ti ti-info-circle"/> After submitting, Side 2 setup timer will start automatically.
@@ -1397,6 +1346,92 @@ function CompleteModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
               :deburring
                 ?<><i className="ti ti-tool"/> Submit &amp; Start Deburring</>
                 :<><i className="ti ti-check"/> Submit &amp; Complete Job</>}
+        </button>
+        <button style={{...btn("outline",true),marginTop:8}} onClick={onClose} disabled={saving}>Cancel</button>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// START RUN MODAL — quality photo required before run
+// ═══════════════════════════════════════════════════════
+function StartRunModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
+  const j=jobs.find(x=>x.id===jobId);
+  const [photoData,setPhotoData]=useState(null);
+  const [saving,setSaving]=useState(false);
+  const fileRef=useRef();
+  if(!j) return null;
+  const isSide2=j.status==="side2_setup";
+  const accentColor=isSide2?C.blue:C.amber;
+
+  const handlePhoto=e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setPhotoData(ev.target.result);r.readAsDataURL(f);};
+
+  const confirm=async()=>{
+    if(!photoData||saving) return;
+    setSaving(true);
+    const now=Date.now();
+    const date=new Date(now);
+    const dateStr=`${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,"0")}-${String(date.getDate()).padStart(2,"0")}`;
+    const safeName=s=>s.replace(/[^a-z0-9]/gi,"_");
+    const runDate=new Date(j.createdAt||now);
+    const folder=`${runDate.getFullYear()}/${String(runDate.getMonth()+1).padStart(2,"0")}`;
+    const filename=isSide2
+      ?`${folder}/quality_${safeName(j.customer||"unknown")}_${safeName(j.job)}_${dateStr}_side2.jpg`
+      :`${folder}/quality_${safeName(j.customer||"unknown")}_${safeName(j.job)}_${dateStr}.jpg`;
+    const photoUrl=await uploadPhoto(photoData,filename);
+    const lt=liveTime(j);
+    const newStatus=isSide2?"side2_run":"run";
+    const timePatch=isSide2?{setupSec2:lt.setup2}:{setupSec:lt.setup};
+    const photoPatch=isSide2?{photoData2:photoUrl}:{photoData:photoUrl};
+    const updatedJobs=(stateRef?stateRef.current.jobs:jobs).map(x=>x.id===jobId?{
+      ...x,...timePatch,...photoPatch,status:newStatus,phaseStartedAt:now,lastModifiedAt:now,
+    }:x);
+    if(stateRef) stateRef.current={...stateRef.current,jobs:updatedJobs};
+    setJobs(updatedJobs);
+    const a=document.createElement("a");a.href=photoData;a.download=filename;a.click();
+    saveNow&&saveNow();
+    setSaving(false);
+    onClose();
+  };
+
+  return(
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.82)",zIndex:200,display:"flex",alignItems:"flex-start",justifyContent:"center",padding:16,overflowY:"auto"}} onClick={e=>e.target===e.currentTarget&&onClose()}>
+      <div style={{background:C.surface,borderRadius:14,width:"100%",maxWidth:460,padding:20,border:`1px solid rgba(255,255,255,.1)`,marginTop:20}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
+          <div style={{fontSize:11,color:accentColor,letterSpacing:2,textTransform:"uppercase"}}><i className="ti ti-camera"/> Quality Photo — {isSide2?"Start Side 2 Run":"Start Run"}</div>
+          <button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:18,lineHeight:1}} onClick={onClose}><i className="ti ti-x"/></button>
+        </div>
+        <div style={{...card(accentColor),background:"#151e2b",marginBottom:16}}>
+          <div style={{fontSize:14,color:C.text,fontWeight:700}}>{j.job}</div>
+          <div style={meta}><span><i className="ti ti-robot"/> {j.machine}</span><span><i className="ti ti-user"/> {j.operatorName}</span></div>
+          {isSide2&&<div style={{marginTop:6}}><span style={{...badge("run"),background:"rgba(59,130,246,.15)",color:C.blue,borderColor:"rgba(59,130,246,.3)"}}><i className="ti ti-layers-intersect"/> Side 2 Setup</span></div>}
+        </div>
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:10,color:accentColor,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>
+            <i className="ti ti-camera"/> Quality Photo <span style={{color:C.red}}>*</span>
+          </div>
+          {photoData?(
+            <div style={{position:"relative"}}>
+              <img src={photoData} style={{width:"100%",borderRadius:10,maxHeight:260,objectFit:"cover",border:`1px solid ${C.border}`}} alt="quality"/>
+              <button onClick={()=>setPhotoData(null)} style={{position:"absolute",top:8,right:8,background:"rgba(0,0,0,.65)",border:"none",borderRadius:20,color:"#fff",cursor:"pointer",padding:"5px 10px",fontSize:11}}>
+                <i className="ti ti-refresh"/> Retake
+              </button>
+            </div>
+          ):(
+            <button onClick={()=>fileRef.current.click()} style={{width:"100%",padding:"28px 16px",background:C.raised,border:`2px dashed ${C.border}`,borderRadius:10,color:accentColor,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:8,fontFamily:"inherit"}}>
+              <i className="ti ti-camera" style={{fontSize:36}}/>
+              <span style={{fontSize:13,letterSpacing:1}}>Tap to take quality photo</span>
+              <span style={{fontSize:10,color:C.muted}}>Required before starting run</span>
+            </button>
+          )}
+          <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handlePhoto}/>
+        </div>
+        <button
+          style={{...btn("primary",true),opacity:!photoData||saving?0.45:1,...(isSide2?{background:C.blue,borderColor:C.blue}:{})}}
+          disabled={!photoData||saving}
+          onClick={confirm}>
+          {saving?<><i className="ti ti-loader-2"/> Uploading…</>:<><i className="ti ti-player-play"/> {isSide2?"Start Side 2 Run":"Start Run"}</>}
         </button>
         <button style={{...btn("outline",true),marginTop:8}} onClick={onClose} disabled={saving}>Cancel</button>
       </div>
