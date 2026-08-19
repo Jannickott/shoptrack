@@ -227,7 +227,7 @@ export default function App(){
   const dataLoadedRef=useRef(false); // prevents saving before server data is loaded
   useEffect(()=>{
     stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog]);
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets]);
 
   // Save to server every 3 seconds — only after data has been loaded
   useEffect(()=>{
@@ -534,7 +534,7 @@ export default function App(){
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
@@ -3992,7 +3992,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow}){
+function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
   const [search,setSearch]=useState("");
@@ -4005,8 +4005,13 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow}){
     if(q&&!(s.partNumber||"").toLowerCase().includes(q)&&!(s.customer||"").toLowerCase().includes(q)) return false;
     return true;
   }).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
-  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{if(selected){setSetupSheets(prev=>prev.map(s=>s.id===sheet.id?sheet:s));}else{setSetupSheets(prev=>[sheet,...prev]);}saveNow&&saveNow();setSelectedId(sheet.id);setView("detail");}}/>);
-  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onDelete={()=>{setSetupSheets(prev=>prev.filter(s=>s.id!==selected.id));saveNow&&saveNow();setView("list");setSelectedId(null);}}/>);
+  const saveSheets=(updated)=>{
+    setSetupSheets(updated);
+    if(stateRef) stateRef.current={...stateRef.current,setupSheets:updated};
+    saveNow&&saveNow();
+  };
+  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);setSelectedId(sheet.id);setView("detail");}}/>);
+  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
