@@ -285,12 +285,21 @@ app.post("/api/setupsheet-pdf", (req, res) => {
       y += 14;
     };
 
+    // ── Program name (prominent) ───────────────────────────
+    if (sheet.subProgram) {
+      doc.rect(45, y, W, 46).fill("#fffbea").stroke("#b07d00");
+      doc.fillColor("#888888").fontSize(7.5).font("Helvetica")
+         .text("PROGRAM NAME", 56, y + 7, { characterSpacing: 1.5 });
+      doc.fillColor("#b07d00").fontSize(22).font("Helvetica-Bold")
+         .text(sheet.subProgram, 56, y + 18, { width: W - 20, characterSpacing: 2 });
+      y += 56;
+    }
+
     // ── Identity ───────────────────────────────────────────
     sectionTitle("IDENTITY");
     [["Machine", sheet.machine], ["Customer", sheet.customer],
      ["Material", sheet.material], ["Revision", sheet.revision],
-     ["Operation", sheet.operation], ["Sub Program", sheet.subProgram],
-     ["Plan Program", sheet.planProgram]]
+     ["Operation", sheet.operation], ["Plan Program", sheet.planProgram]]
       .filter(([, v]) => v)
       .forEach(([k, v]) => field(k, v));
     y += 6;

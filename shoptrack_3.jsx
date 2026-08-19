@@ -4087,7 +4087,8 @@ footer{margin-top:24px;padding-top:8px;border-top:1px solid #eee;font-size:9px;c
 <div class="sub">${[sheet.customer,sheet.machine,sheet.material,sheet.operation&&"Op "+sheet.operation].filter(Boolean).join(" &nbsp;·&nbsp; ")}</div></div>
 <div class="body">
 <h2>Identity</h2>
-<div class="meta">${[["Machine",sheet.machine],["Customer",sheet.customer],["Material",sheet.material],["Revision",sheet.revision],["Operation",sheet.operation],["Sub Program",sheet.subProgram],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>`<div class="field"><span class="grey">${k}: </span><b>${v}</b></div>`).join("")}</div>
+${sheet.subProgram?`<div style="background:#fffbea;border:2px solid #b07d00;border-radius:8px;padding:12px 16px;margin-bottom:14px"><div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#b07d00;margin-bottom:4px">Program Name</div><div style="font-size:26px;font-family:monospace;font-weight:800;color:#b07d00;letter-spacing:2px">${sheet.subProgram}</div></div>`:""}
+<div class="meta">${[["Machine",sheet.machine],["Customer",sheet.customer],["Material",sheet.material],["Revision",sheet.revision],["Operation",sheet.operation],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>`<div class="field"><span class="grey">${k}: </span><b>${v}</b></div>`).join("")}</div>
 ${filledTools.length?`<h2>Tool List</h2><table><thead><tr><th>Pos</th><th>Description</th><th>Label</th><th>Restart</th></tr></thead><tbody>${filledTools.map(rows).join("")}</tbody></table>`:""}
 ${mainOps.length?`<h2>Operations Sequence — Main Spindle</h2><table><thead><tr><th>Tool</th><th>Operation</th><th>Restart</th></tr></thead><tbody>${mainOps.map(opRows).join("")}</tbody></table>`:""}
 ${params.length?`<h2>Setup Parameters</h2><div class="params">${params.map(([k,v])=>`<div class="pbox"><div class="plabel">${k}</div><div class="pval">${v}</div></div>`).join("")}</div>`:""}
@@ -4108,9 +4109,15 @@ ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:18,fontWeight:700,color:C.text}}>{sheet.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[sheet.customer,sheet.machine,sheet.operation&&`Op ${sheet.operation}`].filter(Boolean).join(" · ")}</div></div>
         <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onEdit}><i className="ti ti-edit"/></button>
       </div>
+      {sheet.subProgram&&(
+        <div style={{background:"rgba(240,165,0,.1)",border:`2px solid ${C.amber}`,borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+          <div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Program Name</div>
+          <div style={{fontSize:28,fontWeight:800,color:C.amber,fontFamily:"'Share Tech Mono',monospace",letterSpacing:2,lineHeight:1}}>{sheet.subProgram}</div>
+        </div>
+      )}
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          {[["Machine",sheet.machine],["Material",sheet.material],["Operation",sheet.operation],["Revision",sheet.revision],["Sub Program",sheet.subProgram],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>{k}</div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v}</div></div>))}
+          {[["Machine",sheet.machine],["Material",sheet.material],["Operation",sheet.operation],["Revision",sheet.revision],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>{k}</div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v}</div></div>))}
         </div>
       </div>
       {filledTools.length>0&&(
@@ -4203,7 +4210,8 @@ function SetupSheetForm({sheet,machines,user,onBack,onSave}){
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{marginBottom:10}}><label style={label}>Part Number *</label><input style={inp(errs.partNumber)} value={form.partNumber} onChange={e=>setF("partNumber",e.target.value)} placeholder="e.g. CV-155"/>{errs.partNumber&&<div style={errMsg}>{errs.partNumber}</div>}</div>
         <div style={{marginBottom:10}}><label style={label}>Machine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>setF("machine",e.target.value)}><option value="">— Select Machine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
-        {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["operation","Operation","e.g. 1/2"],["subProgram","Sub Program",""],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
+        <div style={{marginBottom:10}}><label style={{...label,color:C.amber}}>Program Name</label><input style={{...inp(),fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber,letterSpacing:1}} value={form.subProgram||""} onChange={e=>setF("subProgram",e.target.value)} placeholder="e.g. O1234"/></div>
+        {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["operation","Operation","e.g. 1/2"],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
       </div>
       <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Restart Code Format</div>
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
