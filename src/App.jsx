@@ -4010,7 +4010,11 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
     if(stateRef) stateRef.current={...stateRef.current,setupSheets:updated};
     saveNow&&saveNow();
   };
-  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);setSelectedId(sheet.id);setView("detail");}}/>);
+  const backupPdf=async(sheet)=>{
+    try{await fetch("/api/setupsheet-pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheet})});}
+    catch{}
+  };
+  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
   if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
@@ -4048,6 +4052,55 @@ function SetupSheetDetail({sheet,onBack,onEdit,onDelete}){
   const rc=pos=>{if(!pos)return"";return(sheet.restartPrefix||"NAT")+String(pos).padStart(sheet.restartPad||2,"0");};
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
   const mainOps=(sheet.opsMain||[]).filter(o=>o.operation);
+
+  const printPdf=()=>{
+    const w=window.open("","_blank","width=860,height=1100");
+    if(!w) return;
+    const rows=t=>`<tr><td class="mono">${t.position}</td><td>${t.description||""}</td><td class="grey">${t.label||""}</td><td class="mono amber">${rc(t.position)}</td></tr>`;
+    const opRows=o=>`<tr><td class="mono">${"T"+String(o.toolPosition||0).padStart(2,"0")}</td><td>${o.operation||""}</td><td class="mono amber">${o.toolPosition?rc(o.toolPosition):""}</td></tr>`;
+    const params=[["Chuck Name",sheet.chuckName],["Chuck Overhang",sheet.chuckOverhang],["Clamping Pressure",sheet.clampingPressure],["Zero Point",sheet.zeroPoint],["Workpiece Stop",sheet.workpieceStop]].filter(([,v])=>v);
+    w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${sheet.partNumber} — Setup Sheet</title><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:Arial,sans-serif;font-size:13px;color:#111;background:#fff;padding:0}
+.header{background:#1a2233;color:#fff;padding:18px 24px 14px}
+.header h1{font-size:22px;color:#f0a500;margin-bottom:4px}
+.header .sub{font-size:11px;color:#aab;letter-spacing:.5px}
+.body{padding:18px 24px}
+h2{font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#888;border-bottom:1px solid #ddd;padding-bottom:4px;margin:18px 0 10px}
+.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px;margin-bottom:4px}
+.field{font-size:12px}.field b{color:#111}
+table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:4px}
+th{text-align:left;padding:5px 8px;background:#f0f0f0;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#666}
+td{padding:6px 8px;border-bottom:1px solid #f0f0f0}
+tr:nth-child(even) td{background:#fafafa}
+.mono{font-family:monospace;font-weight:700}
+.amber{color:#b07d00}.grey{color:#888}
+.params{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
+.pbox{background:#f4f6ff;border:1px solid #dde;border-radius:6px;padding:10px 14px}
+.plabel{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#888;margin-bottom:4px}
+.pval{font-size:18px;font-family:monospace;font-weight:700;color:#1a2233}
+.notes{background:#f8f8f8;border-radius:4px;padding:10px 14px;font-size:12px;white-space:pre-wrap;line-height:1.6}
+footer{margin-top:24px;padding-top:8px;border-top:1px solid #eee;font-size:9px;color:#aaa;text-align:center}
+@media print{@page{margin:12mm}body{padding:0}.no-print{display:none}}
+</style></head><body>
+<div class="header"><h1>${sheet.partNumber||""}</h1>
+<div class="sub">${[sheet.customer,sheet.machine,sheet.material,sheet.operation&&"Op "+sheet.operation].filter(Boolean).join(" &nbsp;·&nbsp; ")}</div></div>
+<div class="body">
+<h2>Identity</h2>
+<div class="meta">${[["Machine",sheet.machine],["Customer",sheet.customer],["Material",sheet.material],["Revision",sheet.revision],["Operation",sheet.operation],["Sub Program",sheet.subProgram],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>`<div class="field"><span class="grey">${k}: </span><b>${v}</b></div>`).join("")}</div>
+${filledTools.length?`<h2>Tool List</h2><table><thead><tr><th>Pos</th><th>Description</th><th>Label</th><th>Restart</th></tr></thead><tbody>${filledTools.map(rows).join("")}</tbody></table>`:""}
+${mainOps.length?`<h2>Operations Sequence — Main Spindle</h2><table><thead><tr><th>Tool</th><th>Operation</th><th>Restart</th></tr></thead><tbody>${mainOps.map(opRows).join("")}</tbody></table>`:""}
+${params.length?`<h2>Setup Parameters</h2><div class="params">${params.map(([k,v])=>`<div class="pbox"><div class="plabel">${k}</div><div class="pval">${v}</div></div>`).join("")}</div>`:""}
+${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
+<footer>ShopTrack Setup Sheet &nbsp;·&nbsp; ${sheet.partNumber||""} / ${sheet.machine||""} &nbsp;·&nbsp; ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</footer>
+</div>
+<div class="no-print" style="position:fixed;top:10px;right:10px">
+<button onclick="window.print()" style="background:#1a2233;color:#f0a500;border:none;padding:10px 18px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer">Print / Save as PDF</button>
+</div>
+</body></html>`);
+    w.document.close();
+    setTimeout(()=>w.print(),400);
+  };
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
@@ -4101,6 +4154,7 @@ function SetupSheetDetail({sheet,onBack,onEdit,onDelete}){
       )}
       {sheet.notes&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Notes</div><div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",fontSize:12,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{sheet.notes}</div></div>}
       <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
+        <button style={btn("primary",true)} onClick={printPdf}><i className="ti ti-file-type-pdf"/> Export PDF</button>
         <button style={btn("outline",true)} onClick={onEdit}><i className="ti ti-edit"/> Edit Setup Sheet</button>
         {!deleteConfirmSS
           ?<button style={{...btn("outline",true),borderColor:"rgba(231,76,60,.4)",color:C.red}} onClick={()=>setDeleteConfirmSS(true)}><i className="ti ti-trash"/> Delete</button>

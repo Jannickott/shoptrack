@@ -4,17 +4,20 @@ import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
 import cors from "cors";
+import PDFDocument from "pdfkit";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app  = express();
 const PORT = 3001;
 
-const DATA_FILE   = path.join(__dirname, "shoptrack-data.json");
-const PHOTOS_DIR  = path.join(__dirname, "photos");
-const BACKUPS_DIR = path.join(__dirname, "backups");
+const DATA_FILE      = path.join(__dirname, "shoptrack-data.json");
+const PHOTOS_DIR     = path.join(__dirname, "photos");
+const BACKUPS_DIR    = path.join(__dirname, "backups");
+const SETUPSHEETS_DIR = path.join(__dirname, "setupsheets");
 
-if (!fs.existsSync(PHOTOS_DIR))  fs.mkdirSync(PHOTOS_DIR);
-if (!fs.existsSync(BACKUPS_DIR)) fs.mkdirSync(BACKUPS_DIR);
+if (!fs.existsSync(PHOTOS_DIR))      fs.mkdirSync(PHOTOS_DIR);
+if (!fs.existsSync(BACKUPS_DIR))     fs.mkdirSync(BACKUPS_DIR);
+if (!fs.existsSync(SETUPSHEETS_DIR)) fs.mkdirSync(SETUPSHEETS_DIR);
 
 // ── Daily backup ──────────────────────────────────────────
 function runBackup() {
@@ -231,6 +234,154 @@ app.post("/api/data", (req, res) => {
     fs.renameSync(tmpFile, DATA_FILE);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── Serve setup sheet PDFs ────────────────────────────────
+app.use("/setupsheets", express.static(SETUPSHEETS_DIR));
+
+// ── POST /api/setupsheet-pdf ──────────────────────────────
+// Called automatically whenever a setup sheet is saved.
+// Generates a formatted PDF and writes it to setupsheets/.
+app.post("/api/setupsheet-pdf", (req, res) => {
+  try {
+    const { sheet } = req.body;
+    if (!sheet) return res.status(400).json({ error: "No sheet data" });
+
+    const safe = s => (s || "").replace(/[^a-z0-9]/gi, "_").slice(0, 60);
+    const rc   = pos => (sheet.restartPrefix || "NAT") + String(pos).padStart(sheet.restartPad || 2, "0");
+    const filename = `${safe(sheet.partNumber)}_${safe(sheet.machine)}.pdf`;
+    const filePath = path.join(SETUPSHEETS_DIR, filename);
+
+    const doc = new PDFDocument({ margin: 45, size: "A4" });
+    const out = fs.createWriteStream(filePath);
+    doc.pipe(out);
+
+    const W = doc.page.width - 90; // usable width
+    const AMBER = "#b07d00";
+    const DARK  = "#1a1a1a";
+    const GREY  = "#555555";
+    const LINE  = "#dddddd";
+
+    // ── Header ─────────────────────────────────────────────
+    doc.rect(45, 40, W, 54).fill("#1a2233");
+    doc.fillColor("#f0a500").fontSize(20).font("Helvetica-Bold")
+       .text(sheet.partNumber || "—", 56, 48, { width: W - 12 });
+    const sub = [sheet.customer, sheet.machine, sheet.material,
+                 sheet.operation && `Op ${sheet.operation}`].filter(Boolean).join("  ·  ");
+    doc.fillColor("#aaaacc").fontSize(10).font("Helvetica")
+       .text(sub, 56, 72, { width: W - 12 });
+    doc.fillColor(DARK);
+
+    let y = 112;
+    const sectionTitle = (title) => {
+      doc.moveTo(45, y).lineTo(45 + W, y).strokeColor(LINE).lineWidth(1).stroke();
+      doc.fillColor(AMBER).fontSize(8).font("Helvetica-Bold")
+         .text(title, 45, y + 5, { characterSpacing: 1.5 });
+      y += 20;
+    };
+    const field = (label, value) => {
+      doc.fillColor(GREY).fontSize(8).font("Helvetica").text(label, 45, y, { width: 110 });
+      doc.fillColor(DARK).font("Helvetica-Bold").text(value, 160, y, { width: W - 115 });
+      y += 14;
+    };
+
+    // ── Identity ───────────────────────────────────────────
+    sectionTitle("IDENTITY");
+    [["Machine", sheet.machine], ["Customer", sheet.customer],
+     ["Material", sheet.material], ["Revision", sheet.revision],
+     ["Operation", sheet.operation], ["Sub Program", sheet.subProgram],
+     ["Plan Program", sheet.planProgram]]
+      .filter(([, v]) => v)
+      .forEach(([k, v]) => field(k, v));
+    y += 6;
+
+    // ── Tool list ──────────────────────────────────────────
+    const tools = (sheet.tools || []).filter(t => t.description);
+    if (tools.length) {
+      sectionTitle("TOOL LIST");
+      // header row
+      doc.fillColor(GREY).fontSize(7.5).font("Helvetica");
+      ["Pos", "Description", "Label", "Restart"].forEach((h, i) => {
+        doc.text(h, [45, 80, 280, 430][i], y, { characterSpacing: 1 });
+      });
+      y += 14;
+      tools.forEach((t, i) => {
+        if (i % 2 === 0) doc.rect(45, y - 2, W, 16).fill("#f7f7f7").fillColor(DARK);
+        doc.fillColor(DARK).fontSize(9).font("Helvetica-Bold")
+           .text(String(t.position), 45, y, { width: 30 });
+        doc.font("Helvetica").text(t.description || "", 80, y, { width: 195 });
+        doc.fillColor(GREY).text(t.label || "", 280, y, { width: 145 });
+        doc.fillColor(AMBER).font("Helvetica-Bold")
+           .text(rc(t.position), 430, y, { width: 80 });
+        y += 16;
+        if (y > doc.page.height - 80) { doc.addPage(); y = 45; }
+      });
+      y += 6;
+    }
+
+    // ── Operations sequence ────────────────────────────────
+    const ops = (sheet.opsMain || []).filter(o => o.operation);
+    if (ops.length) {
+      sectionTitle("OPERATIONS SEQUENCE — MAIN SPINDLE");
+      doc.fillColor(GREY).fontSize(7.5).font("Helvetica");
+      ["#", "Tool", "Operation", "Restart"].forEach((h, i) => {
+        doc.text(h, [45, 75, 115, 430][i], y, { characterSpacing: 1 });
+      });
+      y += 14;
+      ops.forEach((o, i) => {
+        if (i % 2 === 0) doc.rect(45, y - 2, W, 16).fill("#f7f7f7");
+        doc.fillColor(GREY).fontSize(9).font("Helvetica").text(String(i + 1), 45, y, { width: 26 });
+        doc.fillColor(DARK).font("Helvetica-Bold")
+           .text(`T${String(o.toolPosition || 0).padStart(2, "0")}`, 75, y, { width: 36 });
+        doc.font("Helvetica").text(o.operation || "", 115, y, { width: 310 });
+        doc.fillColor(AMBER).font("Helvetica-Bold")
+           .text(o.toolPosition ? rc(o.toolPosition) : "", 430, y, { width: 80 });
+        y += 16;
+        if (y > doc.page.height - 80) { doc.addPage(); y = 45; }
+      });
+      y += 6;
+    }
+
+    // ── Setup parameters ───────────────────────────────────
+    const params = [["Chuck Name", sheet.chuckName], ["Chuck Overhang", sheet.chuckOverhang],
+                    ["Clamping Pressure", sheet.clampingPressure],
+                    ["Zero Point", sheet.zeroPoint], ["Workpiece Stop", sheet.workpieceStop]]
+                   .filter(([, v]) => v);
+    if (params.length) {
+      sectionTitle("SETUP PARAMETERS");
+      const cols = 2;
+      const colW = (W - 10) / cols;
+      params.forEach(([k, v], i) => {
+        const cx = 45 + (i % cols) * (colW + 10);
+        const cy = y + Math.floor(i / cols) * 44;
+        doc.rect(cx, cy, colW, 40).fill("#f0f4ff").stroke(LINE);
+        doc.fillColor(GREY).fontSize(7.5).font("Helvetica").text(k.toUpperCase(), cx + 8, cy + 6, { width: colW - 16, characterSpacing: 1 });
+        doc.fillColor(DARK).fontSize(16).font("Helvetica-Bold").text(v, cx + 8, cy + 18, { width: colW - 16 });
+      });
+      y += Math.ceil(params.length / cols) * 44 + 10;
+    }
+
+    // ── Notes ──────────────────────────────────────────────
+    if (sheet.notes) {
+      sectionTitle("NOTES");
+      doc.fillColor(DARK).fontSize(9).font("Helvetica").text(sheet.notes, 45, y, { width: W, lineGap: 3 });
+      y += doc.heightOfString(sheet.notes, { width: W, lineGap: 3 }) + 10;
+    }
+
+    // ── Footer ─────────────────────────────────────────────
+    const footerY = doc.page.height - 30;
+    doc.moveTo(45, footerY - 6).lineTo(45 + W, footerY - 6).strokeColor(LINE).stroke();
+    const stamp = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    doc.fillColor(GREY).fontSize(7).font("Helvetica")
+       .text(`ShopTrack Setup Sheet  ·  Generated ${stamp}  ·  ${sheet.partNumber || ""} / ${sheet.machine || ""}`,
+             45, footerY, { width: W, align: "center" });
+
+    doc.end();
+    out.on("finish", () => res.json({ ok: true, url: `/setupsheets/${filename}` }));
+    out.on("error",  e  => res.status(500).json({ error: e.message }));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ── POST /api/photo ───────────────────────────────────────
