@@ -3794,7 +3794,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
   const lowTools=tools.filter(t=>t.active&&t.quantity<=(t.minQuantity||0));
   const orderedTools=tools.filter(t=>t.ordered);
   const filteredTools=toolFilter==="low"?lowTools:toolFilter==="ordered"?orderedTools:tools;
-  const selectedTool=selectedId?tools.find(t=>t.id===selectedId):null;
+  const selectedTool=selectedId?tools.find(t=>String(t.id)===String(selectedId)):null;
   const closeModal=()=>{setSelectedId(null);setRestockId(null);setRestockQty("");setDeleteConfirm(false);};
 
   return(
