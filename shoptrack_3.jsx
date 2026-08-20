@@ -4095,13 +4095,13 @@ function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToToo
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
   const filledTools2=(sheet.tools2||[]).filter(t=>t.description||t.label);
   const filledTools3=(sheet.tools3||[]).filter(t=>t.description||t.label);
-  const findLoc=toolId=>{if(!toolId)return null;const t=(tools||[]).find(x=>x.id===toolId);if(!t)return null;const cab=(cabinets||[]).find(c=>c.id===t.cabinetId);const drw=cab?.drawers?.find(d=>d.id===t.drawerId);if(!cab)return null;return{cab:cab.name,drw:drw?`Drawer ${drw.number}${drw.label?` — ${drw.label}`:""}`:null};};
+  const findLoc=toolId=>{if(!toolId)return null;const t=(tools||[]).find(x=>String(x.id)===String(toolId));if(!t)return null;const cab=(cabinets||[]).find(c=>c.id===t.cabinetId);const drw=cab?.drawers?.find(d=>d.id===t.drawerId);if(!cab)return null;return{cab:cab.name,drw:drw?`Drawer ${drw.number}${drw.label?` — ${drw.label}`:""}`:null};};
   const opColors={"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber};
   const opColor=opColors[sheet.operation]||C.muted;
   const renderToolList=(toolArr,accent)=>(
     <div style={{background:C.surface,borderRadius:10,border:`1px solid ${accent||C.border}`,overflow:"hidden"}}>
       {toolArr.map((t,i)=>{
-        const cabTool=t.toolId?(tools||[]).find(x=>x.id===t.toolId):null;
+        const cabTool=t.toolId?(tools||[]).find(x=>String(x.id)===String(t.toolId)):null;
         const loc=findLoc(t.toolId);
         return(
         <div key={t.position} style={{borderBottom:i<toolArr.length-1?`1px solid ${C.border}`:"none"}}>
@@ -4285,7 +4285,7 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,on
               </select>
               <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
                 <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Tool description — required"/>
-                <select style={sel()} value={t.toolId||""} onChange={e=>setTool(t.position,"toolId",e.target.value||null)}>
+                <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool(t.position,"toolId",e.target.value||null)}>
                   <option value="">— No cabinet tool —</option>
                   {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
                 </select>
