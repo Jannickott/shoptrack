@@ -4102,14 +4102,15 @@ function SetupSheetDetail({sheet,onBack,onEdit,onDelete}){
       ))}
     </div>
   );
+  const sheetParams=(sheet.params&&sheet.params.length)?sheet.params:[["Chuck Name",sheet.chuckName],["Chuck Overhang",sheet.chuckOverhang],["Clamping Pressure",sheet.clampingPressure],["Zero Point",sheet.zeroPoint],["Workpiece Stop",sheet.workpieceStop]].filter(([,v])=>v).map(([k,v])=>({key:k,value:v}));
+  const params=sheetParams.filter(p=>p.value);
 
   const printPdf=()=>{
     const w=window.open("","_blank","width=860,height=1100");
     if(!w) return;
     const rows=t=>`<tr><td class="mono">${t.position}</td><td>${t.description||""}</td><td class="grey">${t.label||""}</td><td class="mono amber">${rc(t.position)}</td></tr>`;
     const toolTable=(title,accent,toolArr)=>{const filled=(toolArr||[]).filter(t=>t.description);if(!filled.length)return"";return`<h2 style="color:${accent}">${title}</h2><table><thead><tr><th>Pos</th><th>Description</th><th>Label</th><th>Restart</th></tr></thead><tbody>${filled.map(rows).join("")}</tbody></table>`;};
-    const sheetParams=(sheet.params&&sheet.params.length)?sheet.params:[["Chuck Name",sheet.chuckName],["Chuck Overhang",sheet.chuckOverhang],["Clamping Pressure",sheet.clampingPressure],["Zero Point",sheet.zeroPoint],["Workpiece Stop",sheet.workpieceStop]].filter(([,v])=>v).map(([k,v])=>({key:k,value:v}));
-    const params=sheetParams.filter(p=>p.value);
+    const pdfParams=params;
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${sheet.partNumber} — Setup Sheet</title><style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:Arial,sans-serif;font-size:13px;color:#111;background:#fff;padding:0}
@@ -4143,7 +4144,7 @@ ${sheet.subProgram?`<div style="background:#fffbea;border:2px solid #b07d00;bord
 ${toolTable("Tool List — Main","#b07d00",sheet.tools)}
 ${toolTable("Tool List — Sub","#1a6eb5",sheet.tools2)}
 ${toolTable("Tool List — 3rd","#1a8c55",sheet.tools3)}
-${params.length?`<h2>Setup Parameters</h2><div class="params">${params.map(p=>`<div class="pbox"><div class="plabel">${p.key}</div><div class="pval">${p.value}</div></div>`).join("")}</div>`:""}
+${pdfParams.length?`<h2>Setup Parameters</h2><div class="params">${pdfParams.map(p=>`<div class="pbox"><div class="plabel">${p.key}</div><div class="pval">${p.value}</div></div>`).join("")}</div>`:""}
 ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
 <footer>ShopTrack Setup Sheet &nbsp;·&nbsp; ${sheet.partNumber||""} / ${sheet.machine||""} &nbsp;·&nbsp; ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</footer>
 </div>
