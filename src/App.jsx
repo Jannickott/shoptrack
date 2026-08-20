@@ -4036,7 +4036,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
             </div>
             <div style={{display:"flex",gap:12,fontSize:9,color:C.muted,letterSpacing:.5}}>
               <span><i className="ti ti-tool"/> {(s.tools||[]).filter(t=>t.description).length} tools</span>
-              {(s.opsMain||[]).filter(o=>o.operation).length>0&&<span><i className="ti ti-list-numbers"/> {(s.opsMain||[]).filter(o=>o.operation).length} ops</span>}
+              {(s.tools2||[]).filter(t=>t.description).length>0&&<span><i className="ti ti-tool"/> {(s.tools2||[]).filter(t=>t.description).length} sub</span>}
               <span><i className="ti ti-calendar"/> {fmtDate(s.updatedAt||s.createdAt)}</span>
               {s.createdBy&&<span><i className="ti ti-user"/> {s.createdBy}</span>}
             </div>
@@ -4051,13 +4051,25 @@ function SetupSheetDetail({sheet,onBack,onEdit,onDelete}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const rc=pos=>{if(!pos)return"";return(sheet.restartPrefix||"NAT")+String(pos).padStart(sheet.restartPad||2,"0");};
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
-  const mainOps=(sheet.opsMain||[]).filter(o=>o.operation);
+  const filledTools2=(sheet.tools2||[]).filter(t=>t.description||t.label);
+  const filledTools3=(sheet.tools3||[]).filter(t=>t.description||t.label);
+  const renderToolList=(tools,accent)=>(
+    <div style={{background:C.surface,borderRadius:10,border:`1px solid ${accent||C.border}`,overflow:"hidden"}}>
+      {tools.map((t,i)=>(
+        <div key={t.position} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<tools.length-1?`1px solid ${C.border}`:"none"}}>
+          <div style={{width:30,height:30,borderRadius:6,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:accent||C.amber,flexShrink:0}}>{t.position}</div>
+          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{t.description}</div>{t.label&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.label}</div>}</div>
+          <div style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{rc(t.position)}</div>
+        </div>
+      ))}
+    </div>
+  );
 
   const printPdf=()=>{
     const w=window.open("","_blank","width=860,height=1100");
     if(!w) return;
     const rows=t=>`<tr><td class="mono">${t.position}</td><td>${t.description||""}</td><td class="grey">${t.label||""}</td><td class="mono amber">${rc(t.position)}</td></tr>`;
-    const opRows=o=>`<tr><td class="mono">${"T"+String(o.toolPosition||0).padStart(2,"0")}</td><td>${o.operation||""}</td><td class="mono amber">${o.toolPosition?rc(o.toolPosition):""}</td></tr>`;
+    const toolTable=(title,accent,toolArr)=>{const filled=(toolArr||[]).filter(t=>t.description);if(!filled.length)return"";return`<h2 style="color:${accent}">${title}</h2><table><thead><tr><th>Pos</th><th>Description</th><th>Label</th><th>Restart</th></tr></thead><tbody>${filled.map(rows).join("")}</tbody></table>`;};
     const params=[["Chuck Name",sheet.chuckName],["Chuck Overhang",sheet.chuckOverhang],["Clamping Pressure",sheet.clampingPressure],["Zero Point",sheet.zeroPoint],["Workpiece Stop",sheet.workpieceStop]].filter(([,v])=>v);
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${sheet.partNumber} — Setup Sheet</title><style>
 *{box-sizing:border-box;margin:0;padding:0}
@@ -4089,8 +4101,9 @@ footer{margin-top:24px;padding-top:8px;border-top:1px solid #eee;font-size:9px;c
 <h2>Identity</h2>
 ${sheet.subProgram?`<div style="background:#fffbea;border:2px solid #b07d00;border-radius:8px;padding:12px 16px;margin-bottom:14px"><div style="font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#b07d00;margin-bottom:4px">Program Name</div><div style="font-size:26px;font-family:monospace;font-weight:800;color:#b07d00;letter-spacing:2px">${sheet.subProgram}</div></div>`:""}
 <div class="meta">${[["Machine",sheet.machine],["Customer",sheet.customer],["Material",sheet.material],["Revision",sheet.revision],["Operation",sheet.operation],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>`<div class="field"><span class="grey">${k}: </span><b>${v}</b></div>`).join("")}</div>
-${filledTools.length?`<h2>Tool List</h2><table><thead><tr><th>Pos</th><th>Description</th><th>Label</th><th>Restart</th></tr></thead><tbody>${filledTools.map(rows).join("")}</tbody></table>`:""}
-${mainOps.length?`<h2>Operations Sequence — Main Spindle</h2><table><thead><tr><th>Tool</th><th>Operation</th><th>Restart</th></tr></thead><tbody>${mainOps.map(opRows).join("")}</tbody></table>`:""}
+${toolTable("Tool List — Main","#b07d00",sheet.tools)}
+${toolTable("Tool List — Sub","#1a6eb5",sheet.tools2)}
+${toolTable("Tool List — 3rd","#1a8c55",sheet.tools3)}
 ${params.length?`<h2>Setup Parameters</h2><div class="params">${params.map(([k,v])=>`<div class="pbox"><div class="plabel">${k}</div><div class="pval">${v}</div></div>`).join("")}</div>`:""}
 ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
 <footer>ShopTrack Setup Sheet &nbsp;·&nbsp; ${sheet.partNumber||""} / ${sheet.machine||""} &nbsp;·&nbsp; ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</footer>
@@ -4120,35 +4133,9 @@ ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
           {[["Machine",sheet.machine],["Material",sheet.material],["Operation",sheet.operation],["Revision",sheet.revision],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>{k}</div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v}</div></div>))}
         </div>
       </div>
-      {filledTools.length>0&&(
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List</div>
-          <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-            {filledTools.map((t,i)=>(
-              <div key={t.position} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<filledTools.length-1?`1px solid ${C.border}`:"none"}}>
-                <div style={{width:30,height:30,borderRadius:6,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:C.amber,flexShrink:0}}>{t.position}</div>
-                <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{t.description}</div>{t.label&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.label}</div>}</div>
-                <div style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{rc(t.position)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {mainOps.length>0&&(
-        <div style={{marginBottom:14}}>
-          <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Operations Sequence — Main Spindle</div>
-          <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden"}}>
-            <div style={{display:"grid",gridTemplateColumns:"50px 1fr 70px",borderBottom:`1px solid ${C.border}`}}>{["Tool","Operation","Restart"].map(h=><div key={h} style={{padding:"6px 10px",fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase"}}>{h}</div>)}</div>
-            {mainOps.map((o,i)=>(
-              <div key={i} style={{display:"grid",gridTemplateColumns:"50px 1fr 70px",borderBottom:i<mainOps.length-1?`1px solid rgba(255,255,255,.04)`:"none"}}>
-                <div style={{padding:"10px",fontSize:12,fontWeight:700,color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>T{String(o.toolPosition||0).padStart(2,"0")}</div>
-                <div style={{padding:"10px",fontSize:12,color:C.text}}>{o.operation}</div>
-                <div style={{padding:"10px",fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace"}}>{rc(o.toolPosition)}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
+      {filledTools.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Main</div>{renderToolList(filledTools,C.amber)}</div>}
+      {filledTools2.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.blue,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Sub</div>{renderToolList(filledTools2,C.blue)}</div>}
+      {filledTools3.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — 3rd</div>{renderToolList(filledTools3,C.green)}</div>}
       {(sheet.chuckName||sheet.clampingPressure||sheet.zeroPoint||sheet.workpieceStop)&&(
         <div style={{marginBottom:14}}>
           <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Setup Parameters</div>
@@ -4178,27 +4165,52 @@ ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
 }
 
 function SetupSheetForm({sheet,machines,user,onBack,onSave}){
-  const blank={id:null,partNumber:"",customer:"",machine:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],opsMain:[],chuckName:"",chuckOverhang:"",clampingPressure:"",zeroPoint:"",workpieceStop:"",notes:""};
+  const blank={id:null,partNumber:"",customer:"",machine:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],chuckName:"",chuckOverhang:"",clampingPressure:"",zeroPoint:"",workpieceStop:"",notes:""};
   const [form,setForm]=useState(sheet?{...blank,...sheet}:blank);
   const [errs,setErrs]=useState({});
+  const [showList2,setShowList2]=useState(!!(sheet?.tools2?.length));
+  const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   const rc=pos=>{if(!pos)return"";return(form.restartPrefix||"NAT")+String(pos).padStart(form.restartPad||2,"0");};
-  const usedPositions=new Set((form.tools||[]).map(t=>t.position));
-  const availablePositions=[...Array(32)].map((_,i)=>i+1).filter(n=>!usedPositions.has(n));
-  const setTool=(pos,field,val)=>setForm(p=>{const tools=[...(p.tools||[])];const idx=tools.findIndex(t=>t.position===pos);if(idx>=0)tools[idx]={...tools[idx],[field]:val};return{...p,tools};});
-  const removeTool=pos=>setForm(p=>({...p,tools:(p.tools||[]).filter(t=>t.position!==pos)}));
-  const addTool=()=>{const pos=availablePositions[0];if(!pos)return;setForm(p=>({...p,tools:[...(p.tools||[]),{position:pos,description:"",label:""}].sort((a,b)=>a.position-b.position)}));};
-  const changeToolPos=(oldPos,newPos)=>{const n=parseInt(newPos);if(!n||usedPositions.has(n))return;setForm(p=>({...p,tools:p.tools.map(t=>t.position===oldPos?{...t,position:n}:t).sort((a,b)=>a.position-b.position)}));};
-  const setOp=(idx,field,val)=>setForm(p=>{const ops=[...(p.opsMain||[])];ops[idx]={...ops[idx],[field]:field==="toolPosition"?parseInt(val)||"":val};return{...p,opsMain:ops};});
-  const addOp=()=>setForm(p=>({...p,opsMain:[...(p.opsMain||[]),{toolPosition:"",operation:""}]}));
-  const removeOp=idx=>setForm(p=>({...p,opsMain:(p.opsMain||[]).filter((_,i)=>i!==idx)}));
+  const allPos=[...Array(99)].map((_,i)=>i+1);
+  const toolListEditor=(listKey,accent)=>{
+    const tools=form[listKey]||[];
+    const used=new Set(tools.map(t=>t.position));
+    const avail=allPos.filter(n=>!used.has(n));
+    const setTool=(pos,fld,val)=>setForm(p=>{const arr=[...(p[listKey]||[])];const idx=arr.findIndex(t=>t.position===pos);if(idx>=0)arr[idx]={...arr[idx],[fld]:val};return{...p,[listKey]:arr};});
+    const removeTool=pos=>setForm(p=>({...p,[listKey]:(p[listKey]||[]).filter(t=>t.position!==pos)}));
+    const addTool=()=>{const pos=avail[0];if(!pos)return;setForm(p=>({...p,[listKey]:[...(p[listKey]||[]),{position:pos,description:"",label:""}].sort((a,b)=>a.position-b.position)}));};
+    const changePos=(old,nv)=>{const n=parseInt(nv);if(!n||used.has(n))return;setForm(p=>({...p,[listKey]:p[listKey].map(t=>t.position===old?{...t,position:n}:t).sort((a,b)=>a.position-b.position)}));};
+    return(
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${accent}`,overflow:"hidden",marginBottom:14}}>
+        {tools.length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No tools added yet</div>}
+        {tools.map(t=>(
+          <div key={t.position} style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"flex-start"}}>
+            <select style={{...sel(),width:60,flexShrink:0,fontWeight:700,color:accent}} value={t.position} onChange={e=>changePos(t.position,e.target.value)}>
+              <option value={t.position}>{t.position}</option>
+              {avail.map(n=><option key={n} value={n}>{n}</option>)}
+            </select>
+            <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
+              <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Tool description (e.g. SKRUB 0.8)"/>
+              <input style={{...inp(),fontSize:10}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Label (e.g. DREJE UDV) — optional"/>
+            </div>
+            <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,padding:"4px 2px",flexShrink:0,marginTop:4}} onClick={()=>removeTool(t.position)}><i className="ti ti-x"/></button>
+          </div>
+        ))}
+        <div style={{padding:"10px 12px"}}><button style={{background:"none",border:"none",color:accent,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={addTool} disabled={avail.length===0}><i className="ti ti-plus"/> Add Tool{avail.length>0?` (next: pos ${avail[0]})`:" (all 99 filled)"}</button></div>
+      </div>
+    );
+  };
   const save=()=>{
     const e={};
     if(!form.partNumber.trim()) e.partNumber="Required";
     if(!form.machine) e.machine="Required";
     if(Object.keys(e).length){setErrs(e);return;}
     const now=Date.now();
-    onSave({...form,id:form.id||now,createdAt:form.createdAt||now,updatedAt:now,createdBy:form.createdBy||user.name});
+    const out={...form};
+    if(!showList2){out.tools2=[];out.tools3=[];}
+    if(!showList3) out.tools3=[];
+    onSave({...out,id:out.id||now,createdAt:out.createdAt||now,updatedAt:now,createdBy:out.createdBy||user.name});
   };
   return(
     <div style={{padding:"14px 16px"}}>
@@ -4221,34 +4233,30 @@ function SetupSheetForm({sheet,machines,user,onBack,onSave}){
         </div>
         <div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:6,padding:"6px 10px"}}>Tool 8 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(8)}</span>&nbsp;·&nbsp;Tool 1 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(1)}</span></div>
       </div>
-      <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool List</div>
-      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
-        {(form.tools||[]).length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No tools added yet</div>}
-        {(form.tools||[]).map(t=>(
-          <div key={t.position} style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"flex-start"}}>
-            <select style={{...sel(),width:60,flexShrink:0,fontWeight:700,color:C.amber}} value={t.position} onChange={e=>changeToolPos(t.position,e.target.value)}><option value={t.position}>{t.position}</option>{availablePositions.map(n=><option key={n} value={n}>{n}</option>)}</select>
-            <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
-              <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Tool description (e.g. SKRUB 0.8)"/>
-              <input style={{...inp(),fontSize:10}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Label (e.g. DREJE UDV) — optional"/>
-            </div>
-            <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,padding:"4px 2px",flexShrink:0,marginTop:4}} onClick={()=>removeTool(t.position)}><i className="ti ti-x"/></button>
+      <div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool List — Main</div>
+      {toolListEditor("tools",C.amber)}
+      {showList2?(
+        <>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+            <div style={{fontSize:8,color:C.blue,letterSpacing:2,textTransform:"uppercase"}}>Tool List — Sub</div>
+            <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",gap:4}} onClick={()=>{setShowList2(false);setShowList3(false);setForm(p=>({...p,tools2:[],tools3:[]}));}}><i className="ti ti-x"/> Remove</button>
           </div>
-        ))}
-        <div style={{padding:"10px 12px"}}><button style={{background:"none",border:"none",color:C.amber,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={addTool} disabled={availablePositions.length===0}><i className="ti ti-plus"/> Add Tool{availablePositions.length>0?` (next: pos ${availablePositions[0]})`:" (all 32 filled)"}</button></div>
-      </div>
-      <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Operations Sequence — Main Spindle</div>
-      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
-        {(form.opsMain||[]).length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No steps added yet</div>}
-        {(form.opsMain||[]).map((o,i)=>(
-          <div key={i} style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"center"}}>
-            <select style={{...sel(),width:70,flexShrink:0}} value={o.toolPosition||""} onChange={e=>setOp(i,"toolPosition",e.target.value)}><option value="">T—</option>{(form.tools||[]).map(t=><option key={t.position} value={t.position}>T{String(t.position).padStart(2,"0")}</option>)}</select>
-            <input style={{...inp(),flex:1}} value={o.operation||""} onChange={e=>setOp(i,"operation",e.target.value)} placeholder="Operation name"/>
-            <div style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace",minWidth:52,textAlign:"right",flexShrink:0}}>{rc(o.toolPosition)}</div>
-            <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,padding:"4px 2px",flexShrink:0}} onClick={()=>removeOp(i)}><i className="ti ti-x"/></button>
-          </div>
-        ))}
-        <div style={{padding:"10px 12px"}}><button style={{background:"none",border:"none",color:C.amber,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={addOp}><i className="ti ti-plus"/> Add Step</button></div>
-      </div>
+          {toolListEditor("tools2",C.blue)}
+          {showList3?(
+            <>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                <div style={{fontSize:8,color:C.green,letterSpacing:2,textTransform:"uppercase"}}>Tool List — 3rd</div>
+                <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:11,display:"flex",alignItems:"center",gap:4}} onClick={()=>{setShowList3(false);setForm(p=>({...p,tools3:[]}));}}><i className="ti ti-x"/> Remove</button>
+              </div>
+              {toolListEditor("tools3",C.green)}
+            </>
+          ):(
+            <button style={{...btn("outline",true,true),borderColor:C.green,color:C.green,marginBottom:14}} onClick={()=>setShowList3(true)}><i className="ti ti-plus"/> Add Third Tool List</button>
+          )}
+        </>
+      ):(
+        <button style={{...btn("outline",true,true),borderColor:C.blue,color:C.blue,marginBottom:14}} onClick={()=>setShowList2(true)}><i className="ti ti-plus"/> Add Sub Tool List</button>
+      )}
       <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Setup Parameters (Turning)</div>
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>

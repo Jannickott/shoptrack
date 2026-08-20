@@ -328,23 +328,46 @@ app.post("/api/setupsheet-pdf", (req, res) => {
       y += 6;
     }
 
-    // ── Operations sequence ────────────────────────────────
-    const ops = (sheet.opsMain || []).filter(o => o.operation);
-    if (ops.length) {
-      sectionTitle("OPERATIONS SEQUENCE — MAIN SPINDLE");
+    // ── Sub tool list ──────────────────────────────────────
+    const tools2 = (sheet.tools2 || []).filter(t => t.description);
+    if (tools2.length) {
+      sectionTitle("TOOL LIST — SUB");
       doc.fillColor(GREY).fontSize(7.5).font("Helvetica");
-      ["#", "Tool", "Operation", "Restart"].forEach((h, i) => {
-        doc.text(h, [45, 75, 115, 430][i], y, { characterSpacing: 1 });
+      ["Pos", "Description", "Label", "Restart"].forEach((h, i) => {
+        doc.text(h, [45, 80, 280, 430][i], y, { characterSpacing: 1 });
       });
       y += 14;
-      ops.forEach((o, i) => {
-        if (i % 2 === 0) doc.rect(45, y - 2, W, 16).fill("#f7f7f7");
-        doc.fillColor(GREY).fontSize(9).font("Helvetica").text(String(i + 1), 45, y, { width: 26 });
-        doc.fillColor(DARK).font("Helvetica-Bold")
-           .text(`T${String(o.toolPosition || 0).padStart(2, "0")}`, 75, y, { width: 36 });
-        doc.font("Helvetica").text(o.operation || "", 115, y, { width: 310 });
-        doc.fillColor(AMBER).font("Helvetica-Bold")
-           .text(o.toolPosition ? rc(o.toolPosition) : "", 430, y, { width: 80 });
+      tools2.forEach((t, i) => {
+        if (i % 2 === 0) doc.rect(45, y - 2, W, 16).fill("#eaf4ff").fillColor(DARK);
+        doc.fillColor(DARK).fontSize(9).font("Helvetica-Bold")
+           .text(String(t.position), 45, y, { width: 30 });
+        doc.font("Helvetica").text(t.description || "", 80, y, { width: 195 });
+        doc.fillColor(GREY).text(t.label || "", 280, y, { width: 145 });
+        doc.fillColor("#1a6eb5").font("Helvetica-Bold")
+           .text(rc(t.position), 430, y, { width: 80 });
+        y += 16;
+        if (y > doc.page.height - 80) { doc.addPage(); y = 45; }
+      });
+      y += 6;
+    }
+
+    // ── Third tool list ────────────────────────────────────
+    const tools3 = (sheet.tools3 || []).filter(t => t.description);
+    if (tools3.length) {
+      sectionTitle("TOOL LIST — 3RD");
+      doc.fillColor(GREY).fontSize(7.5).font("Helvetica");
+      ["Pos", "Description", "Label", "Restart"].forEach((h, i) => {
+        doc.text(h, [45, 80, 280, 430][i], y, { characterSpacing: 1 });
+      });
+      y += 14;
+      tools3.forEach((t, i) => {
+        if (i % 2 === 0) doc.rect(45, y - 2, W, 16).fill("#eafaf0").fillColor(DARK);
+        doc.fillColor(DARK).fontSize(9).font("Helvetica-Bold")
+           .text(String(t.position), 45, y, { width: 30 });
+        doc.font("Helvetica").text(t.description || "", 80, y, { width: 195 });
+        doc.fillColor(GREY).text(t.label || "", 280, y, { width: 145 });
+        doc.fillColor("#1a8c55").font("Helvetica-Bold")
+           .text(rc(t.position), 430, y, { width: 80 });
         y += 16;
         if (y > doc.page.height - 80) { doc.addPage(); y = 45; }
       });
