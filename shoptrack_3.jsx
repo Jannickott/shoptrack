@@ -4109,12 +4109,12 @@ function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToToo
             <div style={{width:30,height:30,borderRadius:6,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:accent||C.amber,flexShrink:0}}>{t.position}</div>
             <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:4}}>
               <div style={{fontSize:13,fontWeight:600,color:C.text}}>{t.description}</div>
-              {cabTool&&loc&&(
+              {cabTool&&(
                 <button onClick={()=>onGoToTool&&onGoToTool(t.toolId)} style={{background:C.blue+"18",border:`1px solid ${C.blue}44`,borderRadius:7,padding:"5px 10px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:8,alignSelf:"flex-start",maxWidth:"100%"}}>
                   <i className="ti ti-map-pin" style={{fontSize:12,color:C.blue,flexShrink:0}}/>
                   <div style={{minWidth:0}}>
                     <div style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cabTool.name}</div>
-                    <div style={{fontSize:9,color:C.muted}}>{loc.cab}{loc.drw?` · ${loc.drw}`:""}</div>
+                    {loc&&<div style={{fontSize:9,color:C.muted}}>{loc.cab}{loc.drw?` · ${loc.drw}`:""}</div>}
                   </div>
                   <i className="ti ti-arrow-right" style={{fontSize:11,color:C.blue,marginLeft:4,flexShrink:0}}/>
                 </button>
