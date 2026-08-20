@@ -539,7 +539,7 @@ export default function App(){
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupParamOptions={setupParamOptions} setSetupParamOptions={setSetupParamOptions}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupParamOptions={setupParamOptions} setSetupParamOptions={setSetupParamOptions} tools={tools} cabinets={cabinets}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
@@ -3997,7 +3997,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupParamOptions,setSetupParamOptions}){
+function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupParamOptions,setSetupParamOptions,tools,cabinets}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
   const [search,setSearch]=useState("");
@@ -4033,8 +4033,8 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
     try{await fetch("/api/setupsheet-pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheet})});}
     catch{}
   };
-  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupParamOptions={setupParamOptions||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
-  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
+  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupParamOptions={setupParamOptions||[]} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
+  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
@@ -4070,7 +4070,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
           <div key={s.id} onClick={()=>{setSelectedId(s.id);setView("detail");}} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}}>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:2}}>{s.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[s.customer,s.material].filter(Boolean).join(" · ")}</div></div>
-              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",padding:"3px 8px",borderRadius:6}}>{s.machine}</span>{s.operation&&<span style={{fontSize:9,color:C.muted}}>Op {s.operation}</span>}</div>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",padding:"3px 8px",borderRadius:6}}>{s.machine}</span>{s.operation&&<span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:6,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[s.operation]||C.muted,background:{"Side 1":"rgba(59,130,246,.12)","Side 2":"rgba(46,213,115,.12)","Finish Part":"rgba(240,165,0,.12)"}[s.operation]||"transparent"}}>{s.operation}</span>}</div>
             </div>
             <div style={{display:"flex",gap:12,fontSize:9,color:C.muted,letterSpacing:.5}}>
               <span><i className="ti ti-tool"/> {(s.tools||[]).filter(t=>t.description).length} tools</span>
@@ -4085,21 +4085,27 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
   );
 }
 
-function SetupSheetDetail({sheet,onBack,onEdit,onDelete}){
+function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const rc=pos=>{if(!pos)return"";return(sheet.restartPrefix||"NAT")+String(pos).padStart(sheet.restartPad||2,"0");};
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
   const filledTools2=(sheet.tools2||[]).filter(t=>t.description||t.label);
   const filledTools3=(sheet.tools3||[]).filter(t=>t.description||t.label);
-  const renderToolList=(tools,accent)=>(
+  const findLoc=toolId=>{if(!toolId)return null;const t=(tools||[]).find(x=>x.id===toolId);if(!t)return null;const cab=(cabinets||[]).find(c=>c.id===t.cabinetId);const drw=cab?.drawers?.find(d=>d.id===t.drawerId);if(!cab)return null;return{cab:cab.name,drw:drw?`Drawer ${drw.number}${drw.label?` — ${drw.label}`:""}`:null};};
+  const opColors={"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber};
+  const opColor=opColors[sheet.operation]||C.muted;
+  const renderToolList=(toolArr,accent)=>(
     <div style={{background:C.surface,borderRadius:10,border:`1px solid ${accent||C.border}`,overflow:"hidden"}}>
-      {tools.map((t,i)=>(
-        <div key={t.position} style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px",borderBottom:i<tools.length-1?`1px solid ${C.border}`:"none"}}>
-          <div style={{width:30,height:30,borderRadius:6,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:accent||C.amber,flexShrink:0}}>{t.position}</div>
-          <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{t.description}</div>{t.label&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.label}</div>}</div>
-          <div style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{rc(t.position)}</div>
+      {toolArr.map((t,i)=>{const loc=findLoc(t.toolId);return(
+        <div key={t.position} style={{borderBottom:i<toolArr.length-1?`1px solid ${C.border}`:"none"}}>
+          <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px"}}>
+            <div style={{width:30,height:30,borderRadius:6,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:accent||C.amber,flexShrink:0}}>{t.position}</div>
+            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{t.description}</div>{t.label&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.label}</div>}</div>
+            <div style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{rc(t.position)}</div>
+          </div>
+          {loc&&<div style={{padding:"5px 14px 8px 54px",display:"flex",alignItems:"center",gap:6}}><i className="ti ti-map-pin" style={{fontSize:11,color:C.blue}}/><span style={{fontSize:10,color:C.blue,fontWeight:600}}>{loc.cab}</span>{loc.drw&&<span style={{fontSize:10,color:C.muted}}> · {loc.drw}</span>}</div>}
         </div>
-      ))}
+      );})}
     </div>
   );
   const sheetParams=(sheet.params&&sheet.params.length)?sheet.params:[["Chuck Name",sheet.chuckName],["Chuck Overhang",sheet.chuckOverhang],["Clamping Pressure",sheet.clampingPressure],["Zero Point",sheet.zeroPoint],["Workpiece Stop",sheet.workpieceStop]].filter(([,v])=>v).map(([k,v])=>({key:k,value:v}));
@@ -4162,15 +4168,21 @@ ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:18,fontWeight:700,color:C.text}}>{sheet.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[sheet.customer,sheet.machine,sheet.operation&&`Op ${sheet.operation}`].filter(Boolean).join(" · ")}</div></div>
         <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onEdit}><i className="ti ti-edit"/></button>
       </div>
+      {sheet.operation&&(
+        <div style={{background:`${opColor}18`,border:`2px solid ${opColor}`,borderRadius:10,padding:"10px 16px",marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
+          <i className="ti ti-refresh" style={{fontSize:18,color:opColor,flexShrink:0}}/>
+          <div><div style={{fontSize:8,color:opColor,letterSpacing:2,textTransform:"uppercase",marginBottom:2}}>Operation</div><div style={{fontSize:20,fontWeight:800,color:opColor,letterSpacing:1}}>{sheet.operation}</div></div>
+        </div>
+      )}
       {sheet.subProgram&&(
-        <div style={{background:"rgba(240,165,0,.1)",border:`2px solid ${C.amber}`,borderRadius:10,padding:"12px 16px",marginBottom:14}}>
+        <div style={{background:"rgba(240,165,0,.1)",border:`2px solid ${C.amber}`,borderRadius:10,padding:"12px 16px",marginBottom:10}}>
           <div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Program Name</div>
           <div style={{fontSize:28,fontWeight:800,color:C.amber,fontFamily:"'Share Tech Mono',monospace",letterSpacing:2,lineHeight:1}}>{sheet.subProgram}</div>
         </div>
       )}
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          {[["Machine",sheet.machine],["Material",sheet.material],["Operation",sheet.operation],["Revision",sheet.revision],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>{k}</div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v}</div></div>))}
+          {[["Machine",sheet.machine],["Material",sheet.material],["Revision",sheet.revision],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>{k}</div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v}</div></div>))}
         </div>
       </div>
       {filledTools.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Main</div>{renderToolList(filledTools,C.amber)}</div>}
@@ -4204,40 +4216,74 @@ ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
   );
 }
 
-function SetupSheetForm({sheet,machines,user,setupParamOptions,onBack,onSave}){
+function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const blank={id:null,partNumber:"",customer:"",machine:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:""};
   const [form,setForm]=useState(sheet?{...blank,...sheet,params:migrateParams(sheet)}:blank);
   const [errs,setErrs]=useState({});
   const [showList2,setShowList2]=useState(!!(sheet?.tools2?.length));
   const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
+  const [pickerKey,setPickerKey]=useState(null); // {listKey, pos} — which slot is picking
+  const [pickerSearch,setPickerSearch]=useState("");
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   const rc=pos=>{if(!pos)return"";return(form.restartPrefix||"NAT")+String(pos).padStart(form.restartPad||2,"0");};
   const allPos=[...Array(99)].map((_,i)=>i+1);
+  const activeCabinetTools=(tools||[]).filter(t=>t.active!==false&&t.name);
+  const filteredPicker=pickerSearch.trim()?activeCabinetTools.filter(t=>(t.name||"").toLowerCase().includes(pickerSearch.toLowerCase())):activeCabinetTools;
   const toolListEditor=(listKey,accent)=>{
-    const tools=form[listKey]||[];
-    const used=new Set(tools.map(t=>t.position));
+    const listTools=form[listKey]||[];
+    const used=new Set(listTools.map(t=>t.position));
     const avail=allPos.filter(n=>!used.has(n));
     const setTool=(pos,fld,val)=>setForm(p=>{const arr=[...(p[listKey]||[])];const idx=arr.findIndex(t=>t.position===pos);if(idx>=0)arr[idx]={...arr[idx],[fld]:val};return{...p,[listKey]:arr};});
-    const removeTool=pos=>setForm(p=>({...p,[listKey]:(p[listKey]||[]).filter(t=>t.position!==pos)}));
-    const addTool=()=>{const pos=avail[0];if(!pos)return;setForm(p=>({...p,[listKey]:[...(p[listKey]||[]),{position:pos,description:"",label:""}].sort((a,b)=>a.position-b.position)}));};
+    const removeTool=pos=>{setPickerKey(null);setForm(p=>({...p,[listKey]:(p[listKey]||[]).filter(t=>t.position!==pos)}))};
+    const addTool=()=>{const pos=avail[0];if(!pos)return;setForm(p=>({...p,[listKey]:[...(p[listKey]||[]),{position:pos,description:"",label:"",toolId:null}].sort((a,b)=>a.position-b.position)}));};
     const changePos=(old,nv)=>{const n=parseInt(nv);if(!n||used.has(n))return;setForm(p=>({...p,[listKey]:p[listKey].map(t=>t.position===old?{...t,position:n}:t).sort((a,b)=>a.position-b.position)}));};
+    const pickCabTool=(pos,cabTool)=>{setForm(p=>{const arr=[...(p[listKey]||[])];const idx=arr.findIndex(t=>t.position===pos);if(idx>=0)arr[idx]={...arr[idx],description:cabTool.name,toolId:cabTool.id};return{...p,[listKey]:arr};});setPickerKey(null);setPickerSearch("");};
+    const clearLink=pos=>setTool(pos,"toolId",null);
+    const isPicking=(pos)=>pickerKey&&pickerKey.listKey===listKey&&pickerKey.pos===pos;
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${accent}`,overflow:"hidden",marginBottom:14}}>
-        {tools.length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No tools added yet</div>}
-        {tools.map(t=>(
-          <div key={t.position} style={{padding:"10px 12px",borderBottom:`1px solid ${C.border}`,display:"flex",gap:8,alignItems:"flex-start"}}>
-            <select style={{...sel(),width:60,flexShrink:0,fontWeight:700,color:accent}} value={t.position} onChange={e=>changePos(t.position,e.target.value)}>
-              <option value={t.position}>{t.position}</option>
-              {avail.map(n=><option key={n} value={n}>{n}</option>)}
-            </select>
-            <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
-              <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Tool description (e.g. SKRUB 0.8)"/>
-              <input style={{...inp(),fontSize:10}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Label (e.g. DREJE UDV) — optional"/>
+        {listTools.length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No tools added yet</div>}
+        {listTools.map(t=>{
+          const showPicker=isPicking(t.position);
+          const cabTool=t.toolId?(tools||[]).find(x=>x.id===t.toolId):null;
+          const cab=cabTool?(cabinets||[]).find(c=>c.id===cabTool.cabinetId):null;
+          const drw=cab?.drawers?.find(d=>d.id===cabTool.drawerId);
+          return(
+          <div key={t.position} style={{borderBottom:`1px solid ${C.border}`}}>
+            <div style={{padding:"10px 12px",display:"flex",gap:8,alignItems:"flex-start"}}>
+              <select style={{...sel(),width:60,flexShrink:0,fontWeight:700,color:accent}} value={t.position} onChange={e=>changePos(t.position,e.target.value)}>
+                <option value={t.position}>{t.position}</option>
+                {avail.map(n=><option key={n} value={n}>{n}</option>)}
+              </select>
+              <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
+                <div style={{display:"flex",gap:6}}>
+                  <input style={{...inp(),flex:1}} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Tool description (e.g. SKRUB 0.8)"/>
+                  <button style={{background:showPicker?C.blue+"33":"none",border:`1px solid ${showPicker?C.blue:C.border}`,borderRadius:6,color:showPicker?C.blue:C.muted,cursor:"pointer",fontSize:12,padding:"0 8px",flexShrink:0}} title="Pick from cabinet" onClick={()=>{if(showPicker){setPickerKey(null);}else{setPickerKey({listKey,pos:t.position});setPickerSearch("");}}}>
+                    <i className="ti ti-database"/>
+                  </button>
+                </div>
+                {cabTool&&cab&&<div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,color:C.blue}}><i className="ti ti-map-pin" style={{fontSize:10}}/><span style={{fontWeight:600}}>{cab.name}</span>{drw&&<span style={{color:C.muted}}>· Drawer {drw.number}</span>}<button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:10,padding:"0 2px",marginLeft:"auto"}} onClick={()=>clearLink(t.position)}>unlink</button></div>}
+                <input style={{...inp(),fontSize:10}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Label (e.g. DREJE UDV) — optional"/>
+              </div>
+              <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,padding:"4px 2px",flexShrink:0,marginTop:4}} onClick={()=>removeTool(t.position)}><i className="ti ti-x"/></button>
             </div>
-            <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,padding:"4px 2px",flexShrink:0,marginTop:4}} onClick={()=>removeTool(t.position)}><i className="ti ti-x"/></button>
+            {showPicker&&(
+              <div style={{borderTop:`1px solid ${C.blue}33`,background:C.raised,padding:"10px 12px"}}>
+                <input style={{...inp(),marginBottom:8}} value={pickerSearch} onChange={e=>setPickerSearch(e.target.value)} placeholder="Search cabinet tools…" autoFocus/>
+                <div style={{maxHeight:180,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
+                  {filteredPicker.length===0&&<div style={{fontSize:11,color:C.muted,textAlign:"center",padding:8}}>No tools found</div>}
+                  {filteredPicker.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(
+                    <button key={ct.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"7px 10px",cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:2}} onClick={()=>pickCabTool(t.position,ct)}>
+                      <div style={{fontSize:12,fontWeight:600,color:C.text}}>{ct.name}</div>
+                      {ctCab&&<div style={{fontSize:10,color:C.muted}}>{ctCab.name}{ctDrw?` · Drawer ${ctDrw.number}`:""}</div>}
+                    </button>
+                  );})}
+                </div>
+              </div>
+            )}
           </div>
-        ))}
+        );})}
         <div style={{padding:"10px 12px"}}><button style={{background:"none",border:"none",color:accent,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={addTool} disabled={avail.length===0}><i className="ti ti-plus"/> Add Tool{avail.length>0?` (next: pos ${avail[0]})`:" (all 99 filled)"}</button></div>
       </div>
     );
@@ -4264,7 +4310,16 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,onBack,onSave}){
         <div style={{marginBottom:10}}><label style={label}>Part Number *</label><input style={inp(errs.partNumber)} value={form.partNumber} onChange={e=>setF("partNumber",e.target.value)} placeholder="e.g. CV-155"/>{errs.partNumber&&<div style={errMsg}>{errs.partNumber}</div>}</div>
         <div style={{marginBottom:10}}><label style={label}>Machine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>setF("machine",e.target.value)}><option value="">— Select Machine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
         <div style={{marginBottom:10}}><label style={{...label,color:C.amber}}>Program Name</label><input style={{...inp(),fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber,letterSpacing:1}} value={form.subProgram||""} onChange={e=>setF("subProgram",e.target.value)} placeholder="e.g. O1234"/></div>
-        {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["operation","Operation","e.g. 1/2"],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
+        {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
+        <div style={{marginBottom:10}}>
+          <label style={{...label,color:{" Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[form.operation]||undefined}}>Operation</label>
+          <select style={{...sel(),fontWeight:700,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[form.operation]||C.text}} value={form.operation||""} onChange={e=>setF("operation",e.target.value)}>
+            <option value="">— Select Operation —</option>
+            <option value="Side 1">Side 1</option>
+            <option value="Side 2">Side 2</option>
+            <option value="Finish Part">Finish Part</option>
+          </select>
+        </div>
       </div>
       <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Restart Code Format</div>
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
