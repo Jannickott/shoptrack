@@ -4100,14 +4100,29 @@ function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToToo
   const opColor=opColors[sheet.operation]||C.muted;
   const renderToolList=(toolArr,accent)=>(
     <div style={{background:C.surface,borderRadius:10,border:`1px solid ${accent||C.border}`,overflow:"hidden"}}>
-      {toolArr.map((t,i)=>{const loc=findLoc(t.toolId);return(
+      {toolArr.map((t,i)=>{
+        const cabTool=t.toolId?(tools||[]).find(x=>x.id===t.toolId):null;
+        const loc=findLoc(t.toolId);
+        return(
         <div key={t.position} style={{borderBottom:i<toolArr.length-1?`1px solid ${C.border}`:"none"}}>
           <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 14px"}}>
             <div style={{width:30,height:30,borderRadius:6,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",fontSize:12,fontWeight:700,color:accent||C.amber,flexShrink:0}}>{t.position}</div>
-            <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{t.description}</div>{t.label&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.label}</div>}</div>
+            <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:4}}>
+              <div style={{fontSize:13,fontWeight:600,color:C.text}}>{t.description}</div>
+              {cabTool&&loc&&(
+                <button onClick={()=>onGoToTool&&onGoToTool(t.toolId)} style={{background:C.blue+"18",border:`1px solid ${C.blue}44`,borderRadius:7,padding:"5px 10px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:8,alignSelf:"flex-start",maxWidth:"100%"}}>
+                  <i className="ti ti-map-pin" style={{fontSize:12,color:C.blue,flexShrink:0}}/>
+                  <div style={{minWidth:0}}>
+                    <div style={{fontSize:11,fontWeight:700,color:C.blue,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{cabTool.name}</div>
+                    <div style={{fontSize:9,color:C.muted}}>{loc.cab}{loc.drw?` · ${loc.drw}`:""}</div>
+                  </div>
+                  <i className="ti ti-arrow-right" style={{fontSize:11,color:C.blue,marginLeft:4,flexShrink:0}}/>
+                </button>
+              )}
+              {t.label&&<div style={{fontSize:10,color:C.muted}}>{t.label}</div>}
+            </div>
             <div style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{rc(t.position)}</div>
           </div>
-          {loc&&<div style={{padding:"5px 14px 8px 54px",display:"flex",alignItems:"center",gap:6}}><i className="ti ti-map-pin" style={{fontSize:11,color:C.blue}}/><span style={{fontSize:10,color:C.blue,fontWeight:600}}>{loc.cab}</span>{loc.drw&&<span style={{fontSize:10,color:C.muted}}> · {loc.drw}</span>}<button onClick={()=>onGoToTool&&onGoToTool(t.toolId)} style={{marginLeft:"auto",background:C.blue+"22",border:`1px solid ${C.blue}`,borderRadius:6,color:C.blue,cursor:"pointer",fontSize:10,padding:"2px 8px",fontWeight:600}}><i className="ti ti-arrow-right"/> Go to tool</button></div>}
         </div>
       );})}
     </div>
@@ -4245,14 +4260,11 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,on
   const [errs,setErrs]=useState({});
   const [showList2,setShowList2]=useState(!!(sheet?.tools2?.length));
   const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
-  const [pickerKey,setPickerKey]=useState(null); // listKey string — bottom "Add from Cabinet" open
-  const [pickerSearch,setPickerSearch]=useState("");
   const [uploading,setUploading]=useState(false);
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   const rc=pos=>{if(!pos)return"";return(form.restartPrefix||"NAT")+String(pos).padStart(form.restartPad||2,"0");};
   const allPos=[...Array(99)].map((_,i)=>i+1);
   const activeCabinetTools=(tools||[]).filter(t=>t.active!==false&&t.name);
-  const filteredPicker=pickerSearch.trim()?activeCabinetTools.filter(t=>(t.name||"").toLowerCase().includes(pickerSearch.toLowerCase())):activeCabinetTools;
   const toolListEditor=(listKey,accent)=>{
     const listTools=form[listKey]||[];
     const used=new Set(listTools.map(t=>t.position));
@@ -4261,18 +4273,10 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,on
     const removeTool=pos=>setForm(p=>({...p,[listKey]:(p[listKey]||[]).filter(t=>t.position!==pos)}));
     const addEmpty=()=>{const pos=avail[0];if(!pos)return;setForm(p=>({...p,[listKey]:[...(p[listKey]||[]),{position:pos,description:"",label:"",toolId:null}].sort((a,b)=>a.position-b.position)}));};
     const changePos=(old,nv)=>{const n=parseInt(nv);if(!n||used.has(n))return;setForm(p=>({...p,[listKey]:p[listKey].map(t=>t.position===old?{...t,position:n}:t).sort((a,b)=>a.position-b.position)}));};
-    const clearLink=pos=>setTool(pos,"toolId",null);
-    // "Add from Cabinet" — adds a new slot with tool name pre-filled + link set
-    const addFromCab=ct=>{const pos=avail[0];if(!pos)return;setForm(p=>({...p,[listKey]:[...(p[listKey]||[]),{position:pos,description:ct.name,label:"",toolId:ct.id}].sort((a,b)=>a.position-b.position)}));setPickerKey(null);setPickerSearch("");};
-    const cabPickerOpen=pickerKey===listKey;
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${accent}`,overflow:"hidden",marginBottom:14}}>
         {listTools.length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No tools added yet</div>}
-        {listTools.map(t=>{
-          const cabTool=t.toolId?(tools||[]).find(x=>x.id===t.toolId):null;
-          const cab=cabTool?(cabinets||[]).find(c=>c.id===cabTool.cabinetId):null;
-          const drw=cab?.drawers?.find(d=>d.id===cabTool.drawerId);
-          return(
+        {listTools.map(t=>(
           <div key={t.position} style={{borderBottom:`1px solid ${C.border}`}}>
             <div style={{padding:"10px 12px",display:"flex",gap:8,alignItems:"flex-start"}}>
               <select style={{...sel(),width:60,flexShrink:0,fontWeight:700,color:accent}} value={t.position} onChange={e=>changePos(t.position,e.target.value)}>
@@ -4280,39 +4284,20 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,on
                 {avail.map(n=><option key={n} value={n}>{n}</option>)}
               </select>
               <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
-                <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Tool description (e.g. SKRUB 0.8)"/>
-                {cabTool&&cab?(
-                  <div style={{display:"flex",alignItems:"center",gap:6,fontSize:10,color:C.blue}}>
-                    <i className="ti ti-map-pin" style={{fontSize:10}}/>
-                    <span style={{fontWeight:600}}>{cab.name}</span>
-                    {drw&&<span style={{color:C.muted}}>· Drawer {drw.number}</span>}
-                    <button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:10,padding:"0 2px",marginLeft:"auto"}} onClick={()=>clearLink(t.position)}>unlink</button>
-                  </div>
-                ):null}
-                <input style={{...inp(),fontSize:10}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Label (e.g. DREJE UDV) — optional"/>
+                <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Tool description — required"/>
+                <select style={sel()} value={t.toolId||""} onChange={e=>setTool(t.position,"toolId",e.target.value||null)}>
+                  <option value="">— No cabinet tool —</option>
+                  {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
+                </select>
+                <input style={{...inp(),fontSize:11}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Notes — optional"/>
               </div>
               <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:16,padding:"4px 2px",flexShrink:0,marginTop:4}} onClick={()=>removeTool(t.position)}><i className="ti ti-x"/></button>
             </div>
           </div>
-        );})}
-        <div style={{padding:"10px 12px",display:"flex",gap:8,flexWrap:"wrap",borderTop:listTools.length>0?`1px solid ${C.border}`:"none"}}>
-          <button style={{background:"none",border:"none",color:accent,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={addEmpty} disabled={avail.length===0}><i className="ti ti-plus"/> Add Tool manually</button>
-          <button style={{background:cabPickerOpen?C.blue+"22":"none",border:`1px solid ${cabPickerOpen?C.blue:C.border}`,borderRadius:6,color:cabPickerOpen?C.blue:C.muted,cursor:"pointer",fontSize:12,padding:"4px 10px",display:"flex",alignItems:"center",gap:6}} onClick={()=>{setPickerKey(cabPickerOpen?null:listKey);setPickerSearch("");}} disabled={avail.length===0}><i className="ti ti-database"/> Add from Cabinet</button>
+        ))}
+        <div style={{padding:"10px 12px",borderTop:listTools.length>0?`1px solid ${C.border}`:"none"}}>
+          <button style={{background:"none",border:"none",color:accent,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={addEmpty} disabled={avail.length===0}><i className="ti ti-plus"/> Add Tool{avail.length===0?" (all 99 filled)":""}</button>
         </div>
-        {cabPickerOpen&&(
-          <div style={{borderTop:`1px solid ${C.blue}44`,background:C.raised,padding:"10px 12px"}}>
-            <input style={{...inp(),marginBottom:8}} value={pickerSearch} onChange={e=>setPickerSearch(e.target.value)} placeholder="Search cabinet tools…" autoFocus/>
-            <div style={{maxHeight:200,overflowY:"auto",display:"flex",flexDirection:"column",gap:4}}>
-              {filteredPicker.length===0&&<div style={{fontSize:11,color:C.muted,textAlign:"center",padding:8}}>No tools found</div>}
-              {filteredPicker.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(
-                <button key={ct.id} style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:6,padding:"8px 10px",cursor:"pointer",textAlign:"left",display:"flex",flexDirection:"column",gap:2}} onClick={()=>addFromCab(ct)}>
-                  <div style={{fontSize:12,fontWeight:600,color:C.text}}>{ct.name}</div>
-                  {ctCab&&<div style={{fontSize:10,color:C.muted}}><i className="ti ti-map-pin" style={{fontSize:9}}/> {ctCab.name}{ctDrw?` · Drawer ${ctDrw.number}`:""}</div>}
-                </button>
-              );})}
-            </div>
-          </div>
-        )}
       </div>
     );
   };
