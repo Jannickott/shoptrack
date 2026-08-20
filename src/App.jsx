@@ -4138,6 +4138,10 @@ tr:nth-child(even) td{background:#fafafa}
 .plabel{font-size:8px;letter-spacing:1.5px;text-transform:uppercase;color:#888;margin-bottom:4px}
 .pval{font-size:18px;font-family:monospace;font-weight:700;color:#1a2233}
 .notes{background:#f8f8f8;border-radius:4px;padding:10px 14px;font-size:12px;white-space:pre-wrap;line-height:1.6}
+.photos{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:4px}
+.photo-box{border-radius:6px;overflow:hidden;border:1px solid #e0e0e0}
+.photo-box img{width:100%;display:block;max-height:220px;object-fit:cover}
+.photo-cap{font-size:10px;color:#666;padding:4px 8px;background:#f8f8f8}
 footer{margin-top:24px;padding-top:8px;border-top:1px solid #eee;font-size:9px;color:#aaa;text-align:center}
 @media print{@page{margin:12mm}body{padding:0}.no-print{display:none}}
 </style></head><body>
@@ -4152,6 +4156,7 @@ ${toolTable("Tool List — Sub","#1a6eb5",sheet.tools2)}
 ${toolTable("Tool List — 3rd","#1a8c55",sheet.tools3)}
 ${pdfParams.length?`<h2>Setup Parameters</h2><div class="params">${pdfParams.map(p=>`<div class="pbox"><div class="plabel">${p.key}</div><div class="pval">${p.value}</div></div>`).join("")}</div>`:""}
 ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
+${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.map(p=>`<div class="photo-box"><img src="${location.origin}${p.url}" onerror="this.style.display='none'"/>${p.caption?`<div class="photo-cap">${p.caption}</div>`:""}</div>`).join("")}</div>`:""}
 <footer>ShopTrack Setup Sheet &nbsp;·&nbsp; ${sheet.partNumber||""} / ${sheet.machine||""} &nbsp;·&nbsp; ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</footer>
 </div>
 <div class="no-print" style="position:fixed;top:10px;right:10px">
@@ -4199,6 +4204,19 @@ ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
         </div>
       )}
       {sheet.notes&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Notes</div><div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",fontSize:12,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{sheet.notes}</div></div>}
+      {(sheet.photos||[]).length>0&&(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Photos</div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {sheet.photos.map((p,i)=>(
+              <div key={i} style={{borderRadius:8,overflow:"hidden",background:C.raised,aspectRatio:"4/3",position:"relative"}}>
+                <img src={p.url} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}} onClick={()=>window.open(p.url,"_blank")}/>
+                {p.caption&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.65)",color:"#fff",fontSize:10,padding:"4px 8px"}}>{p.caption}</div>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
         <button style={btn("primary",true)} onClick={printPdf}><i className="ti ti-file-type-pdf"/> Export PDF</button>
         <button style={btn("outline",true)} onClick={onEdit}><i className="ti ti-edit"/> Edit Setup Sheet</button>
@@ -4225,6 +4243,7 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,on
   const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
   const [pickerKey,setPickerKey]=useState(null); // {listKey, pos} — which slot is picking
   const [pickerSearch,setPickerSearch]=useState("");
+  const [uploading,setUploading]=useState(false);
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   const rc=pos=>{if(!pos)return"";return(form.restartPrefix||"NAT")+String(pos).padStart(form.restartPad||2,"0");};
   const allPos=[...Array(99)].map((_,i)=>i+1);
@@ -4373,6 +4392,42 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,on
         </div>
       </div>
       <div style={{marginBottom:20}}><label style={label}>Notes</label><textarea style={{...inp(),minHeight:80,resize:"vertical",display:"block"}} value={form.notes||""} onChange={e=>setF("notes",e.target.value)} placeholder="e.g. EMNE TID 1 MINUT OG 22 SEKUNDER"/></div>
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Photos</div>
+        {(form.photos||[]).length>0&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:10}}>
+            {(form.photos||[]).map((p,i)=>(
+              <div key={i} style={{position:"relative",borderRadius:8,overflow:"hidden",background:C.raised,aspectRatio:"4/3"}}>
+                <img src={p.url} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                <button onClick={()=>setF("photos",(form.photos||[]).filter((_,j)=>j!==i))} style={{position:"absolute",top:4,right:4,background:"rgba(0,0,0,.7)",border:"none",borderRadius:4,color:"#fff",cursor:"pointer",padding:"2px 6px",fontSize:12}}><i className="ti ti-x"/></button>
+                {p.caption!==undefined&&<input style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.6)",border:"none",color:"#fff",fontSize:10,padding:"4px 8px",outline:"none"}} value={p.caption||""} onChange={e=>setF("photos",(form.photos||[]).map((x,j)=>j===i?{...x,caption:e.target.value}:x))} placeholder="Caption…"/>}
+              </div>
+            ))}
+          </div>
+        )}
+        <label style={{display:"flex",alignItems:"center",gap:8,background:C.raised,border:`1px dashed ${C.border}`,borderRadius:8,padding:"10px 14px",cursor:"pointer",color:C.muted,fontSize:12}}>
+          {uploading?<><i className="ti ti-loader" style={{animation:"spin 1s linear infinite"}}/> Uploading…</>:<><i className="ti ti-camera"/> Add Photo</>}
+          <input type="file" accept="image/*" multiple style={{display:"none"}} disabled={uploading} onChange={async e=>{
+            const files=[...e.target.files];
+            if(!files.length) return;
+            setUploading(true);
+            const sheetId=form.id||Date.now();
+            const uploaded=[];
+            for(const file of files){
+              const reader=new FileReader();
+              const dataUrl=await new Promise(res=>{reader.onload=ev=>res(ev.target.result);reader.readAsDataURL(file);});
+              try{
+                const r=await fetch("/api/setup-photo",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheetId,data:dataUrl})});
+                const j=await r.json();
+                if(j.url) uploaded.push({url:j.url,caption:""});
+              }catch{}
+            }
+            setForm(p=>({...p,photos:[...(p.photos||[]),...uploaded]}));
+            setUploading(false);
+            e.target.value="";
+          }}/>
+        </label>
+      </div>
       <button style={btn("primary",true)} onClick={save}><i className="ti ti-check"/> Save Setup Sheet</button>
     </div>
   );

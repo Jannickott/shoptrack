@@ -432,6 +432,20 @@ app.post("/api/photo", (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /api/setup-photo ─────────────────────────────────
+app.post("/api/setup-photo", (req, res) => {
+  try {
+    const { sheetId, data } = req.body;
+    const base64 = data.replace(/^data:image\/\w+;base64,/, "");
+    const ts = Date.now();
+    const filename = `setup/${sheetId}_${ts}.jpg`;
+    const filePath = path.join(PHOTOS_DIR, filename);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
+    res.json({ url: `/photos/${filename}` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 // ── Fallback to React app ─────────────────────────────────
 app.get("/{*path}", (_req, res) => {
   res.sendFile(path.join(__dirname, "dist", "index.html"));
