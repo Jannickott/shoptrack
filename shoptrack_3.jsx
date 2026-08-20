@@ -152,6 +152,7 @@ export default function App(){
   const [user,  setUser]     =useState(null);
   const loginTimeRef         =useRef(0); // when current user logged in on this device
   const [tab,   setTab]      =useState("new");
+  const [focusToolId,setFocusToolId]=useState(null);
   const [jobs,  setJobs]     =useState([]);
   const [users, setUsers]    =useState(INIT_USERS);
   const [machines,setMachines]=useState(INIT_MACHINES);
@@ -538,8 +539,8 @@ export default function App(){
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
-      {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupParamOptions={setupParamOptions} setSetupParamOptions={setSetupParamOptions} tools={tools} cabinets={cabinets}/>}
+      {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupParamOptions={setupParamOptions} setSetupParamOptions={setSetupParamOptions} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
@@ -2651,15 +2652,16 @@ function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,d
   );
 }
 
-function AdminToolsTab({tools,setTools,toolLog,cabinets,setCabinets,departments,users,machines,saveNow}){
+function AdminToolsTab({tools,setTools,toolLog,cabinets,setCabinets,departments,users,machines,saveNow,focusToolId}){
   const [view,setView]=useState("tools");
+  useEffect(()=>{if(focusToolId) setView("tools");},[focusToolId]);
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",gap:8,marginBottom:16}}>
         <button style={tag(view==="tools")}    onClick={()=>setView("tools")}   ><i className="ti ti-package"/> Tools</button>
         <button style={tag(view==="cabinets")} onClick={()=>setView("cabinets")}><i className="ti ti-archive"/> Cabinets</button>
       </div>
-      {view==="tools"    &&<ManageTools    tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets}/>}
+      {view==="tools"    &&<ManageTools    tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets} focusToolId={focusToolId}/>}
       {view==="cabinets" &&<ManageCabinets cabinets={cabinets} setCabinets={setCabinets} departments={departments} saveNow={saveNow}/>}
     </div>
   );
@@ -3556,12 +3558,13 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
 // ═══════════════════════════════════════════════════════
 // MANAGE TOOLS — admin view
 // ═══════════════════════════════════════════════════════
-function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
+function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,focusToolId}){
   const [subview,setSubview]=useState("list");
   const [editId,setEditId]=useState(null);
   const [restockId,setRestockId]=useState(null);
   const [restockQty,setRestockQty]=useState("");
   const [selectedId,setSelectedId]=useState(null);
+  useEffect(()=>{if(focusToolId){setSelectedId(focusToolId);setSubview("list");}},[focusToolId]);
   const [toolFilter,setToolFilter]=useState("all");
   const [deleteConfirm,setDeleteConfirm]=useState(false);
   const blank={name:"",toolType:"",returnable:false,regrindable:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
@@ -3997,7 +4000,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets}){
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupParamOptions,setSetupParamOptions,tools,cabinets}){
+function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupParamOptions,setSetupParamOptions,tools,cabinets,setTab,setFocusToolId}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
   const [search,setSearch]=useState("");
@@ -4034,7 +4037,8 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
     catch{}
   };
   if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupParamOptions={setupParamOptions||[]} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
-  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
+  const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("admintools");};
+  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onGoToTool={onGoToTool} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
@@ -4085,7 +4089,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
   );
 }
 
-function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete}){
+function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const rc=pos=>{if(!pos)return"";return(sheet.restartPrefix||"NAT")+String(pos).padStart(sheet.restartPad||2,"0");};
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
@@ -4103,7 +4107,7 @@ function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete}){
             <div style={{flex:1,minWidth:0}}><div style={{fontSize:13,fontWeight:600,color:C.text}}>{t.description}</div>{t.label&&<div style={{fontSize:10,color:C.muted,marginTop:1}}>{t.label}</div>}</div>
             <div style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{rc(t.position)}</div>
           </div>
-          {loc&&<div style={{padding:"5px 14px 8px 54px",display:"flex",alignItems:"center",gap:6}}><i className="ti ti-map-pin" style={{fontSize:11,color:C.blue}}/><span style={{fontSize:10,color:C.blue,fontWeight:600}}>{loc.cab}</span>{loc.drw&&<span style={{fontSize:10,color:C.muted}}> · {loc.drw}</span>}</div>}
+          {loc&&<div style={{padding:"5px 14px 8px 54px",display:"flex",alignItems:"center",gap:6}}><i className="ti ti-map-pin" style={{fontSize:11,color:C.blue}}/><span style={{fontSize:10,color:C.blue,fontWeight:600}}>{loc.cab}</span>{loc.drw&&<span style={{fontSize:10,color:C.muted}}> · {loc.drw}</span>}<button onClick={()=>onGoToTool&&onGoToTool(t.toolId)} style={{marginLeft:"auto",background:C.blue+"22",border:`1px solid ${C.blue}`,borderRadius:6,color:C.blue,cursor:"pointer",fontSize:10,padding:"2px 8px",fontWeight:600}}><i className="ti ti-arrow-right"/> Go to tool</button></div>}
         </div>
       );})}
     </div>
@@ -4257,7 +4261,7 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,on
     const removeTool=pos=>{setPickerKey(null);setForm(p=>({...p,[listKey]:(p[listKey]||[]).filter(t=>t.position!==pos)}))};
     const addTool=()=>{const pos=avail[0];if(!pos)return;setForm(p=>({...p,[listKey]:[...(p[listKey]||[]),{position:pos,description:"",label:"",toolId:null}].sort((a,b)=>a.position-b.position)}));};
     const changePos=(old,nv)=>{const n=parseInt(nv);if(!n||used.has(n))return;setForm(p=>({...p,[listKey]:p[listKey].map(t=>t.position===old?{...t,position:n}:t).sort((a,b)=>a.position-b.position)}));};
-    const pickCabTool=(pos,cabTool)=>{setForm(p=>{const arr=[...(p[listKey]||[])];const idx=arr.findIndex(t=>t.position===pos);if(idx>=0)arr[idx]={...arr[idx],description:cabTool.name,toolId:cabTool.id};return{...p,[listKey]:arr};});setPickerKey(null);setPickerSearch("");};
+    const pickCabTool=(pos,cabTool)=>{setForm(p=>{const arr=[...(p[listKey]||[])];const idx=arr.findIndex(t=>t.position===pos);if(idx>=0)arr[idx]={...arr[idx],toolId:cabTool.id};return{...p,[listKey]:arr};});setPickerKey(null);setPickerSearch("");};
     const clearLink=pos=>setTool(pos,"toolId",null);
     const isPicking=(pos)=>pickerKey&&pickerKey.listKey===listKey&&pickerKey.pos===pos;
     return(
