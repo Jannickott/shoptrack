@@ -375,22 +375,26 @@ app.post("/api/setupsheet-pdf", (req, res) => {
     }
 
     // ── Setup parameters ───────────────────────────────────
-    const params = [["Chuck Name", sheet.chuckName], ["Chuck Overhang", sheet.chuckOverhang],
-                    ["Clamping Pressure", sheet.clampingPressure],
-                    ["Zero Point", sheet.zeroPoint], ["Workpiece Stop", sheet.workpieceStop]]
-                   .filter(([, v]) => v);
-    if (params.length) {
+    // Support new dynamic params array and old individual fields
+    let rawParams = (sheet.params && sheet.params.length)
+      ? sheet.params.filter(p => p.value)
+      : [["Chuck Name", sheet.chuckName], ["Chuck Overhang", sheet.chuckOverhang],
+         ["Clamping Pressure", sheet.clampingPressure],
+         ["Zero Point", sheet.zeroPoint], ["Workpiece Stop", sheet.workpieceStop]]
+        .filter(([, v]) => v)
+        .map(([k, v]) => ({ key: k, value: v }));
+    if (rawParams.length) {
       sectionTitle("SETUP PARAMETERS");
       const cols = 2;
       const colW = (W - 10) / cols;
-      params.forEach(([k, v], i) => {
+      rawParams.forEach((p, i) => {
         const cx = 45 + (i % cols) * (colW + 10);
         const cy = y + Math.floor(i / cols) * 44;
         doc.rect(cx, cy, colW, 40).fill("#f0f4ff").stroke(LINE);
-        doc.fillColor(GREY).fontSize(7.5).font("Helvetica").text(k.toUpperCase(), cx + 8, cy + 6, { width: colW - 16, characterSpacing: 1 });
-        doc.fillColor(DARK).fontSize(16).font("Helvetica-Bold").text(v, cx + 8, cy + 18, { width: colW - 16 });
+        doc.fillColor(GREY).fontSize(7.5).font("Helvetica").text(p.key.toUpperCase(), cx + 8, cy + 6, { width: colW - 16, characterSpacing: 1 });
+        doc.fillColor(DARK).fontSize(16).font("Helvetica-Bold").text(p.value, cx + 8, cy + 18, { width: colW - 16 });
       });
-      y += Math.ceil(params.length / cols) * 44 + 10;
+      y += Math.ceil(rawParams.length / cols) * 44 + 10;
     }
 
     // ── Notes ──────────────────────────────────────────────
