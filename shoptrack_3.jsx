@@ -174,9 +174,11 @@ export default function App(){
   const [setupSheets,setSetupSheets]   =useState([]);
   const DEFAULT_DEPT_PARAMS={
     "Turning":["Chuck Name","Chuck Overhang","Clamping Pressure","Zero Point","Workpiece Stop","Spindle Speed","Feed Rate","Coolant Pressure","Tool Offset","Bar Diameter","Chuck Jaw","RPM","Cutting Speed","DOC"],
-    "Fortanding":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
+    "Affolter 160":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
   };
+  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter 160"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
+  const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
 
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
@@ -210,8 +212,14 @@ export default function App(){
           if(data.cabinets)     setCabinets(data.cabinets);
           if(data.departments)  setDepartments(data.departments);
           if(data.setupSheets)       setSetupSheets(data.setupSheets);
-          if(data.setupDeptParams)        setSetupDeptParams(data.setupDeptParams);
-          else if(data.setupParamOptions) setSetupDeptParams(p=>({...p,Turning:data.setupParamOptions}));
+          if(data.setupDeptParams){
+            // Migrate: if old data has "Fortanding" key but not "Affolter 160", move it
+            const dp=data.setupDeptParams;
+            if(dp["Fortanding"]&&!dp["Affolter 160"]) dp["Affolter 160"]=dp["Fortanding"];
+            delete dp["Fortanding"];
+            setSetupDeptParams(dp);
+          } else if(data.setupParamOptions) setSetupDeptParams(p=>({...p,Turning:data.setupParamOptions}));
+          if(data.subDepartments) setSubDepartments(data.subDepartments);
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
             workHours:data.workHours,
@@ -224,6 +232,7 @@ export default function App(){
             departments:data.departments,
             setupSheets:data.setupSheets,
             setupDeptParams:data.setupDeptParams,
+            subDepartments:data.subDepartments,
           };
         }
       })
@@ -236,8 +245,8 @@ export default function App(){
   const lastServerRef=useRef({});
   const dataLoadedRef=useRef(false); // prevents saving before server data is loaded
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams]);
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments};
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments]);
 
   // Save to server every 3 seconds — only after data has been loaded
   useEffect(()=>{
@@ -296,8 +305,9 @@ export default function App(){
         if(data.departments&&s(data.departments)!==s(last.departments)) setDepartments(data.departments);
         if(data.setupSheets&&s(data.setupSheets)!==s(last.setupSheets)) setSetupSheets(data.setupSheets);
         if(data.setupDeptParams&&s(data.setupDeptParams)!==s(last.setupDeptParams)) setSetupDeptParams(data.setupDeptParams);
+        if(data.subDepartments&&s(data.subDepartments)!==s(last.subDepartments)) setSubDepartments(data.subDepartments);
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments};
       }).catch(()=>{});
     },5000);
     return()=>clearInterval(t);
@@ -545,7 +555,7 @@ export default function App(){
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
@@ -4041,21 +4051,30 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,tools,cabinets,setTab,setFocusToolId,focusSheetId}){
+function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,subDepartments,setSubDepartments,tools,cabinets,setTab,setFocusToolId,focusSheetId}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
   useEffect(()=>{if(focusSheetId){setSelectedId(focusSheetId);setView("detail");}},[focusSheetId]);
   const [search,setSearch]=useState("");
   const [deptFilt,setDeptFilt]=useState("all");
+  const [subDeptFilt,setSubDeptFilt]=useState("all");
   const [machineFilt,setMachineFilt]=useState("all");
   const [showParamAdmin,setShowParamAdmin]=useState(false);
   const [adminParamDept,setAdminParamDept]=useState("");
+  const [adminSubDept,setAdminSubDept]=useState("");
   const [newParamName,setNewParamName]=useState("");
+  const [newSubDeptName,setNewSubDeptName]=useState("");
   const selected=selectedId?(setupSheets||[]).find(s=>s.id===selectedId):null;
-  // All unique departments from machines (for dept tabs)
-  const allDepts=[...new Set((machines||[]).map(m=>m.department).filter(Boolean))].sort();
-  // Sheets visible in current dept filter
-  const deptSheets=(setupSheets||[]).filter(s=>deptFilt==="all"||(s.department||"")===(deptFilt));
+  // All unique depts from subDepartments keys + machines
+  const allDepts=[...new Set([...Object.keys(subDepartments||{}),...(machines||[]).map(m=>m.department).filter(Boolean)])].sort();
+  // Current dept has sub-depts?
+  const curSubDepts=(subDepartments||{})[deptFilt]||[];
+  // Sheets visible in current dept/sub-dept filter
+  const deptSheets=(setupSheets||[]).filter(s=>{
+    if(deptFilt!=="all"&&(s.department||"")!==deptFilt) return false;
+    if(subDeptFilt!=="all"&&(s.subDepartment||"")!==subDeptFilt) return false;
+    return true;
+  });
   const machineNames=[...new Set(deptSheets.map(s=>s.machine).filter(Boolean))].sort();
   const filtered=deptSheets.filter(s=>{
     if(machineFilt!=="all"&&s.machine!==machineFilt) return false;
@@ -4073,16 +4092,39 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
     if(stateRef) stateRef.current={...stateRef.current,setupDeptParams:updated};
     saveNow&&saveNow();
   };
-  // Which dept is the admin editing in the param panel
-  const editingDept=adminParamDept||(allDepts[0]||"");
-  const editingParams=(setupDeptParams||{})[editingDept]||[];
+  const saveSubDepts=(updated)=>{
+    setSubDepartments(updated);
+    if(stateRef) stateRef.current={...stateRef.current,subDepartments:updated};
+    saveNow&&saveNow();
+  };
+  // Admin: which dept + sub-dept is being edited
+  const editingAdminDept=adminParamDept||(allDepts[0]||"");
+  const editingAdminDeptSubDepts=(subDepartments||{})[editingAdminDept]||[];
+  const editingSubDept=adminSubDept||(editingAdminDeptSubDepts[0]||"");
+  // The key into setupDeptParams for the currently-edited slot
+  const editingKey=editingAdminDeptSubDepts.length>0?editingSubDept:editingAdminDept;
+  const editingParams=(setupDeptParams||{})[editingKey]||[];
   const addParamOption=()=>{
     const v=newParamName.trim();
     if(!v||editingParams.includes(v)) return;
-    saveDeptParams({...(setupDeptParams||{}),[editingDept]:[...editingParams,v]});
+    saveDeptParams({...(setupDeptParams||{}),[editingKey]:[...editingParams,v]});
     setNewParamName("");
   };
-  const removeParamOption=name=>saveDeptParams({...(setupDeptParams||{}),[editingDept]:editingParams.filter(x=>x!==name)});
+  const removeParamOption=name=>saveDeptParams({...(setupDeptParams||{}),[editingKey]:editingParams.filter(x=>x!==name)});
+  const addSubDept=()=>{
+    const v=newSubDeptName.trim();
+    if(!v) return;
+    const cur=(subDepartments||{})[editingAdminDept]||[];
+    if(cur.includes(v)) return;
+    saveSubDepts({...(subDepartments||{}),[editingAdminDept]:[...cur,v]});
+    setNewSubDeptName("");
+    setAdminSubDept(v);
+  };
+  const removeSubDept=name=>{
+    const cur=(subDepartments||{})[editingAdminDept]||[];
+    saveSubDepts({...(subDepartments||{}),[editingAdminDept]:cur.filter(x=>x!==name)});
+    if(adminSubDept===name) setAdminSubDept("");
+  };
   const backupPdf=async(sheet)=>{
     try{await fetch("/api/setupsheet-pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheet})});}
     catch{}
@@ -4090,7 +4132,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
   // Compute dept-specific params for the form
   const sheetDept=selected?(machines||[]).find(m=>m.name===selected.machine)?.department||"":"";
   const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
-  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
+  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
   if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onGoToTool={onGoToTool} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
@@ -4107,30 +4149,68 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
         <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,padding:"14px",marginBottom:12}}>
           <div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Setup Parameters — Admin</div>
           {/* Dept tabs */}
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:10}}>
             {allDepts.map(d=>(
-              <button key={d} style={{fontSize:10,padding:"4px 12px",borderRadius:20,border:`1px solid ${editingDept===d?C.amber:C.border}`,background:editingDept===d?C.amber+"22":C.raised,color:editingDept===d?C.amber:C.muted,cursor:"pointer",fontWeight:editingDept===d?700:400}} onClick={()=>{setAdminParamDept(d);setNewParamName("");}}>{d}</button>
+              <button key={d} style={{fontSize:10,padding:"4px 12px",borderRadius:20,border:`1px solid ${editingAdminDept===d?C.amber:C.border}`,background:editingAdminDept===d?C.amber+"22":C.raised,color:editingAdminDept===d?C.amber:C.muted,cursor:"pointer",fontWeight:editingAdminDept===d?700:400}} onClick={()=>{setAdminParamDept(d);setAdminSubDept("");setNewParamName("");setNewSubDeptName("");}}>{d}</button>
             ))}
           </div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-            {editingParams.length===0&&<div style={{fontSize:11,color:C.muted}}>No parameters defined for {editingDept} yet.</div>}
-            {editingParams.map(name=>(
-              <div key={name} style={{display:"flex",alignItems:"center",gap:4,background:C.raised,borderRadius:16,padding:"4px 8px 4px 10px",border:`1px solid ${C.border}`}}>
-                <span style={{fontSize:11,color:C.text}}>{name}</span>
-                <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px"}} onClick={()=>removeParamOption(name)}><i className="ti ti-x"/></button>
+          {/* Sub-dept management (for depts that use sub-depts like Fortanding) */}
+          {editingAdminDeptSubDepts.length>0&&(
+            <div style={{background:C.raised,borderRadius:8,padding:"10px 12px",marginBottom:10,border:`1px solid ${C.border}`}}>
+              <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Sub-departments in {editingAdminDept}</div>
+              <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+                {editingAdminDeptSubDepts.map(sd=>(
+                  <div key={sd} style={{display:"flex",alignItems:"center",gap:4,background:editingSubDept===sd?C.amber+"22":C.surface,borderRadius:16,padding:"3px 6px 3px 10px",border:`1px solid ${editingSubDept===sd?C.amber:C.border}`,cursor:"pointer"}} onClick={()=>{setAdminSubDept(sd);setNewParamName("");}}>
+                    <span style={{fontSize:11,color:editingSubDept===sd?C.amber:C.text,fontWeight:editingSubDept===sd?700:400}}>{sd}</span>
+                    <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px"}} onClick={e=>{e.stopPropagation();removeSubDept(sd);}}><i className="ti ti-x"/></button>
+                  </div>
+                ))}
               </div>
-            ))}
-          </div>
-          <div style={{display:"flex",gap:8}}>
-            <input style={{...inp(),flex:1}} value={newParamName} onChange={e=>setNewParamName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addParamOption()} placeholder={`Add parameter for ${editingDept}…`}/>
-            <button style={btn("primary",false,true)} onClick={addParamOption}><i className="ti ti-plus"/></button>
-          </div>
+              <div style={{display:"flex",gap:6}}>
+                <input style={{...inp(),flex:1,fontSize:11}} value={newSubDeptName} onChange={e=>setNewSubDeptName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addSubDept()} placeholder="Add sub-department…"/>
+                <button style={btn("primary",false,true)} onClick={addSubDept}><i className="ti ti-plus"/></button>
+              </div>
+            </div>
+          )}
+          {/* Add sub-dept support to a plain dept */}
+          {editingAdminDeptSubDepts.length===0&&(
+            <div style={{marginBottom:10}}>
+              <button style={{fontSize:10,color:C.muted,background:"none",border:`1px dashed ${C.border}`,borderRadius:8,padding:"4px 12px",cursor:"pointer"}} onClick={()=>{const v=prompt("Sub-department name (e.g. Affolter 160):");if(v&&v.trim())addSubDept()||saveSubDepts({...(subDepartments||{}),[editingAdminDept]:[v.trim()]});}}>
+                + Add sub-departments to {editingAdminDept}
+              </button>
+            </div>
+          )}
+          {/* Param list for the editing key */}
+          {editingKey&&(
+            <>
+              <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Parameters for {editingKey}</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:10}}>
+                {editingParams.length===0&&<div style={{fontSize:11,color:C.muted}}>No parameters yet.</div>}
+                {editingParams.map(name=>(
+                  <div key={name} style={{display:"flex",alignItems:"center",gap:4,background:C.raised,borderRadius:16,padding:"4px 8px 4px 10px",border:`1px solid ${C.border}`}}>
+                    <span style={{fontSize:11,color:C.text}}>{name}</span>
+                    <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px"}} onClick={()=>removeParamOption(name)}><i className="ti ti-x"/></button>
+                  </div>
+                ))}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <input style={{...inp(),flex:1}} value={newParamName} onChange={e=>setNewParamName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addParamOption()} placeholder={`Add parameter for ${editingKey}…`}/>
+                <button style={btn("primary",false,true)} onClick={addParamOption}><i className="ti ti-plus"/></button>
+              </div>
+            </>
+          )}
         </div>
       )}
       {/* Department tabs */}
       {allDepts.length>0&&(
         <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
-          {["all",...allDepts].map(d=><button key={d} style={{fontSize:10,padding:"4px 12px",borderRadius:20,border:`1px solid ${deptFilt===d?C.blue:C.border}`,background:deptFilt===d?"rgba(59,130,246,.15)":C.raised,color:deptFilt===d?"#3b82f6":C.muted,cursor:"pointer",fontWeight:deptFilt===d?700:400}} onClick={()=>{setDeptFilt(d);setMachineFilt("all");}}>{d==="all"?"All Departments":d}</button>)}
+          {["all",...allDepts].map(d=><button key={d} style={{fontSize:10,padding:"4px 12px",borderRadius:20,border:`1px solid ${deptFilt===d?C.blue:C.border}`,background:deptFilt===d?"rgba(59,130,246,.15)":C.raised,color:deptFilt===d?"#3b82f6":C.muted,cursor:"pointer",fontWeight:deptFilt===d?700:400}} onClick={()=>{setDeptFilt(d);setSubDeptFilt("all");setMachineFilt("all");}}>{d==="all"?"All Departments":d}</button>)}
+        </div>
+      )}
+      {/* Sub-dept tabs (shown when current dept has sub-depts) */}
+      {curSubDepts.length>0&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+          {["all",...curSubDepts].map(sd=><button key={sd} style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1px solid ${subDeptFilt===sd?"#a78bfa":C.border}`,background:subDeptFilt===sd?"rgba(167,139,250,.15)":C.raised,color:subDeptFilt===sd?"#a78bfa":C.muted,cursor:"pointer",fontWeight:subDeptFilt===sd?700:400}} onClick={()=>{setSubDeptFilt(sd);setMachineFilt("all");}}>{sd==="all"?"All Sub-depts":sd}</button>)}
         </div>
       )}
       {/* Machine sub-filter */}
@@ -4141,7 +4221,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
           <div key={s.id} onClick={()=>{setSelectedId(s.id);setView("detail");}} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}}>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:2}}>{s.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[s.customer,s.material].filter(Boolean).join(" · ")}</div></div>
-              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>{s.department&&deptFilt==="all"&&<span style={{fontSize:9,fontWeight:700,color:C.blue,background:"rgba(59,130,246,.12)",padding:"2px 7px",borderRadius:6}}>{s.department}</span>}<span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",padding:"3px 8px",borderRadius:6}}>{s.machine}</span>{s.operation&&<span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:6,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[s.operation]||C.muted,background:{"Side 1":"rgba(59,130,246,.12)","Side 2":"rgba(46,213,115,.12)","Finish Part":"rgba(240,165,0,.12)"}[s.operation]||"transparent"}}>{s.operation}</span>}</div>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>{s.department&&deptFilt==="all"&&<span style={{fontSize:9,fontWeight:700,color:C.blue,background:"rgba(59,130,246,.12)",padding:"2px 7px",borderRadius:6}}>{s.department}</span>}{s.subDepartment&&subDeptFilt==="all"&&<span style={{fontSize:9,fontWeight:700,color:"#a78bfa",background:"rgba(167,139,250,.12)",padding:"2px 7px",borderRadius:6}}>{s.subDepartment}</span>}<span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",padding:"3px 8px",borderRadius:6}}>{s.machine}</span>{s.operation&&<span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:6,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[s.operation]||C.muted,background:{"Side 1":"rgba(59,130,246,.12)","Side 2":"rgba(46,213,115,.12)","Finish Part":"rgba(240,165,0,.12)"}[s.operation]||"transparent"}}>{s.operation}</span>}</div>
             </div>
             <div style={{display:"flex",gap:12,fontSize:9,color:C.muted,letterSpacing:.5}}>
               <span><i className="ti ti-tool"/> {(s.tools||[]).filter(t=>t.description).length} tools</span>
@@ -4261,6 +4341,7 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
       </div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {sheet.department&&<span style={{fontSize:10,fontWeight:700,color:C.blue,background:"rgba(59,130,246,.12)",border:"1px solid rgba(59,130,246,.3)",borderRadius:6,padding:"3px 10px"}}><i className="ti ti-building" style={{fontSize:10}}/> {sheet.department}</span>}
+        {sheet.subDepartment&&<span style={{fontSize:10,fontWeight:700,color:"#a78bfa",background:"rgba(167,139,250,.12)",border:"1px solid rgba(167,139,250,.3)",borderRadius:6,padding:"3px 10px"}}><i className="ti ti-git-branch" style={{fontSize:10}}/> {sheet.subDepartment}</span>}
         {sheet.machine&&<span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.3)",borderRadius:6,padding:"3px 10px"}}>{sheet.machine}</span>}
       </div>
       {sheet.operation&&(
@@ -4324,13 +4405,16 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
   );
 }
 
-function SetupSheetForm({sheet,machines,user,setupDeptParams,tools,cabinets,onBack,onSave}){
+function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
-  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:""};
-  const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),params:migrateParams(sheet)}:blank);
-  // Re-derive available params whenever machine/department changes
-  const setupParamOptions=(setupDeptParams||{})[form.department]||[];
+  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:""};
+  const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}:blank);
+  // Sub-depts available for current dept
+  const deptSubDepts=(subDepartments||{})[form.department]||[];
+  // Param options: use sub-dept key if available, else dept key
+  const paramKey=form.subDepartment||form.department;
+  const setupParamOptions=(setupDeptParams||{})[paramKey]||[];
   const [errs,setErrs]=useState({});
   const [showList2,setShowList2]=useState(!!(sheet?.tools2?.length));
   const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
@@ -4380,6 +4464,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,tools,cabinets,onBa
     if(!form.partNumber.trim()) e.partNumber="Required";
     if(!form.machine) e.machine="Required";
     if(!form.department) e.department="Required";
+    if(deptSubDepts.length>0&&!form.subDepartment) e.subDepartment="Required";
     if(Object.keys(e).length){setErrs(e);return;}
     const now=Date.now();
     const out={...form};
@@ -4397,7 +4482,8 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,tools,cabinets,onBa
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{marginBottom:10}}><label style={label}>Part Number *</label><input style={inp(errs.partNumber)} value={form.partNumber} onChange={e=>setF("partNumber",e.target.value)} placeholder="e.g. CV-155"/>{errs.partNumber&&<div style={errMsg}>{errs.partNumber}</div>}</div>
         <div style={{marginBottom:10}}><label style={label}>Machine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>{const d=getDept(e.target.value);setForm(p=>({...p,machine:e.target.value,department:d||p.department}));}}><option value="">— Select Machine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
-        <div style={{marginBottom:10}}><label style={label}><i className="ti ti-building" style={{fontSize:11}}/> Department *</label><select style={sel(errs.department)} value={form.department||""} onChange={e=>setForm(p=>({...p,department:e.target.value,params:[]}))}><option value="">— Select Department —</option>{Object.keys(setupDeptParams||{}).map(d=><option key={d} value={d}>{d}</option>)}</select>{errs.department&&<div style={errMsg}>{errs.department}</div>}</div>
+        <div style={{marginBottom:10}}><label style={label}><i className="ti ti-building" style={{fontSize:11}}/> Department *</label><select style={sel(errs.department)} value={form.department||""} onChange={e=>setForm(p=>({...p,department:e.target.value,subDepartment:"",params:[]}))}><option value="">— Select Department —</option>{[...new Set([...Object.keys(subDepartments||{}),...Object.keys(setupDeptParams||{}).filter(k=>!Object.values(subDepartments||{}).flat().includes(k))])].sort().map(d=><option key={d} value={d}>{d}</option>)}</select>{errs.department&&<div style={errMsg}>{errs.department}</div>}</div>
+        {deptSubDepts.length>0&&<div style={{marginBottom:10}}><label style={label}><i className="ti ti-git-branch" style={{fontSize:11}}/> Sub-department *</label><select style={sel(errs.subDepartment)} value={form.subDepartment||""} onChange={e=>setForm(p=>({...p,subDepartment:e.target.value,params:[]}))}><option value="">— Select Sub-department —</option>{deptSubDepts.map(sd=><option key={sd} value={sd}>{sd}</option>)}</select>{errs.subDepartment&&<div style={errMsg}>{errs.subDepartment}</div>}</div>}
         <div style={{marginBottom:10}}><label style={{...label,color:C.amber}}>Program Name</label><input style={{...inp(),fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber,letterSpacing:1}} value={form.subProgram||""} onChange={e=>setF("subProgram",e.target.value)} placeholder="e.g. O1234"/></div>
         {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
         <div style={{marginBottom:10}}>
