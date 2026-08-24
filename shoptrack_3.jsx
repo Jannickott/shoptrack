@@ -4483,7 +4483,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         <div style={{marginBottom:10}}><label style={label}>Part Number *</label><input style={inp(errs.partNumber)} value={form.partNumber} onChange={e=>setF("partNumber",e.target.value)} placeholder="e.g. CV-155"/>{errs.partNumber&&<div style={errMsg}>{errs.partNumber}</div>}</div>
         <div style={{marginBottom:10}}><label style={label}>Machine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>{const d=getDept(e.target.value);setForm(p=>({...p,machine:e.target.value,department:d||p.department}));}}><option value="">— Select Machine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
         <div style={{marginBottom:10}}><label style={label}><i className="ti ti-building" style={{fontSize:11}}/> Department *</label><select style={sel(errs.department)} value={form.department||""} onChange={e=>setForm(p=>({...p,department:e.target.value,subDepartment:"",params:[]}))}><option value="">— Select Department —</option>{[...new Set([...Object.keys(subDepartments||{}),...Object.keys(setupDeptParams||{}).filter(k=>!Object.values(subDepartments||{}).flat().includes(k))])].sort().map(d=><option key={d} value={d}>{d}</option>)}</select>{errs.department&&<div style={errMsg}>{errs.department}</div>}</div>
-        {deptSubDepts.length>0&&<div style={{marginBottom:10}}><label style={label}><i className="ti ti-git-branch" style={{fontSize:11}}/> Sub-department *</label><select style={sel(errs.subDepartment)} value={form.subDepartment||""} onChange={e=>setForm(p=>({...p,subDepartment:e.target.value,params:[]}))}><option value="">— Select Sub-department —</option>{deptSubDepts.map(sd=><option key={sd} value={sd}>{sd}</option>)}</select>{errs.subDepartment&&<div style={errMsg}>{errs.subDepartment}</div>}</div>}
+        {deptSubDepts.length>0&&<div style={{marginBottom:10}}><label style={label}><i className="ti ti-git-branch" style={{fontSize:11}}/> Sub-department *</label><select style={sel(errs.subDepartment)} value={form.subDepartment||""} onChange={e=>{const sd=e.target.value;const autoParams=((setupDeptParams||{})[sd]||[]).map(k=>({key:k,value:""}));setForm(p=>({...p,subDepartment:sd,params:autoParams}));}}><option value="">— Select Sub-department —</option>{deptSubDepts.map(sd=><option key={sd} value={sd}>{sd}</option>)}</select>{errs.subDepartment&&<div style={errMsg}>{errs.subDepartment}</div>}</div>}
         <div style={{marginBottom:10}}><label style={{...label,color:C.amber}}>Program Name</label><input style={{...inp(),fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber,letterSpacing:1}} value={form.subProgram||""} onChange={e=>setF("subProgram",e.target.value)} placeholder="e.g. O1234"/></div>
         {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
         <div style={{marginBottom:10}}>
@@ -4496,6 +4496,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
           </select>
         </div>
       </div>
+      {deptSubDepts.length===0&&<>
       <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Restart Code Format</div>
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:8}}>
@@ -4504,9 +4505,10 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         </div>
         <div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:6,padding:"6px 10px"}}>Tool 8 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(8)}</span>&nbsp;·&nbsp;Tool 1 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(1)}</span></div>
       </div>
-      <div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool List — Main</div>
-      {toolListEditor("tools",C.amber)}
-      {showList2?(
+      </>}
+      {deptSubDepts.length===0&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool List — Main</div>}
+      {deptSubDepts.length===0&&toolListEditor("tools",C.amber)}
+      {deptSubDepts.length===0&&(showList2?(
         <>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
             <div style={{fontSize:8,color:C.blue,letterSpacing:2,textTransform:"uppercase"}}>Tool List — Sub</div>
@@ -4527,7 +4529,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         </>
       ):(
         <button style={{...btn("outline",true,true),borderColor:C.blue,color:C.blue,marginBottom:14}} onClick={()=>setShowList2(true)}><i className="ti ti-plus"/> Add Sub Tool List</button>
-      )}
+      ))}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
         <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Setup Parameters</div>
       </div>
