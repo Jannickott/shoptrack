@@ -172,8 +172,11 @@ export default function App(){
   const [cabinets,   setCabinets]      =useState([]);
   const [departments,setDepartments]   =useState([]);
   const [setupSheets,setSetupSheets]   =useState([]);
-  const DEFAULT_PARAM_OPTIONS=["Chuck Name","Chuck Overhang","Clamping Pressure","Zero Point","Workpiece Stop","Spindle Speed","Feed Rate","Coolant Pressure","Tool Offset","Bar Diameter","Chuck Jaw","RPM","Cutting Speed","DOC"];
-  const [setupParamOptions,setSetupParamOptions]=useState(DEFAULT_PARAM_OPTIONS);
+  const DEFAULT_DEPT_PARAMS={
+    "Turning":["Chuck Name","Chuck Overhang","Clamping Pressure","Zero Point","Workpiece Stop","Spindle Speed","Feed Rate","Coolant Pressure","Tool Offset","Bar Diameter","Chuck Jaw","RPM","Cutting Speed","DOC"],
+    "Fortanding":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
+  };
+  const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
 
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
@@ -207,7 +210,8 @@ export default function App(){
           if(data.cabinets)     setCabinets(data.cabinets);
           if(data.departments)  setDepartments(data.departments);
           if(data.setupSheets)       setSetupSheets(data.setupSheets);
-          if(data.setupParamOptions) setSetupParamOptions(data.setupParamOptions);
+          if(data.setupDeptParams)        setSetupDeptParams(data.setupDeptParams);
+          else if(data.setupParamOptions) setSetupDeptParams(p=>({...p,Turning:data.setupParamOptions}));
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
             workHours:data.workHours,
@@ -219,7 +223,7 @@ export default function App(){
             cabinets:data.cabinets,
             departments:data.departments,
             setupSheets:data.setupSheets,
-            setupParamOptions:data.setupParamOptions,
+            setupDeptParams:data.setupDeptParams,
           };
         }
       })
@@ -232,8 +236,8 @@ export default function App(){
   const lastServerRef=useRef({});
   const dataLoadedRef=useRef(false); // prevents saving before server data is loaded
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupParamOptions};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupParamOptions]);
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams};
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams]);
 
   // Save to server every 3 seconds — only after data has been loaded
   useEffect(()=>{
@@ -291,9 +295,9 @@ export default function App(){
         if(data.cabinets   &&s(data.cabinets)   !==s(last.cabinets))   setCabinets(data.cabinets);
         if(data.departments&&s(data.departments)!==s(last.departments)) setDepartments(data.departments);
         if(data.setupSheets&&s(data.setupSheets)!==s(last.setupSheets)) setSetupSheets(data.setupSheets);
-        if(data.setupParamOptions&&s(data.setupParamOptions)!==s(last.setupParamOptions)) setSetupParamOptions(data.setupParamOptions);
+        if(data.setupDeptParams&&s(data.setupDeptParams)!==s(last.setupDeptParams)) setSetupDeptParams(data.setupDeptParams);
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupParamOptions:data.setupParamOptions};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams};
       }).catch(()=>{});
     },5000);
     return()=>clearInterval(t);
@@ -541,7 +545,7 @@ export default function App(){
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupParamOptions={setupParamOptions} setSetupParamOptions={setSetupParamOptions} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
@@ -4037,17 +4041,23 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupParamOptions,setSetupParamOptions,tools,cabinets,setTab,setFocusToolId,focusSheetId}){
+function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,tools,cabinets,setTab,setFocusToolId,focusSheetId}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
   useEffect(()=>{if(focusSheetId){setSelectedId(focusSheetId);setView("detail");}},[focusSheetId]);
   const [search,setSearch]=useState("");
+  const [deptFilt,setDeptFilt]=useState("all");
   const [machineFilt,setMachineFilt]=useState("all");
   const [showParamAdmin,setShowParamAdmin]=useState(false);
+  const [adminParamDept,setAdminParamDept]=useState("");
   const [newParamName,setNewParamName]=useState("");
   const selected=selectedId?(setupSheets||[]).find(s=>s.id===selectedId):null;
-  const machineNames=[...new Set((setupSheets||[]).map(s=>s.machine).filter(Boolean))].sort();
-  const filtered=(setupSheets||[]).filter(s=>{
+  // All unique departments from machines (for dept tabs)
+  const allDepts=[...new Set((machines||[]).map(m=>m.department).filter(Boolean))].sort();
+  // Sheets visible in current dept filter
+  const deptSheets=(setupSheets||[]).filter(s=>deptFilt==="all"||(s.department||"")===(deptFilt));
+  const machineNames=[...new Set(deptSheets.map(s=>s.machine).filter(Boolean))].sort();
+  const filtered=deptSheets.filter(s=>{
     if(machineFilt!=="all"&&s.machine!==machineFilt) return false;
     const q=search.trim().toLowerCase();
     if(q&&!(s.partNumber||"").toLowerCase().includes(q)&&!(s.customer||"").toLowerCase().includes(q)) return false;
@@ -4058,41 +4068,53 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
     if(stateRef) stateRef.current={...stateRef.current,setupSheets:updated};
     saveNow&&saveNow();
   };
-  const saveParamOptions=(updated)=>{
-    setSetupParamOptions(updated);
-    if(stateRef) stateRef.current={...stateRef.current,setupParamOptions:updated};
+  const saveDeptParams=(updated)=>{
+    setSetupDeptParams(updated);
+    if(stateRef) stateRef.current={...stateRef.current,setupDeptParams:updated};
     saveNow&&saveNow();
   };
+  // Which dept is the admin editing in the param panel
+  const editingDept=adminParamDept||(allDepts[0]||"");
+  const editingParams=(setupDeptParams||{})[editingDept]||[];
   const addParamOption=()=>{
     const v=newParamName.trim();
-    if(!v||(setupParamOptions||[]).includes(v)) return;
-    saveParamOptions([...(setupParamOptions||[]),v]);
+    if(!v||editingParams.includes(v)) return;
+    saveDeptParams({...(setupDeptParams||{}),[editingDept]:[...editingParams,v]});
     setNewParamName("");
   };
-  const removeParamOption=name=>saveParamOptions((setupParamOptions||[]).filter(x=>x!==name));
+  const removeParamOption=name=>saveDeptParams({...(setupDeptParams||{}),[editingDept]:editingParams.filter(x=>x!==name)});
   const backupPdf=async(sheet)=>{
     try{await fetch("/api/setupsheet-pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheet})});}
     catch{}
   };
-  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupParamOptions={setupParamOptions||[]} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
+  // Compute dept-specific params for the form
+  const sheetDept=selected?(machines||[]).find(m=>m.name===selected.machine)?.department||"":"";
+  const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
+  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
   if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onGoToTool={onGoToTool} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
-      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
         <div style={{flex:1,position:"relative"}}>
           <i className="ti ti-search" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:14,pointerEvents:"none"}}/>
           <input style={{...inp(),paddingLeft:32}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Search part number or customer…"/>
         </div>
-        {user?.role==="admin"&&<button style={{...btn("outline",false,true),padding:"8px 12px"}} onClick={()=>setShowParamAdmin(p=>!p)} title="Manage parameter options"><i className="ti ti-settings"/></button>}
+        {user?.role==="admin"&&<button style={{...btn("outline",false,true),padding:"8px 12px",background:showParamAdmin?C.amber+"22":"none",borderColor:showParamAdmin?C.amber:C.border,color:showParamAdmin?C.amber:C.muted}} onClick={()=>setShowParamAdmin(p=>!p)} title="Manage parameter options"><i className="ti ti-settings"/></button>}
         <button style={btn("primary",false,true)} onClick={()=>{setSelectedId(null);setView("edit");}}><i className="ti ti-plus"/></button>
       </div>
       {showParamAdmin&&user?.role==="admin"&&(
-        <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,padding:"14px",marginBottom:14}}>
-          <div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Setup Parameter Options — Admin</div>
-          <div style={{fontSize:11,color:C.muted,marginBottom:10}}>These appear in the dropdown when operators add parameters to a setup sheet.</div>
+        <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,padding:"14px",marginBottom:12}}>
+          <div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Setup Parameters — Admin</div>
+          {/* Dept tabs */}
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>
+            {allDepts.map(d=>(
+              <button key={d} style={{fontSize:10,padding:"4px 12px",borderRadius:20,border:`1px solid ${editingDept===d?C.amber:C.border}`,background:editingDept===d?C.amber+"22":C.raised,color:editingDept===d?C.amber:C.muted,cursor:"pointer",fontWeight:editingDept===d?700:400}} onClick={()=>{setAdminParamDept(d);setNewParamName("");}}>{d}</button>
+            ))}
+          </div>
           <div style={{display:"flex",flexWrap:"wrap",gap:6,marginBottom:12}}>
-            {(setupParamOptions||[]).map(name=>(
+            {editingParams.length===0&&<div style={{fontSize:11,color:C.muted}}>No parameters defined for {editingDept} yet.</div>}
+            {editingParams.map(name=>(
               <div key={name} style={{display:"flex",alignItems:"center",gap:4,background:C.raised,borderRadius:16,padding:"4px 8px 4px 10px",border:`1px solid ${C.border}`}}>
                 <span style={{fontSize:11,color:C.text}}>{name}</span>
                 <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:13,lineHeight:1,padding:"0 2px"}} onClick={()=>removeParamOption(name)}><i className="ti ti-x"/></button>
@@ -4100,19 +4122,26 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
             ))}
           </div>
           <div style={{display:"flex",gap:8}}>
-            <input style={{...inp(),flex:1}} value={newParamName} onChange={e=>setNewParamName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addParamOption()} placeholder="New parameter name (e.g. Spindle Speed)"/>
+            <input style={{...inp(),flex:1}} value={newParamName} onChange={e=>setNewParamName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addParamOption()} placeholder={`Add parameter for ${editingDept}…`}/>
             <button style={btn("primary",false,true)} onClick={addParamOption}><i className="ti ti-plus"/></button>
           </div>
         </div>
       )}
-      {machineNames.length>0&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:14}}>{["all",...machineNames].map(m=><button key={m} style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1px solid ${machineFilt===m?C.amber:C.border}`,background:machineFilt===m?C.amber+"22":C.raised,color:machineFilt===m?C.amber:C.muted,cursor:"pointer",fontWeight:machineFilt===m?700:400}} onClick={()=>setMachineFilt(m)}>{m==="all"?"All Machines":m}</button>)}</div>}
+      {/* Department tabs */}
+      {allDepts.length>0&&(
+        <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:8}}>
+          {["all",...allDepts].map(d=><button key={d} style={{fontSize:10,padding:"4px 12px",borderRadius:20,border:`1px solid ${deptFilt===d?C.blue:C.border}`,background:deptFilt===d?"rgba(59,130,246,.15)":C.raised,color:deptFilt===d?"#3b82f6":C.muted,cursor:"pointer",fontWeight:deptFilt===d?700:400}} onClick={()=>{setDeptFilt(d);setMachineFilt("all");}}>{d==="all"?"All Departments":d}</button>)}
+        </div>
+      )}
+      {/* Machine sub-filter */}
+      {machineNames.length>1&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>{["all",...machineNames].map(m=><button key={m} style={{fontSize:10,padding:"3px 10px",borderRadius:20,border:`1px solid ${machineFilt===m?C.amber:C.border}`,background:machineFilt===m?C.amber+"22":C.raised,color:machineFilt===m?C.amber:C.muted,cursor:"pointer",fontWeight:machineFilt===m?700:400}} onClick={()=>setMachineFilt(m)}>{m==="all"?"All Machines":m}</button>)}</div>}
       {filtered.length===0&&<div style={{textAlign:"center",padding:"50px 20px",color:C.muted}}><i className="ti ti-clipboard-list" style={{fontSize:40,display:"block",marginBottom:12,opacity:.25}}/><div style={{fontSize:13,marginBottom:6}}>No setup sheets yet.</div><div style={{fontSize:11,color:C.amber,cursor:"pointer"}} onClick={()=>{setSelectedId(null);setView("edit");}}>+ Create your first setup sheet</div></div>}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {filtered.map(s=>(
           <div key={s.id} onClick={()=>{setSelectedId(s.id);setView("detail");}} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}}>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:2}}>{s.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[s.customer,s.material].filter(Boolean).join(" · ")}</div></div>
-              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}><span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",padding:"3px 8px",borderRadius:6}}>{s.machine}</span>{s.operation&&<span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:6,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[s.operation]||C.muted,background:{"Side 1":"rgba(59,130,246,.12)","Side 2":"rgba(46,213,115,.12)","Finish Part":"rgba(240,165,0,.12)"}[s.operation]||"transparent"}}>{s.operation}</span>}</div>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>{s.department&&deptFilt==="all"&&<span style={{fontSize:9,fontWeight:700,color:C.blue,background:"rgba(59,130,246,.12)",padding:"2px 7px",borderRadius:6}}>{s.department}</span>}<span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",padding:"3px 8px",borderRadius:6}}>{s.machine}</span>{s.operation&&<span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:6,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[s.operation]||C.muted,background:{"Side 1":"rgba(59,130,246,.12)","Side 2":"rgba(46,213,115,.12)","Finish Part":"rgba(240,165,0,.12)"}[s.operation]||"transparent"}}>{s.operation}</span>}</div>
             </div>
             <div style={{display:"flex",gap:12,fontSize:9,color:C.muted,letterSpacing:.5}}>
               <span><i className="ti ti-tool"/> {(s.tools||[]).filter(t=>t.description).length} tools</span>
@@ -4230,6 +4259,10 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:18,fontWeight:700,color:C.text}}>{sheet.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[sheet.customer,sheet.machine,sheet.operation&&`Op ${sheet.operation}`].filter(Boolean).join(" · ")}</div></div>
         <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onEdit}><i className="ti ti-edit"/></button>
       </div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
+        {sheet.department&&<span style={{fontSize:10,fontWeight:700,color:C.blue,background:"rgba(59,130,246,.12)",border:"1px solid rgba(59,130,246,.3)",borderRadius:6,padding:"3px 10px"}}><i className="ti ti-building" style={{fontSize:10}}/> {sheet.department}</span>}
+        {sheet.machine&&<span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.3)",borderRadius:6,padding:"3px 10px"}}>{sheet.machine}</span>}
+      </div>
       {sheet.operation&&(
         <div style={{background:`${opColor}18`,border:`2px solid ${opColor}`,borderRadius:10,padding:"10px 16px",marginBottom:10,display:"flex",alignItems:"center",gap:10}}>
           <i className="ti ti-refresh" style={{fontSize:18,color:opColor,flexShrink:0}}/>
@@ -4291,10 +4324,13 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
   );
 }
 
-function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,onBack,onSave}){
+function SetupSheetForm({sheet,machines,user,setupDeptParams,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
-  const blank={id:null,partNumber:"",customer:"",machine:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:""};
-  const [form,setForm]=useState(sheet?{...blank,...sheet,params:migrateParams(sheet)}:blank);
+  const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
+  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:""};
+  const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),params:migrateParams(sheet)}:blank);
+  // Re-derive available params whenever machine/department changes
+  const setupParamOptions=(setupDeptParams||{})[form.department]||(setupDeptParams||{})[""]||[];
   const [errs,setErrs]=useState({});
   const [showList2,setShowList2]=useState(!!(sheet?.tools2?.length));
   const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
@@ -4359,7 +4395,8 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,on
       <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Identity</div>
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{marginBottom:10}}><label style={label}>Part Number *</label><input style={inp(errs.partNumber)} value={form.partNumber} onChange={e=>setF("partNumber",e.target.value)} placeholder="e.g. CV-155"/>{errs.partNumber&&<div style={errMsg}>{errs.partNumber}</div>}</div>
-        <div style={{marginBottom:10}}><label style={label}>Machine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>setF("machine",e.target.value)}><option value="">— Select Machine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
+        <div style={{marginBottom:10}}><label style={label}>Machine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>{const d=getDept(e.target.value);setForm(p=>({...p,machine:e.target.value,department:d}));}}><option value="">— Select Machine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
+        {form.department&&<div style={{marginBottom:10,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-building" style={{fontSize:12,color:C.muted}}/><span style={{fontSize:11,color:C.muted}}>Department: </span><span style={{fontSize:11,fontWeight:700,color:C.text}}>{form.department}</span></div>}
         <div style={{marginBottom:10}}><label style={{...label,color:C.amber}}>Program Name</label><input style={{...inp(),fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber,letterSpacing:1}} value={form.subProgram||""} onChange={e=>setF("subProgram",e.target.value)} placeholder="e.g. O1234"/></div>
         {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
         <div style={{marginBottom:10}}>
