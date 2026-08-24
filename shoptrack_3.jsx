@@ -4330,7 +4330,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,tools,cabinets,onBa
   const blank={id:null,partNumber:"",customer:"",machine:"",department:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:""};
   const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),params:migrateParams(sheet)}:blank);
   // Re-derive available params whenever machine/department changes
-  const setupParamOptions=(setupDeptParams||{})[form.department]||(setupDeptParams||{})[""]||[];
+  const setupParamOptions=(setupDeptParams||{})[form.department]||[];
   const [errs,setErrs]=useState({});
   const [showList2,setShowList2]=useState(!!(sheet?.tools2?.length));
   const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
@@ -4379,6 +4379,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,tools,cabinets,onBa
     const e={};
     if(!form.partNumber.trim()) e.partNumber="Required";
     if(!form.machine) e.machine="Required";
+    if(!form.department) e.department="Required";
     if(Object.keys(e).length){setErrs(e);return;}
     const now=Date.now();
     const out={...form};
@@ -4395,8 +4396,8 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,tools,cabinets,onBa
       <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Identity</div>
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{marginBottom:10}}><label style={label}>Part Number *</label><input style={inp(errs.partNumber)} value={form.partNumber} onChange={e=>setF("partNumber",e.target.value)} placeholder="e.g. CV-155"/>{errs.partNumber&&<div style={errMsg}>{errs.partNumber}</div>}</div>
-        <div style={{marginBottom:10}}><label style={label}>Machine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>{const d=getDept(e.target.value);setForm(p=>({...p,machine:e.target.value,department:d}));}}><option value="">— Select Machine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
-        {form.department&&<div style={{marginBottom:10,display:"flex",alignItems:"center",gap:8}}><i className="ti ti-building" style={{fontSize:12,color:C.muted}}/><span style={{fontSize:11,color:C.muted}}>Department: </span><span style={{fontSize:11,fontWeight:700,color:C.text}}>{form.department}</span></div>}
+        <div style={{marginBottom:10}}><label style={label}>Machine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>{const d=getDept(e.target.value);setForm(p=>({...p,machine:e.target.value,department:d||p.department}));}}><option value="">— Select Machine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
+        <div style={{marginBottom:10}}><label style={label}><i className="ti ti-building" style={{fontSize:11}}/> Department *</label><select style={sel(errs.department)} value={form.department||""} onChange={e=>setForm(p=>({...p,department:e.target.value,params:[]}))}><option value="">— Select Department —</option>{Object.keys(setupDeptParams||{}).map(d=><option key={d} value={d}>{d}</option>)}</select>{errs.department&&<div style={errMsg}>{errs.department}</div>}</div>
         <div style={{marginBottom:10}}><label style={{...label,color:C.amber}}>Program Name</label><input style={{...inp(),fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber,letterSpacing:1}} value={form.subProgram||""} onChange={e=>setF("subProgram",e.target.value)} placeholder="e.g. O1234"/></div>
         {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
         <div style={{marginBottom:10}}>
