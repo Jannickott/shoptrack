@@ -533,7 +533,7 @@ export default function App(){
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
-      {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow}/>}
+      {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} saveNow={saveNow} stateRef={stateRef}/>}
@@ -3242,10 +3242,11 @@ function ManageMachines({machines,setMachines,departments}){
 // ═══════════════════════════════════════════════════════
 // TOOLS TAB — operator view
 // ═══════════════════════════════════════════════════════
-function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
+function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focusToolId}){
   const [search,setSearch]=useState("");
   const [selectedType,setSelectedType]=useState(null);
   const [selectedId,setSelectedId]=useState(null);
+  useEffect(()=>{if(focusToolId) setSelectedId(focusToolId);},[focusToolId]);
   const [takeQty,setTakeQty]=useState(1);
 
   const userDepts=user.departments||[];
@@ -3272,7 +3273,7 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow}){
   const searchResults=searchQ?deptVisible.filter(t=>(t.name||"").toLowerCase().includes(searchQ)||(t.articleNumber||"").toLowerCase().includes(searchQ)).sort((a,b)=>(a.name||"").localeCompare(b.name)):[];
 
   const typeTools=selectedType?(grouped[selectedType]||[]):[];
-  const selectedTool=selectedId?tools.find(t=>t.id===selectedId):null;
+  const selectedTool=selectedId?tools.find(t=>String(t.id)===String(selectedId)):null;
 
   const doTake=()=>{
     if(!selectedTool) return;
@@ -4037,7 +4038,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
     catch{}
   };
   if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupParamOptions={setupParamOptions||[]} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
-  const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("admintools");};
+  const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
   if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onGoToTool={onGoToTool} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
@@ -4175,7 +4176,7 @@ ${toolTable("Tool List — Sub","#1a6eb5",sheet.tools2)}
 ${toolTable("Tool List — 3rd","#1a8c55",sheet.tools3)}
 ${pdfParams.length?`<h2>Setup Parameters</h2><div class="params">${pdfParams.map(p=>`<div class="pbox"><div class="plabel">${p.key}</div><div class="pval">${p.value}</div></div>`).join("")}</div>`:""}
 ${sheet.notes?`<h2>Notes</h2><div class="notes">${sheet.notes}</div>`:""}
-${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.map(p=>`<div class="photo-box"><img src="${location.origin}${p.url}" onerror="this.style.display='none'"/>${p.caption?`<div class="photo-cap">${p.caption}</div>`:""}</div>`).join("")}</div>`:""}
+${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.map(p=>`<div class="photo-box"><img src="${p.url}" onerror="this.style.display='none'"/>${p.caption?`<div class="photo-cap">${p.caption}</div>`:""}</div>`).join("")}</div>`:""}
 <footer>ShopTrack Setup Sheet &nbsp;·&nbsp; ${sheet.partNumber||""} / ${sheet.machine||""} &nbsp;·&nbsp; ${new Date().toLocaleDateString("en-GB",{day:"2-digit",month:"short",year:"numeric"})}</footer>
 </div>
 <div class="no-print" style="position:fixed;top:10px;right:10px">
@@ -4405,16 +4406,24 @@ function SetupSheetForm({sheet,machines,user,setupParamOptions,tools,cabinets,on
             const files=[...e.target.files];
             if(!files.length) return;
             setUploading(true);
-            const sheetId=form.id||Date.now();
+            const resize=(dataUrl,maxW=1200,maxH=900)=>new Promise(res=>{
+              const img=new Image();
+              img.onload=()=>{
+                let w=img.width,h=img.height;
+                if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+                if(h>maxH){w=Math.round(w*maxH/h);h=maxH;}
+                const c=document.createElement("canvas");c.width=w;c.height=h;
+                c.getContext("2d").drawImage(img,0,0,w,h);
+                res(c.toDataURL("image/jpeg",0.82));
+              };
+              img.src=dataUrl;
+            });
             const uploaded=[];
             for(const file of files){
               const reader=new FileReader();
               const dataUrl=await new Promise(res=>{reader.onload=ev=>res(ev.target.result);reader.readAsDataURL(file);});
-              try{
-                const r=await fetch("/api/setup-photo",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheetId,data:dataUrl})});
-                const j=await r.json();
-                if(j.url) uploaded.push({url:j.url,caption:""});
-              }catch{}
+              const resized=await resize(dataUrl);
+              uploaded.push({url:resized,caption:""});
             }
             setForm(p=>({...p,photos:[...(p.photos||[]),...uploaded]}));
             setUploading(false);
