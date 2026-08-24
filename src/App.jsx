@@ -153,6 +153,7 @@ export default function App(){
   const loginTimeRef         =useRef(0); // when current user logged in on this device
   const [tab,   setTab]      =useState("new");
   const [focusToolId,setFocusToolId]=useState(null);
+  const [focusSheetId,setFocusSheetId]=useState(null);
   const [jobs,  setJobs]     =useState([]);
   const [users, setUsers]    =useState(INIT_USERS);
   const [machines,setMachines]=useState(INIT_MACHINES);
@@ -529,7 +530,7 @@ export default function App(){
       )}
 
       {/* CONTENT */}
-      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab}/>}
+      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
@@ -540,7 +541,7 @@ export default function App(){
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupParamOptions={setupParamOptions} setSetupParamOptions={setSetupParamOptions} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupParamOptions={setupParamOptions} setSetupParamOptions={setSetupParamOptions} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
@@ -624,10 +625,11 @@ function LoginScreen({users,onLogin}){
 // ═══════════════════════════════════════════════════════
 // NEW JOB
 // ═══════════════════════════════════════════════════════
-function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab}){
+function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetId}){
   const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const [machine,setMachine]=useState(""); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
   const [twoSided,setTwoSided]=useState(false);
   const [showSuggestions,setShowSuggestions]=useState(true);
+  const [sheetPickerOpen,setSheetPickerOpen]=useState(false);
 
   // Past completed jobs matching the typed part number (min 2 chars)
   const suggestions=job.trim().length>=2
@@ -646,11 +648,20 @@ function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab}){
     setShowSuggestions(false);
   };
 
-  const start=()=>{
+  const matchingSheets=job.trim()&&machine?(setupSheets||[]).filter(s=>s.partNumber.trim().toLowerCase()===job.trim().toLowerCase()&&s.machine===machine):[];
+  const createJob=()=>{
+    const now=Date.now();
+    setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now},...prev]);
+    setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);
+  };
+  const goToSheet=(sheetId)=>{setFocusSheetId&&setFocusSheetId(sheetId);setTab&&setTab("setup");};
+  const start=(chosenSheetId)=>{
     const e={};if(!customer.trim())e.customer="Required";if(!job.trim())e.job="Required";if(!machine)e.machine="Required";
     if(Object.keys(e).length){setErrs(e);return;}
-    const now=Date.now();setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now},...prev]);
-    setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);
+    if(chosenSheetId===undefined&&matchingSheets.length>1){setSheetPickerOpen(true);return;}
+    createJob();
+    const sheetId=chosenSheetId!=null?chosenSheetId:matchingSheets.length===1?matchingSheets[0].id:null;
+    if(sheetId) goToSheet(sheetId);
   };
   return(
     <div style={{padding:"14px 16px"}}>
@@ -743,31 +754,56 @@ function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab}){
         <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Logged in as</div>
         <div style={{display:"flex",alignItems:"center",gap:12}}><div style={avatar()}>{initials(user.name)}</div><div style={{fontSize:14,color:C.text}}>{user.name}</div></div>
       </div>
-      {(()=>{
-        if(!job.trim()||!machine) return null;
-        const sheet=(setupSheets||[]).find(s=>s.partNumber.trim().toLowerCase()===job.trim().toLowerCase()&&s.machine===machine);
-        if(sheet) return(
-          <div style={{background:"rgba(59,130,246,.1)",border:"1px solid rgba(59,130,246,.4)",borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
-            <i className="ti ti-clipboard-list" style={{fontSize:18,color:"#3b82f6",flexShrink:0}}/>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:700,color:"#3b82f6"}}>Setup Sheet Found</div>
-              <div style={{fontSize:10,color:C.muted,marginTop:1}}>{sheet.partNumber} · {sheet.machine}{sheet.operation?` · Op ${sheet.operation}`:""}</div>
-            </div>
-            <button style={{...btn("outline",false,true),borderColor:"rgba(59,130,246,.5)",color:"#3b82f6",flexShrink:0,padding:"6px 12px",fontSize:11}} onClick={()=>setTab&&setTab("setup")}>View</button>
+      {matchingSheets.length>0?(
+        <div style={{marginBottom:16}}>
+          <div style={{fontSize:8,color:C.blue,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}><i className="ti ti-clipboard-list"/> {matchingSheets.length} Setup Sheet{matchingSheets.length>1?"s":""} Found</div>
+          {matchingSheets.map(s=>{
+            const opColor={"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[s.operation]||C.muted;
+            return(
+              <div key={s.id} style={{background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.3)",borderRadius:10,padding:"10px 14px",marginBottom:6,display:"flex",alignItems:"center",gap:10}}>
+                <div style={{flex:1,minWidth:0}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.text}}>{s.partNumber}</div>
+                  {s.operation&&<div style={{fontSize:10,fontWeight:700,color:opColor,marginTop:2}}>{s.operation}</div>}
+                  {s.revision&&<div style={{fontSize:9,color:C.muted}}>Rev {s.revision}</div>}
+                </div>
+                <button style={{background:"rgba(59,130,246,.15)",border:"1px solid rgba(59,130,246,.4)",borderRadius:7,color:"#3b82f6",cursor:"pointer",fontSize:11,padding:"5px 12px",fontWeight:600}} onClick={()=>goToSheet(s.id)}>View</button>
+              </div>
+            );
+          })}
+        </div>
+      ):job.trim()&&machine?(
+        <div style={{background:"rgba(240,165,0,.08)",border:"1px solid rgba(240,165,0,.3)",borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+          <i className="ti ti-clipboard-x" style={{fontSize:18,color:C.amber,flexShrink:0}}/>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:12,fontWeight:700,color:C.amber}}>No Setup Sheet</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:1}}>No sheet for {job.trim()} on {machine}</div>
           </div>
-        );
-        return(
-          <div style={{background:"rgba(240,165,0,.08)",border:"1px solid rgba(240,165,0,.3)",borderRadius:10,padding:"10px 14px",marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
-            <i className="ti ti-clipboard-x" style={{fontSize:18,color:C.amber,flexShrink:0}}/>
-            <div style={{flex:1,minWidth:0}}>
-              <div style={{fontSize:12,fontWeight:700,color:C.amber}}>No Setup Sheet</div>
-              <div style={{fontSize:10,color:C.muted,marginTop:1}}>No sheet found for {job.trim()} on {machine}</div>
-            </div>
-            <button style={{...btn("outline",false,true),borderColor:"rgba(240,165,0,.5)",color:C.amber,flexShrink:0,padding:"6px 12px",fontSize:11}} onClick={()=>setTab&&setTab("setup")}>Create</button>
+          <button style={{background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.4)",borderRadius:7,color:C.amber,cursor:"pointer",fontSize:11,padding:"5px 12px",fontWeight:600}} onClick={()=>setTab&&setTab("setup")}>Create</button>
+        </div>
+      ):null}
+      <button style={btn("primary",true)} onClick={()=>start(undefined)}><i className="ti ti-player-play"/> &nbsp;Begin Setup Timer</button>
+      {sheetPickerOpen&&(
+        <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:200,display:"flex",alignItems:"flex-end"}}>
+          <div style={{background:C.bg,width:"100%",borderRadius:"16px 16px 0 0",padding:"20px 16px 32px",maxHeight:"70vh",overflowY:"auto"}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>Which Setup Sheet?</div>
+            {matchingSheets.map(s=>{
+              const opColor={"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[s.operation]||C.muted;
+              return(
+                <button key={s.id} style={{display:"flex",alignItems:"center",gap:12,width:"100%",background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:"14px",marginBottom:8,cursor:"pointer",textAlign:"left"}} onClick={()=>start(s.id)}>
+                  <div style={{width:10,height:10,borderRadius:"50%",background:opColor,flexShrink:0}}/>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:13,fontWeight:700,color:C.text}}>{s.operation||"(no operation)"}</div>
+                    <div style={{fontSize:10,color:C.muted,marginTop:2}}>{s.partNumber} · {s.machine}{s.revision?` · Rev ${s.revision}`:""}</div>
+                  </div>
+                  <i className="ti ti-arrow-right" style={{color:C.muted,fontSize:16}}/>
+                </button>
+              );
+            })}
+            <button style={{width:"100%",background:"none",border:`1px solid ${C.border}`,borderRadius:10,padding:"12px",color:C.muted,cursor:"pointer",fontSize:12,marginTop:4}} onClick={()=>{createJob();}}>Start without setup sheet</button>
+            <button style={{width:"100%",background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:11,marginTop:8,padding:"8px"}} onClick={()=>setSheetPickerOpen(false)}>Cancel</button>
           </div>
-        );
-      })()}
-      <button style={btn("primary",true)} onClick={start}><i className="ti ti-player-play"/> &nbsp;Begin Setup Timer</button>
+        </div>
+      )}
     </div>
   );
 }
@@ -4001,9 +4037,10 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupParamOptions,setSetupParamOptions,tools,cabinets,setTab,setFocusToolId}){
+function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupParamOptions,setSetupParamOptions,tools,cabinets,setTab,setFocusToolId,focusSheetId}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
+  useEffect(()=>{if(focusSheetId){setSelectedId(focusSheetId);setView("detail");}},[focusSheetId]);
   const [search,setSearch]=useState("");
   const [machineFilt,setMachineFilt]=useState("all");
   const [showParamAdmin,setShowParamAdmin]=useState(false);
