@@ -174,9 +174,9 @@ export default function App(){
   const [setupSheets,setSetupSheets]   =useState([]);
   const DEFAULT_DEPT_PARAMS={
     "Turning":["Chuck Name","Chuck Overhang","Clamping Pressure","Zero Point","Workpiece Stop","Spindle Speed","Feed Rate","Coolant Pressure","Tool Offset","Bar Diameter","Chuck Jaw","RPM","Cutting Speed","DOC"],
-    "Affolter 160":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
+    "Affolter":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
   };
-  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter 160"]};
+  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
 
@@ -213,13 +213,19 @@ export default function App(){
           if(data.departments)  setDepartments(data.departments);
           if(data.setupSheets)       setSetupSheets(data.setupSheets);
           if(data.setupDeptParams){
-            // Migrate: if old data has "Fortanding" key but not "Affolter 160", move it
             const dp=data.setupDeptParams;
-            if(dp["Fortanding"]&&!dp["Affolter 160"]) dp["Affolter 160"]=dp["Fortanding"];
-            delete dp["Fortanding"];
+            // Migrate old "Fortanding" key → "Affolter"
+            if(dp["Fortanding"]&&!dp["Affolter"]){dp["Affolter"]=dp["Fortanding"];delete dp["Fortanding"];}
+            // Migrate old "Affolter 160" key → "Affolter"
+            if(dp["Affolter 160"]&&!dp["Affolter"]){dp["Affolter"]=dp["Affolter 160"];delete dp["Affolter 160"];}
             setSetupDeptParams(dp);
           } else if(data.setupParamOptions) setSetupDeptParams(p=>({...p,Turning:data.setupParamOptions}));
-          if(data.subDepartments) setSubDepartments(data.subDepartments);
+          if(data.subDepartments){
+            // Migrate "Affolter 160" → "Affolter" in sub-dept lists
+            const sd=data.subDepartments;
+            Object.keys(sd).forEach(k=>{sd[k]=sd[k].map(v=>v==="Affolter 160"?"Affolter":v);});
+            setSubDepartments(sd);
+          }
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
             workHours:data.workHours,
@@ -4069,8 +4075,11 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
   const allDepts=[...new Set([...Object.keys(subDepartments||{}),...(machines||[]).map(m=>m.department).filter(Boolean)])].sort();
   // Current dept has sub-depts?
   const curSubDepts=(subDepartments||{})[deptFilt]||[];
+  // Operator filtering: non-admins only see their assigned departments
+  const userDepts=user?.departments||[];
+  const visibleSheets=(user?.role==="admin"||userDepts.length===0)?(setupSheets||[]):(setupSheets||[]).filter(s=>userDepts.includes(s.department)||!s.department);
   // Sheets visible in current dept/sub-dept filter
-  const deptSheets=(setupSheets||[]).filter(s=>{
+  const deptSheets=visibleSheets.filter(s=>{
     if(deptFilt!=="all"&&(s.department||"")!==deptFilt) return false;
     if(subDeptFilt!=="all"&&(s.subDepartment||"")!==subDeptFilt) return false;
     return true;
@@ -4358,10 +4367,31 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
       )}
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-          {[["Machine",sheet.machine],["Material",sheet.material],["Revision",sheet.revision],["Plan Program",sheet.planProgram]].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>{k}</div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v}</div></div>))}
+          {[["Machine",sheet.machine],["Material",sheet.material],["Revision",sheet.revision],...(sheet.subDepartment?[]:[["Plan Program",sheet.planProgram]])].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>{k}</div><div style={{fontSize:13,fontWeight:600,color:C.text}}>{v}</div></div>))}
         </div>
       </div>
-      {filledTools.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Main</div>{renderToolList(filledTools,C.amber)}</div>}
+      {sheet.subDepartment&&filledTools.length>0&&(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Clamping Tools</div>
+          <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,overflow:"hidden"}}>
+            {sheet.toolModul&&<div style={{padding:"8px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}><span style={{fontSize:10,color:C.amber,fontWeight:700,minWidth:60}}>Modul</span><span style={{fontSize:18,fontWeight:800,fontFamily:"'Share Tech Mono',monospace",color:C.amber}}>{sheet.toolModul}</span></div>}
+            {filledTools.map((t,i)=>{
+              const slotLabel=i===0?"Upper tool":"Lower tool";
+              const cabTool=t.toolId?(tools||[]).find(x=>String(x.id)===String(t.toolId)):null;
+              const loc=findLoc(t.toolId);
+              return(
+                <div key={t.position} style={{borderBottom:i<filledTools.length-1?`1px solid ${C.border}`:"none",padding:"10px 14px"}}>
+                  <div style={{fontSize:8,color:C.amber,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>{slotLabel}</div>
+                  {t.description&&<div style={{fontSize:13,fontWeight:600,color:C.text,marginBottom:4}}>{t.description}</div>}
+                  {cabTool&&(<button onClick={()=>onGoToTool&&onGoToTool(t.toolId)} style={{background:C.blue+"18",border:`1px solid ${C.blue}44`,borderRadius:7,padding:"5px 10px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:8,marginBottom:4}}><i className="ti ti-map-pin" style={{fontSize:12,color:C.blue}}/><div><div style={{fontSize:11,fontWeight:700,color:C.blue}}>{cabTool.name}</div>{loc&&<div style={{fontSize:9,color:C.muted}}>{loc.cab}{loc.drw?` · ${loc.drw}`:""}</div>}</div><i className="ti ti-arrow-right" style={{fontSize:11,color:C.blue,marginLeft:4}}/></button>)}
+                  {t.label&&<div style={{fontSize:10,color:C.muted}}>{t.label}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+      {!sheet.subDepartment&&filledTools.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Main</div>{renderToolList(filledTools,C.amber)}</div>}
       {filledTools2.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.blue,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Sub</div>{renderToolList(filledTools2,C.blue)}</div>}
       {filledTools3.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — 3rd</div>{renderToolList(filledTools3,C.green)}</div>}
       {params.length>0&&(
@@ -4408,7 +4438,7 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
 function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
-  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:""};
+  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:""};
   const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}:blank);
   // Sub-depts available for current dept
   const deptSubDepts=(subDepartments||{})[form.department]||[];
@@ -4459,6 +4489,48 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       </div>
     );
   };
+  const fortandingToolEditor=()=>{
+    const fTools=(form.tools||[]).sort((a,b)=>a.position-b.position);
+    const hasPos1=fTools.some(t=>t.position===1);
+    const setTool=(pos,fld,val)=>setForm(p=>{const arr=[...(p.tools||[])];const idx=arr.findIndex(t=>t.position===pos);if(idx>=0)arr[idx]={...arr[idx],[fld]:val};return{...p,tools:arr};});
+    const addTool=pos=>setForm(p=>({...p,tools:[...(p.tools||[]),{position:pos,description:"",label:"",toolId:null}].sort((a,b)=>a.position-b.position)}));
+    const removeTool=pos=>setForm(p=>({...p,tools:(p.tools||[]).filter(t=>t.position!==pos)}));
+    const slotLabels={1:"Upper tool",2:"Lower tool"};
+    return(
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,overflow:"hidden",marginBottom:14}}>
+        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.amber,flexShrink:0,minWidth:80}}>Modul</div>
+          <input style={{...inp(),flex:1,fontSize:16,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="e.g. 0,9"/>
+        </div>
+        {[1,2].map(pos=>{
+          const t=fTools.find(x=>x.position===pos);
+          if(t) return(
+            <div key={pos} style={{borderBottom:pos===1&&fTools.some(x=>x.position===2)?`1px solid ${C.border}`:"none"}}>
+              <div style={{padding:"8px 14px 4px",display:"flex",alignItems:"center",gap:6}}>
+                <div style={{fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",flex:1}}>{slotLabels[pos]}</div>
+                {form.toolModul&&<span style={{fontSize:10,color:C.muted,fontFamily:"'Share Tech Mono',monospace"}}>Modul {form.toolModul}</span>}
+                <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:14}} onClick={()=>removeTool(pos)}><i className="ti ti-x"/></button>
+              </div>
+              <div style={{padding:"4px 14px 10px",display:"flex",flexDirection:"column",gap:6}}>
+                <input style={inp()} value={t.description||""} onChange={e=>setTool(pos,"description",e.target.value)} placeholder="Tool description — optional"/>
+                <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool(pos,"toolId",e.target.value||null)}>
+                  <option value="">— No cabinet tool —</option>
+                  {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
+                </select>
+                <input style={{...inp(),fontSize:11}} value={t.label||""} onChange={e=>setTool(pos,"label",e.target.value)} placeholder="Notes — optional"/>
+              </div>
+            </div>
+          );
+          if(pos===1||hasPos1) return(
+            <div key={pos} style={{padding:"10px 14px",borderTop:pos===2?`1px solid ${C.border}`:"none"}}>
+              <button style={{background:"none",border:"none",color:C.amber,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",gap:6}} onClick={()=>addTool(pos)}><i className="ti ti-plus"/> Add {slotLabels[pos]}</button>
+            </div>
+          );
+          return null;
+        })}
+      </div>
+    );
+  };
   const save=()=>{
     const e={};
     if(!form.partNumber.trim()) e.partNumber="Required";
@@ -4485,7 +4557,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         <div style={{marginBottom:10}}><label style={label}><i className="ti ti-building" style={{fontSize:11}}/> Department *</label><select style={sel(errs.department)} value={form.department||""} onChange={e=>setForm(p=>({...p,department:e.target.value,subDepartment:"",params:[]}))}><option value="">— Select Department —</option>{[...new Set([...Object.keys(subDepartments||{}),...Object.keys(setupDeptParams||{}).filter(k=>!Object.values(subDepartments||{}).flat().includes(k))])].sort().map(d=><option key={d} value={d}>{d}</option>)}</select>{errs.department&&<div style={errMsg}>{errs.department}</div>}</div>
         {deptSubDepts.length>0&&<div style={{marginBottom:10}}><label style={label}><i className="ti ti-git-branch" style={{fontSize:11}}/> Sub-department *</label><select style={sel(errs.subDepartment)} value={form.subDepartment||""} onChange={e=>{const sd=e.target.value;const autoParams=((setupDeptParams||{})[sd]||[]).map(k=>({key:k,value:""}));setForm(p=>({...p,subDepartment:sd,params:autoParams}));}}><option value="">— Select Sub-department —</option>{deptSubDepts.map(sd=><option key={sd} value={sd}>{sd}</option>)}</select>{errs.subDepartment&&<div style={errMsg}>{errs.subDepartment}</div>}</div>}
         <div style={{marginBottom:10}}><label style={{...label,color:C.amber}}>Program Name</label><input style={{...inp(),fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber,letterSpacing:1}} value={form.subProgram||""} onChange={e=>setF("subProgram",e.target.value)} placeholder="e.g. O1234"/></div>
-        {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],["planProgram","Plan Program",""]].map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
+        {[["customer","Customer","e.g. SPX"],["material","Material","e.g. JM3"],["revision","Revision","e.g. A"],...(deptSubDepts.length===0?[["planProgram","Plan Program",""]]:[])] .map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
         <div style={{marginBottom:10}}>
           <label style={{...label,color:{" Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[form.operation]||undefined}}>Operation</label>
           <select style={{...sel(),fontWeight:700,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[form.operation]||C.text}} value={form.operation||""} onChange={e=>setF("operation",e.target.value)}>
@@ -4506,6 +4578,8 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         <div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:6,padding:"6px 10px"}}>Tool 8 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(8)}</span>&nbsp;·&nbsp;Tool 1 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(1)}</span></div>
       </div>
       </>}
+      {deptSubDepts.length>0&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Clamping Tools</div>}
+      {deptSubDepts.length>0&&fortandingToolEditor()}
       {deptSubDepts.length===0&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool List — Main</div>}
       {deptSubDepts.length===0&&toolListEditor("tools",C.amber)}
       {deptSubDepts.length===0&&(showList2?(
