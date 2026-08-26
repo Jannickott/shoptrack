@@ -4461,7 +4461,8 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
   const allPos=[...Array(99)].map((_,i)=>i+1);
   // Only show tools from cabinets assigned to the current department (cabinets with no dept = all depts)
   const deptCabinets=(cabinets||[]).filter(c=>!(c.departments||[]).length||(c.departments||[]).includes(form.department));
-  const activeCabinetTools=(tools||[]).filter(t=>t.active!==false&&t.name&&deptCabinets.some(c=>c.id===t.cabinetId));
+  const deptCabinetIds=new Set(deptCabinets.map(c=>String(c.id)));
+  const activeCabinetTools=(tools||[]).filter(t=>t.active!==false&&t.name&&deptCabinetIds.has(String(t.cabinetId)));
   const toolListEditor=(listKey,accent)=>{
     const listTools=form[listKey]||[];
     const used=new Set(listTools.map(t=>t.position));
