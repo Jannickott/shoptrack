@@ -554,13 +554,13 @@ export default function App(){
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
-      {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId}/>}
+      {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
-      {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId}/>}
+      {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
@@ -2708,7 +2708,7 @@ function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,d
   );
 }
 
-function AdminToolsTab({tools,setTools,toolLog,cabinets,setCabinets,departments,users,machines,saveNow,focusToolId}){
+function AdminToolsTab({tools,setTools,toolLog,cabinets,setCabinets,departments,users,machines,saveNow,focusToolId,setFocusToolId}){
   const [view,setView]=useState("tools");
   useEffect(()=>{if(focusToolId) setView("tools");},[focusToolId]);
   return(
@@ -2717,7 +2717,7 @@ function AdminToolsTab({tools,setTools,toolLog,cabinets,setCabinets,departments,
         <button style={tag(view==="tools")}    onClick={()=>setView("tools")}   ><i className="ti ti-package"/> Tools</button>
         <button style={tag(view==="cabinets")} onClick={()=>setView("cabinets")}><i className="ti ti-archive"/> Cabinets</button>
       </div>
-      {view==="tools"    &&<ManageTools    tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets} focusToolId={focusToolId}/>}
+      {view==="tools"    &&<ManageTools    tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {view==="cabinets" &&<ManageCabinets cabinets={cabinets} setCabinets={setCabinets} departments={departments} saveNow={saveNow}/>}
     </div>
   );
@@ -3298,11 +3298,11 @@ function ManageMachines({machines,setMachines,departments}){
 // ═══════════════════════════════════════════════════════
 // TOOLS TAB — operator view
 // ═══════════════════════════════════════════════════════
-function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focusToolId}){
+function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focusToolId,setFocusToolId}){
   const [search,setSearch]=useState("");
   const [selectedType,setSelectedType]=useState(null);
   const [selectedId,setSelectedId]=useState(null);
-  useEffect(()=>{if(focusToolId) setSelectedId(focusToolId);},[focusToolId]);
+  useEffect(()=>{if(focusToolId){setSelectedId(focusToolId);setFocusToolId&&setFocusToolId(null);}},[focusToolId]);
   const [takeQty,setTakeQty]=useState(1);
 
   const userDepts=user.departments||[];
@@ -3615,13 +3615,13 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
 // ═══════════════════════════════════════════════════════
 // MANAGE TOOLS — admin view
 // ═══════════════════════════════════════════════════════
-function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,focusToolId}){
+function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,focusToolId,setFocusToolId}){
   const [subview,setSubview]=useState("list");
   const [editId,setEditId]=useState(null);
   const [restockId,setRestockId]=useState(null);
   const [restockQty,setRestockQty]=useState("");
   const [selectedId,setSelectedId]=useState(null);
-  useEffect(()=>{if(focusToolId){setSelectedId(focusToolId);setSubview("list");}},[focusToolId]);
+  useEffect(()=>{if(focusToolId){setSelectedId(focusToolId);setSubview("list");setFocusToolId&&setFocusToolId(null);}},[focusToolId]);
   const [toolFilter,setToolFilter]=useState("all");
   const [deleteConfirm,setDeleteConfirm]=useState(false);
   const blank={name:"",toolType:"",returnable:false,regrindable:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
