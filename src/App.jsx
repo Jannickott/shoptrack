@@ -561,7 +561,7 @@ export default function App(){
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
@@ -4057,10 +4057,10 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,subDepartments,setSubDepartments,tools,cabinets,setTab,setFocusToolId,focusSheetId}){
+function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,subDepartments,setSubDepartments,tools,cabinets,setTab,setFocusToolId,focusSheetId,setFocusSheetId}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
-  useEffect(()=>{if(focusSheetId){setSelectedId(focusSheetId);setView("detail");}},[focusSheetId]);
+  useEffect(()=>{if(focusSheetId){setSelectedId(focusSheetId);setView("detail");setFocusSheetId&&setFocusSheetId(null);}},[focusSheetId]);
   const [search,setSearch]=useState("");
   const [deptFilt,setDeptFilt]=useState("all");
   const [subDeptFilt,setSubDeptFilt]=useState("all");
