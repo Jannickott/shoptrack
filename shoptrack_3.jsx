@@ -2729,20 +2729,21 @@ function AdminToolsTab({tools,setTools,toolLog,cabinets,setCabinets,departments,
 function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
   const [view,setView]=useState("list"); // "list"|"cabinet"|"drawer"
   const [editCabId,setEditCabId]=useState(null);
-  const [cabForm,setCabForm]=useState({name:"",departments:[]});
+  const [cabForm,setCabForm]=useState({name:"",departments:[],photoData:null});
+  const cabPhotoRef=useRef();
   const [editDrawer,setEditDrawer]=useState(null); // {cabinetId, drawerId|null}
   const [drawerForm,setDrawerForm]=useState({number:"",label:"",rows:6,cols:7});
   const [errs,setErrs]=useState({});
 
   const openAddCabinet=()=>{setCabForm({name:"",departments:[]});setEditCabId(null);setErrs({});setView("cabinet");};
-  const openEditCabinet=c=>{setCabForm({name:c.name,departments:c.departments||[]});setEditCabId(c.id);setErrs({});setView("cabinet");};
+  const openEditCabinet=c=>{setCabForm({name:c.name,departments:c.departments||[],photoData:c.photoData||null});setEditCabId(c.id);setErrs({});setView("cabinet");};
   const saveCabinet=()=>{
     if(!cabForm.name.trim()){setErrs({name:"Required"});return;}
     const now=Date.now();
     if(editCabId){
-      setCabinets(prev=>prev.map(c=>c.id===editCabId?{...c,name:cabForm.name.trim(),departments:cabForm.departments||[]}:c));
+      setCabinets(prev=>prev.map(c=>c.id===editCabId?{...c,name:cabForm.name.trim(),departments:cabForm.departments||[],photoData:cabForm.photoData||null}:c));
     } else {
-      setCabinets(prev=>[...prev,{id:now,name:cabForm.name.trim(),departments:cabForm.departments||[],drawers:[]}]);
+      setCabinets(prev=>[...prev,{id:now,name:cabForm.name.trim(),departments:cabForm.departments||[],drawers:[],photoData:cabForm.photoData||null}]);
     }
     setView("list");saveNow&&saveNow();
   };
@@ -2801,6 +2802,18 @@ function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
               );
             })}
           </div>}
+      </div>
+      <div style={{marginBottom:16}}>
+        <label style={label}>Cabinet Photo</label>
+        <div style={{border:`2px dashed ${cabForm.photoData?"rgba(39,174,96,.4)":"rgba(255,255,255,.12)"}`,borderRadius:8,padding:cabForm.photoData?12:22,textAlign:"center",cursor:"pointer",background:cabForm.photoData?"rgba(39,174,96,.05)":"transparent",transition:"all .2s"}}
+          onClick={()=>cabPhotoRef.current.click()}>
+          {cabForm.photoData
+            ?<><img src={cabForm.photoData} style={{maxHeight:130,borderRadius:6,display:"block",margin:"0 auto 8px",border:`1px solid ${C.border}`}}/><div style={{fontSize:11,color:C.green,letterSpacing:1}}>Photo attached — tap to replace</div></>
+            :<><i className="ti ti-camera" style={{fontSize:30,opacity:0.3,display:"block",marginBottom:8}}/><div style={{fontSize:12,color:C.muted}}>Tap to add a photo of the cabinet</div></>}
+        </div>
+        <input type="file" ref={cabPhotoRef} accept="image/*" capture="environment" style={{display:"none"}}
+          onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setCabForm(p=>({...p,photoData:ev.target.result}));r.readAsDataURL(f);}}/>
+        {cabForm.photoData&&<button style={{...btn("danger",false,true),marginTop:6,fontSize:9}} onClick={()=>setCabForm(p=>({...p,photoData:null}))}><i className="ti ti-x"/> Remove photo</button>}
       </div>
       <button style={btn("success",true)} onClick={saveCabinet}><i className="ti ti-check"/> {editCabId?"Save Changes":"Add Cabinet"}</button>
     </div>
@@ -2871,7 +2884,9 @@ function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
       {(cabinets||[]).map(cab=>(
         <div key={cab.id} style={{...card(),marginBottom:10}}>
           <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:(cab.departments||[]).length>0?6:10}}>
-            <i className="ti ti-archive" style={{fontSize:16,color:C.amber,flexShrink:0}}/>
+            {cab.photoData
+              ?<img src={cab.photoData} style={{width:40,height:40,borderRadius:7,objectFit:"cover",border:`1px solid ${C.border}`,flexShrink:0}}/>
+              :<i className="ti ti-archive" style={{fontSize:16,color:C.amber,flexShrink:0}}/>}
             <div style={{flex:1,fontSize:14,color:C.text,fontWeight:700}}>{cab.name}</div>
             <button style={{...btn("outline",false,true),padding:"6px 8px"}} onClick={()=>openEditCabinet(cab)}><i className="ti ti-edit"/></button>
             <button style={{...btn("danger",false,true),padding:"6px 8px"}} onClick={()=>deleteCabinet(cab.id)}><i className="ti ti-trash"/></button>
@@ -3300,9 +3315,14 @@ function ManageMachines({machines,setMachines,departments}){
 // ═══════════════════════════════════════════════════════
 function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focusToolId,setFocusToolId}){
   const [search,setSearch]=useState("");
+  const [selectedCabinet,setSelectedCabinet]=useState(null);
   const [selectedType,setSelectedType]=useState(null);
   const [selectedId,setSelectedId]=useState(null);
-  useEffect(()=>{if(focusToolId){setSelectedId(focusToolId);setFocusToolId&&setFocusToolId(null);}},[focusToolId]);
+  useEffect(()=>{if(focusToolId){
+    const ft=tools.find(t2=>String(t2.id)===String(focusToolId));
+    if(ft)setSelectedCabinet(String(ft.cabinetId));
+    setSelectedId(focusToolId);setFocusToolId&&setFocusToolId(null);
+  }},[focusToolId]);
   const [takeQty,setTakeQty]=useState(1);
 
   const userDepts=user.departments||[];
@@ -3318,13 +3338,22 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
     return true;
   });
 
-  // Group by toolType, sort each group A→Z
+  // Cabinets that have at least one visible tool, filtered by dept
+  const visibleCabinets=(cabinets||[]).filter(c=>{
+    if(userDepts.length>0){const cd=c.departments||[];if(cd.length>0&&!cd.some(d=>userDepts.includes(d)))return false;}
+    return deptVisible.some(t=>String(t.cabinetId)===String(c.id));
+  });
+
+  // Tools in the selected cabinet (or all if no cabinet selected)
+  const cabVisible=selectedCabinet?deptVisible.filter(t=>String(t.cabinetId)===selectedCabinet):deptVisible;
+
+  // Group by toolType within selected cabinet, sort each group A→Z
   const grouped={};
-  deptVisible.forEach(t=>{const key=t.toolType||"Other";if(!grouped[key])grouped[key]=[];grouped[key].push(t);});
+  cabVisible.forEach(t=>{const key=t.toolType||"Other";if(!grouped[key])grouped[key]=[];grouped[key].push(t);});
   Object.values(grouped).forEach(arr=>arr.sort((a,b)=>(a.name||"").localeCompare(b.name)));
   const categories=Object.keys(grouped).sort((a,b)=>{if(a==="Other")return 1;if(b==="Other")return -1;return a.localeCompare(b);});
 
-  // If searching, show all matching tools across types sorted A→Z
+  // If searching, show all matching tools across all cabinets sorted A→Z
   const searchQ=search.trim().toLowerCase();
   const searchResults=searchQ?deptVisible.filter(t=>(t.name||"").toLowerCase().includes(searchQ)||(t.articleNumber||"").toLowerCase().includes(searchQ)).sort((a,b)=>(a.name||"").localeCompare(b.name)):[];
 
@@ -3427,8 +3456,9 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
     <div style={{padding:"14px 16px"}}>
       {/* Search — always visible */}
       <div style={{position:"relative",marginBottom:14,display:"flex",gap:8,alignItems:"center"}}>
-        {selectedType&&!searchQ&&(
-          <button style={{flexShrink:0,padding:"8px 12px",background:C.raised,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,cursor:"pointer",fontSize:14}} onClick={()=>setSelectedType(null)}>
+        {!searchQ&&(selectedCabinet||selectedType)&&(
+          <button style={{flexShrink:0,padding:"8px 12px",background:C.raised,border:`1px solid ${C.border}`,borderRadius:8,color:C.text,cursor:"pointer",fontSize:14}}
+            onClick={()=>{if(selectedType){setSelectedType(null);}else{setSelectedCabinet(null);}}}>
             <i className="ti ti-arrow-left"/>
           </button>
         )}
@@ -3438,10 +3468,35 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
         </div>
       </div>
 
-      {/* Category view */}
-      {!searchQ&&!selectedType&&(
+      {/* Cabinet gallery — shown first when no cabinet selected */}
+      {!searchQ&&!selectedCabinet&&(
         <>
-          {categories.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools added yet.</div>}
+          {visibleCabinets.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools available.</div>}
+          <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12}}>
+            {visibleCabinets.map(cab=>{
+              const cabTools=deptVisible.filter(t=>String(t.cabinetId)===String(cab.id));
+              const hasAlert=cabTools.some(t=>(!t.returnable&&t.quantity<=(t.minQuantity||0))||(t.returnable&&t.quantity-(t.checkedOutCount||0)-(t.damagedCount||0)<=0)||t.needsRegrinding||(t.damagedCount||0)>0);
+              return(
+                <div key={cab.id} onClick={()=>setSelectedCabinet(String(cab.id))} style={{background:C.surface,borderRadius:12,border:`1px solid ${hasAlert?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
+                  <div style={{position:"relative",width:"100%",aspectRatio:"4/3",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {cab.photoData?<img src={cab.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>:<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}><i className="ti ti-archive" style={{fontSize:40,color:C.muted,opacity:0.2}}/><div style={{fontSize:14,fontWeight:700,color:C.muted,opacity:0.5}}>{cab.name}</div></div>}
+                    <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,.75))",padding:"24px 12px 8px"}}>
+                      <div style={{fontSize:16,fontWeight:800,color:"#fff",letterSpacing:.3}}>{cab.name}</div>
+                      <div style={{fontSize:11,color:"rgba(255,255,255,.7)"}}>{cabTools.length} tool{cabTools.length!==1?"s":""}</div>
+                    </div>
+                    {hasAlert&&<div style={{position:"absolute",top:8,right:8,background:C.amber,borderRadius:20,width:10,height:10}}/>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+
+      {/* Category view — within a cabinet */}
+      {!searchQ&&selectedCabinet&&!selectedType&&(
+        <>
+          {categories.length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No tools in this cabinet.</div>}
           <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12}}>
             {categories.map(type=>{
               const group=grouped[type];
@@ -3465,7 +3520,7 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
       )}
 
       {/* Type drill-down view */}
-      {!searchQ&&selectedType&&(
+      {!searchQ&&selectedCabinet&&selectedType&&(
         <>
           <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>{selectedType} · {typeTools.length} tool{typeTools.length!==1?"s":""}</div>
           {typeTools.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No tools in this category.</div>}
@@ -3617,11 +3672,16 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
 // ═══════════════════════════════════════════════════════
 function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,focusToolId,setFocusToolId}){
   const [subview,setSubview]=useState("list");
+  const [selectedCabinet,setSelectedCabinet]=useState(null);
   const [editId,setEditId]=useState(null);
   const [restockId,setRestockId]=useState(null);
   const [restockQty,setRestockQty]=useState("");
   const [selectedId,setSelectedId]=useState(null);
-  useEffect(()=>{if(focusToolId){setSelectedId(focusToolId);setSubview("list");setFocusToolId&&setFocusToolId(null);}},[focusToolId]);
+  useEffect(()=>{if(focusToolId){
+    const ft=tools.find(t2=>String(t2.id)===String(focusToolId));
+    if(ft)setSelectedCabinet(String(ft.cabinetId));
+    setSelectedId(focusToolId);setSubview("list");setFocusToolId&&setFocusToolId(null);
+  }},[focusToolId]);
   const [toolFilter,setToolFilter]=useState("all");
   const [deleteConfirm,setDeleteConfirm]=useState(false);
   const blank={name:"",toolType:"",returnable:false,regrindable:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
@@ -3850,11 +3910,13 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
 
   const lowTools=tools.filter(t=>t.active&&t.quantity<=(t.minQuantity||0));
   const orderedTools=tools.filter(t=>t.ordered);
-  const filteredTools=toolFilter==="low"?lowTools:toolFilter==="ordered"?orderedTools:tools;
+  const allFilteredTools=toolFilter==="low"?lowTools:toolFilter==="ordered"?orderedTools:tools;
+  const filteredTools=selectedCabinet?allFilteredTools.filter(t=>String(t.cabinetId)===selectedCabinet):allFilteredTools;
   const selectedTool=selectedId?tools.find(t=>String(t.id)===String(selectedId)):null;
   const closeModal=()=>{setSelectedId(null);setRestockId(null);setRestockQty("");setDeleteConfirm(false);};
 
-  return(
+  // Cabinet gallery for admin
+  if(!selectedCabinet) return(
     <div>
       <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
         <button style={btn("primary",false,true)} onClick={openAdd}><i className="ti ti-plus"/> Add Tool</button>
@@ -3869,8 +3931,47 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
           ))}
         </div>
       </div>
-      {tools.length===0&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No tools yet. Use Add Tool to get started.</div>}
-      {filteredTools.length===0&&tools.length>0&&<div style={{textAlign:"center",padding:"20px",color:C.muted,fontSize:12}}>No tools match this filter.</div>}
+      {(cabinets||[]).length===0&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No cabinets yet. Add one in the Cabinets tab.</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:12}}>
+        {(cabinets||[]).map(cab=>{
+          const cabTools=allFilteredTools.filter(t=>String(t.cabinetId)===String(cab.id));
+          const hasLow=cabTools.some(t=>t.active&&t.quantity<=(t.minQuantity||0));
+          const hasAlert=cabTools.some(t=>(!t.returnable&&t.quantity<=(t.minQuantity||0))||(t.returnable&&t.quantity-(t.checkedOutCount||0)-(t.damagedCount||0)<=0)||t.needsRegrinding||(t.damagedCount||0)>0);
+          return(
+            <div key={cab.id} onClick={()=>setSelectedCabinet(String(cab.id))} style={{background:C.surface,borderRadius:12,border:`1px solid ${hasAlert?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
+              <div style={{position:"relative",width:"100%",aspectRatio:"4/3",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                {cab.photoData?<img src={cab.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>:<div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}><i className="ti ti-archive" style={{fontSize:40,color:C.muted,opacity:0.2}}/><div style={{fontSize:14,fontWeight:700,color:C.muted,opacity:0.5}}>{cab.name}</div></div>}
+                <div style={{position:"absolute",bottom:0,left:0,right:0,background:"linear-gradient(transparent,rgba(0,0,0,.75))",padding:"24px 12px 8px"}}>
+                  <div style={{fontSize:16,fontWeight:800,color:"#fff",letterSpacing:.3}}>{cab.name}</div>
+                  <div style={{fontSize:11,color:"rgba(255,255,255,.7)"}}>{allFilteredTools.filter(t=>String(t.cabinetId)===String(cab.id)).length} tool{allFilteredTools.filter(t=>String(t.cabinetId)===String(cab.id)).length!==1?"s":""}</div>
+                </div>
+                {hasAlert&&<div style={{position:"absolute",top:8,right:8,background:C.amber,borderRadius:20,width:10,height:10}}/>}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+
+  return(
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+        <button style={{...btn("outline",false,true),padding:"8px 10px"}} onClick={()=>setSelectedCabinet(null)}><i className="ti ti-arrow-left"/></button>
+        <button style={btn("primary",false,true)} onClick={openAdd}><i className="ti ti-plus"/> Add Tool</button>
+        <button style={btn("outline",false,true)} onClick={()=>setSubview("log")}><i className="ti ti-history"/> Usage Log</button>
+        <div style={{display:"flex",gap:4,marginLeft:"auto"}}>
+          {[["all","All"],["low","Low Stock"],["ordered","Ordered"]].map(([f,lb])=>(
+            <button key={f} style={{...btn(toolFilter===f?"blue":"outline",false,true),position:"relative"}} onClick={()=>setToolFilter(f)}>
+              {lb}
+              {f==="low"&&lowTools.length>0&&<span style={{background:C.red,color:"white",borderRadius:20,fontSize:8,padding:"0px 5px",marginLeft:5,fontWeight:700}}>{lowTools.length}</span>}
+              {f==="ordered"&&orderedTools.length>0&&<span style={{background:"#3b82f6",color:"white",borderRadius:20,fontSize:8,padding:"0px 5px",marginLeft:5,fontWeight:700}}>{orderedTools.length}</span>}
+            </button>
+          ))}
+        </div>
+      </div>
+      {(()=>{const cab=(cabinets||[]).find(c=>String(c.id)===selectedCabinet);return cab?<div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}><i className="ti ti-archive"/> {cab.name}</div>:null;})()}
+      {filteredTools.length===0&&<div style={{textAlign:"center",padding:"20px",color:C.muted,fontSize:12}}>No tools {selectedCabinet?"in this cabinet":"match this filter"}.</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8}}>
         {filteredTools.map(tool=>{
           const checkedOut=tool.returnable?(tool.checkedOutCount||0):0;
