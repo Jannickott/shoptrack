@@ -3688,6 +3688,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
   const photoRef=useRef();
+  const photoCamRef=useRef();
 
   const openAdd=()=>{setForm(blank);setEditId(null);setErrs({});setSubview("form");};
   const openEdit=t=>{
@@ -3867,17 +3868,28 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
       </div>
       <div style={{marginBottom:16}}>
         <label style={label}>Tool Photo</label>
-        <div style={{border:`2px dashed ${form.photoData?"rgba(39,174,96,.4)":"rgba(255,255,255,.12)"}`,borderRadius:8,padding:form.photoData?12:22,textAlign:"center",cursor:"pointer",background:form.photoData?"rgba(39,174,96,.05)":"transparent",transition:"all .2s"}}
-          onClick={()=>photoRef.current.click()}>
-          {form.photoData
-            ?<><img src={form.photoData} style={{maxHeight:130,borderRadius:6,display:"block",margin:"0 auto 8px",border:`1px solid ${C.border}`}}/><div style={{fontSize:11,color:C.green,letterSpacing:1}}>Photo attached — tap to replace</div></>
-            :<><i className="ti ti-camera" style={{fontSize:30,opacity:0.3,display:"block",marginBottom:8}}/><div style={{fontSize:12,color:C.muted}}>Tap to add a photo of the tool</div></>}
-        </div>
+        {form.photoData
+          ?<div style={{border:"2px dashed rgba(39,174,96,.4)",borderRadius:8,padding:12,textAlign:"center",background:"rgba(39,174,96,.05)"}}>
+            <img src={form.photoData} style={{maxHeight:130,borderRadius:6,display:"block",margin:"0 auto 8px",border:`1px solid ${C.border}`}}/>
+            <div style={{fontSize:11,color:C.green,letterSpacing:1,marginBottom:8}}>Photo attached</div>
+            <div style={{display:"flex",gap:8,justifyContent:"center"}}>
+              <button type="button" style={btn("outline",false,true)} onClick={()=>photoCamRef.current.click()}><i className="ti ti-camera"/> Retake</button>
+              <button type="button" style={btn("outline",false,true)} onClick={()=>photoRef.current.click()}><i className="ti ti-upload"/> Replace</button>
+              <button type="button" style={{...btn("danger",false,true)}} onClick={()=>setForm(p=>({...p,photoData:null}))}><i className="ti ti-x"/> Remove</button>
+            </div>
+          </div>
+          :<div style={{display:"flex",gap:8}}>
+            <button type="button" style={{...btn("outline",false,false),flex:1,padding:"14px 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:6,borderRadius:8,fontSize:12}} onClick={()=>photoCamRef.current.click()}>
+              <i className="ti ti-camera" style={{fontSize:22}}/>Take Photo
+            </button>
+            <button type="button" style={{...btn("outline",false,false),flex:1,padding:"14px 8px",display:"flex",flexDirection:"column",alignItems:"center",gap:6,borderRadius:8,fontSize:12}} onClick={()=>photoRef.current.click()}>
+              <i className="ti ti-upload" style={{fontSize:22}}/>Upload
+            </button>
+          </div>}
+        <input type="file" ref={photoCamRef} accept="image/*" capture="environment" style={{display:"none"}}
+          onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setForm(p=>({...p,photoData:ev.target.result}));r.readAsDataURL(f);}}/>
         <input type="file" ref={photoRef} accept="image/*" style={{display:"none"}}
           onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setForm(p=>({...p,photoData:ev.target.result}));r.readAsDataURL(f);}}/>
-        {form.photoData&&<button style={{...btn("danger",false,true),marginTop:6,fontSize:9}} onClick={()=>setForm(p=>({...p,photoData:null}))}>
-          <i className="ti ti-x"/> Remove photo
-        </button>}
       </div>
       <button style={btn("success",true)} onClick={save}><i className="ti ti-check"/> {editId?"Save Changes":"Add Tool"}</button>
     </div>
