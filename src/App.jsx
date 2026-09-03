@@ -556,7 +556,7 @@ export default function App(){
       {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools}/>}
-      {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} saveNow={saveNow} stateRef={stateRef}/>}
+      {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
@@ -2285,7 +2285,7 @@ function IssueCard({name,issue,setMachineIssues,resolveIssue}){
   );
 }
 
-function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,setMachineIssues,resolveIssue,saveNow,stateRef}){
+function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,setMachineIssues,resolveIssue,downtimeLog,setDowntimeLog,saveNow,stateRef}){
   const [statusFilt,setStatusFilt]=useState("all");
   const [machineFilt,setMachineFilt]=useState("all");
   const [search,setSearch]=useState("");
@@ -2355,6 +2355,79 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
           </div>
         </>
       )}
+      {(downtimeLog||[]).length>0&&(
+        <>
+          <div style={{paddingTop:4,borderTop:`1px solid ${C.border}`,marginBottom:10,marginTop:6}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>
+              <i className="ti ti-history"/> Resolved Issues · {(downtimeLog||[]).length}
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+            {[...(downtimeLog||[])].reverse().map(entry=>(
+              <ResolvedIssueCard key={entry.id} entry={entry} setDowntimeLog={setDowntimeLog} saveNow={saveNow}/>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function ResolvedIssueCard({entry,setDowntimeLog,saveNow}){
+  const [editing,setEditing]=useState(false);
+  const [reason,setReason]=useState(entry.reason||"");
+  const [fixDescription,setFixDescription]=useState(entry.fixDescription||"");
+  const [fixCost,setFixCost]=useState(entry.fixCost||"");
+  const accentColor=entry.status==="down"?C.red:C.amber;
+  const save=()=>{
+    setDowntimeLog(prev=>prev.map(e=>e.id===entry.id?{...e,reason:reason.trim(),fixDescription:fixDescription.trim(),fixCost:fixCost.trim()}:e));
+    setEditing(false);
+    saveNow&&saveNow();
+  };
+  return(
+    <div style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${accentColor}`,border:`1px solid ${C.border}`,borderTopColor:accentColor,padding:"10px",display:"flex",flexDirection:"column",gap:6}}>
+      <div style={{display:"flex",alignItems:"center",gap:6}}>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,color:C.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.machineName}</div>
+          <div style={{fontSize:10,color:C.muted}}>{fmtDate(entry.reportedAt)}</div>
+        </div>
+        <button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:14,padding:2}} onClick={()=>{setReason(entry.reason||"");setFixDescription(entry.fixDescription||"");setFixCost(entry.fixCost||"");setEditing(e=>!e);}}>
+          <i className={`ti ti-${editing?"x":"pencil"}`}/>
+        </button>
+      </div>
+      <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+        <span style={badge("run")}>Resolved</span>
+        <span style={badge(entry.status==="down"?"down":"repair")}>{entry.status==="down"?"Was Down":"Was Repair"}</span>
+      </div>
+      {!editing&&(
+        <div style={{fontSize:10,color:C.muted,display:"flex",flexDirection:"column",gap:3}}>
+          {entry.reason&&<div style={{color:C.text}}><i className="ti ti-alert-circle"/> {entry.reason}</div>}
+          {entry.fixDescription&&<div><i className="ti ti-tools"/> {entry.fixDescription}</div>}
+          {entry.fixCost&&<div><i className="ti ti-coin"/> {entry.fixCost}</div>}
+          <div style={{marginTop:2}}><i className="ti ti-user-check"/> Resolved by {entry.resolvedBy}</div>
+        </div>
+      )}
+      {editing&&(
+        <div style={{display:"flex",flexDirection:"column",gap:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
+          <div>
+            <div style={label}>Issue Description</div>
+            <input style={inp()} value={reason} onChange={e=>setReason(e.target.value)} placeholder="What was wrong?"/>
+          </div>
+          <div>
+            <div style={label}>Fix / Solution</div>
+            <input style={inp()} value={fixDescription} onChange={e=>setFixDescription(e.target.value)} placeholder="What was done to fix it?"/>
+          </div>
+          <div>
+            <div style={label}>Cost</div>
+            <input style={inp()} value={fixCost} onChange={e=>setFixCost(e.target.value)} placeholder="e.g. 250 kr or $120 parts"/>
+          </div>
+          <button style={btn("primary",true,true)} onClick={save}><i className="ti ti-check"/> Save</button>
+        </div>
+      )}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",borderTop:`1px solid ${C.border}`,paddingTop:6,marginTop:2}}>
+        <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Downtime</div>
+        <span style={{fontSize:14,color:C.muted,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{fmtHM(entry.downtimeSec||0)}</span>
+      </div>
     </div>
   );
 }
