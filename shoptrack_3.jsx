@@ -3118,6 +3118,9 @@ function ManageDepartments({departments,setDepartments,saveNow}){
   const [adding,setAdding]=useState(false);
   const [newName,setNewName]=useState("");
   const [err,setErr]=useState("");
+  const [editingDept,setEditingDept]=useState(null);
+  const [editDeptVal,setEditDeptVal]=useState("");
+  const [editDeptErr,setEditDeptErr]=useState("");
 
   const add=()=>{
     const name=newName.trim();
@@ -3129,6 +3132,15 @@ function ManageDepartments({departments,setDepartments,saveNow}){
   };
   const remove=name=>{
     setDepartments(prev=>(prev||[]).filter(d=>d!==name));
+    saveNow&&saveNow();
+  };
+  const startEditDept=d=>{setEditingDept(d);setEditDeptVal(d);setEditDeptErr("");};
+  const saveDeptName=oldName=>{
+    const nv=editDeptVal.trim();
+    if(!nv){setEditDeptErr("Required");return;}
+    if(nv!==oldName&&(departments||[]).includes(nv)){setEditDeptErr("Already exists");return;}
+    setDepartments(prev=>(prev||[]).map(d=>d===oldName?nv:d).sort());
+    setEditingDept(null);
     saveNow&&saveNow();
   };
 
@@ -3150,10 +3162,24 @@ function ManageDepartments({departments,setDepartments,saveNow}){
       )}
       {(departments||[]).length===0&&!adding&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No departments yet. Add one to start organising operators, machines and cabinets.</div>}
       {(departments||[]).map(d=>(
-        <div key={d} style={{...card(),marginBottom:6,display:"flex",alignItems:"center",gap:10}}>
-          <i className="ti ti-tag" style={{color:C.amber,flexShrink:0}}/>
-          <div style={{flex:1,fontSize:14,color:C.text,fontWeight:600}}>{d}</div>
-          <button style={{...btn("danger",false,true),padding:"6px 8px"}} onClick={()=>remove(d)}><i className="ti ti-trash"/></button>
+        <div key={d} style={{...card(),marginBottom:6}}>
+          <div style={{display:"flex",alignItems:"center",gap:10}}>
+            <i className="ti ti-tag" style={{color:C.amber,flexShrink:0}}/>
+            <div style={{flex:1,fontSize:14,color:C.text,fontWeight:600}}>{d}</div>
+            <button style={{...btn("outline",false,true),padding:"6px 8px"}} onClick={()=>startEditDept(editingDept===d?null:d)}><i className="ti ti-pencil"/></button>
+            <button style={{...btn("danger",false,true),padding:"6px 8px"}} onClick={()=>remove(d)}><i className="ti ti-trash"/></button>
+          </div>
+          {editingDept===d&&(
+            <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Rename Department</div>
+              <input style={inp(editDeptErr)} value={editDeptVal} onChange={e=>{setEditDeptVal(e.target.value);setEditDeptErr("");}} autoFocus onKeyDown={e=>{if(e.key==="Enter")saveDeptName(d);if(e.key==="Escape")setEditingDept(null);}}/>
+              {editDeptErr&&<div style={errMsg}>{editDeptErr}</div>}
+              <div style={{display:"flex",gap:8,marginTop:8}}>
+                <button style={btn("outline",true)} onClick={()=>setEditingDept(null)}>Cancel</button>
+                <button style={btn("success",true)} onClick={()=>saveDeptName(d)}><i className="ti ti-check"/> Save</button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -3165,6 +3191,7 @@ function ManageOperators({users,setUsers,machines,departments}){
   const [editId,setEditId]=useState(null); const [editPin,setEditPin]=useState(""); const [editErr,setEditErr]=useState("");
   const [editDeptId,setEditDeptId]=useState(null);
   const [deleteId,setDeleteId]=useState(null);
+  const [editNameId,setEditNameId]=useState(null); const [editNameVal,setEditNameVal]=useState(""); const [editNameErr,setEditNameErr]=useState("");
   const [showRemoved,setShowRemoved]=useState(false);
   const operators=users.filter(u=>u.role==="operator"&&!u.removed);
   const removed=users.filter(u=>u.role==="operator"&&u.removed);
@@ -3196,6 +3223,12 @@ function ManageOperators({users,setUsers,machines,departments}){
     setUsers(prev=>prev.map(u=>u.id===id?{...u,removed:true,active:false}:u));
     setDeleteId(null);
   };
+  const saveOperatorName=id=>{
+    const nv=editNameVal.trim();
+    if(!nv){setEditNameErr("Name required");return;}
+    setUsers(prev=>prev.map(u=>u.id===id?{...u,name:nv}:u));
+    setEditNameId(null);setEditNameErr("");
+  };
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
@@ -3219,12 +3252,24 @@ function ManageOperators({users,setUsers,machines,departments}){
               <div style={{fontSize:10,color:C.muted,marginTop:2}}>PIN: {"●".repeat(4)} &nbsp;·&nbsp; <span style={{color:u.active?C.green:C.red}}>{u.active?"Active":"Inactive"}</span></div>
             </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <button style={btn("outline",false,true)} onClick={()=>{setEditId(editId===u.id?null:u.id);setEditDeptId(null);setDeleteId(null);setEditPin("");setEditErr("");}}><i className="ti ti-key"/> PIN</button>
-              {allDepts.length>0&&<button style={btn("blue",false,true)} onClick={()=>{setEditDeptId(editDeptId===u.id?null:u.id);setEditId(null);setDeleteId(null);}}><i className="ti ti-building-factory"/> Depts</button>}
+              <button style={btn("outline",false,true)} onClick={()=>{setEditNameId(editNameId===u.id?null:u.id);setEditNameVal(u.name);setEditNameErr("");setEditId(null);setEditDeptId(null);setDeleteId(null);}}><i className="ti ti-pencil"/></button>
+              <button style={btn("outline",false,true)} onClick={()=>{setEditId(editId===u.id?null:u.id);setEditDeptId(null);setDeleteId(null);setEditNameId(null);setEditPin("");setEditErr("");}}><i className="ti ti-key"/> PIN</button>
+              {allDepts.length>0&&<button style={btn("blue",false,true)} onClick={()=>{setEditDeptId(editDeptId===u.id?null:u.id);setEditId(null);setDeleteId(null);setEditNameId(null);}}><i className="ti ti-building-factory"/> Depts</button>}
               <button style={btn(u.active?"danger":"success",false,true)} onClick={()=>toggle(u.id)}>{u.active?"Disable":"Enable"}</button>
-              <button style={btn("danger",false,true)} onClick={()=>{setDeleteId(deleteId===u.id?null:u.id);setEditId(null);setEditDeptId(null);}}><i className="ti ti-trash"/></button>
+              <button style={btn("danger",false,true)} onClick={()=>{setDeleteId(deleteId===u.id?null:u.id);setEditId(null);setEditDeptId(null);setEditNameId(null);}}><i className="ti ti-trash"/></button>
             </div>
           </div>
+          {editNameId===u.id&&(
+            <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Rename Operator</div>
+              <input style={inp(editNameErr)} value={editNameVal} onChange={e=>{setEditNameVal(e.target.value);setEditNameErr("");}} autoFocus onKeyDown={e=>{if(e.key==="Enter")saveOperatorName(u.id);if(e.key==="Escape")setEditNameId(null);}}/>
+              {editNameErr&&<div style={errMsg}>{editNameErr}</div>}
+              <div style={{display:"flex",gap:8,marginTop:8}}>
+                <button style={btn("outline",true)} onClick={()=>setEditNameId(null)}>Cancel</button>
+                <button style={btn("success",true)} onClick={()=>saveOperatorName(u.id)}><i className="ti ti-check"/> Save</button>
+              </div>
+            </div>
+          )}
           {/* Auto-pause — always visible, saves on change */}
           <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
             <i className="ti ti-clock" style={{color:u.autoPauseTime?C.amber:C.muted,fontSize:14,flexShrink:0}}/>
@@ -3331,6 +3376,7 @@ function ManageMachines({machines,setMachines,departments}){
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [dept,setDept]=useState(""); const [err,setErr]=useState("");
   const [editTargetId,setEditTargetId]=useState(null); const [editTargetHours,setEditTargetHours]=useState("");
   const [editDeptId,setEditDeptId]=useState(null); const [editDeptVal,setEditDeptVal]=useState("");
+  const [editNameId,setEditNameId]=useState(null); const [editNameVal,setEditNameVal]=useState(""); const [editNameErr,setEditNameErr]=useState("");
   const allDepts=(departments||[]).length>0?(departments||[]):[...new Set(machines.map(m=>m.department||"").filter(Boolean))].sort();
   const save=()=>{
     if(!name.trim()){setErr("Name required");return;}
@@ -3345,6 +3391,13 @@ function ManageMachines({machines,setMachines,departments}){
   const toggle=id=>setMachines(prev=>prev.map(m=>m.id===id?{...m,active:!m.active}:m));
   const del=id=>{ if(window.confirm("Remove this machine?")) setMachines(prev=>prev.filter(m=>m.id!==id)); };
   const openTarget=m=>{setEditTargetId(m.id);setEditTargetHours(m.weeklyTargetHours?String(m.weeklyTargetHours):"");};
+  const saveMachineName=id=>{
+    const nv=editNameVal.trim();
+    if(!nv){setEditNameErr("Name required");return;}
+    if(machines.find(m=>m.id!==id&&m.name.toLowerCase()===nv.toLowerCase())){setEditNameErr("Name already exists");return;}
+    setMachines(prev=>prev.map(m=>m.id===id?{...m,name:nv}:m));
+    setEditNameId(null);setEditNameErr("");
+  };
   const saveTarget=id=>{
     const h=parseFloat(editTargetHours)||0;
     setMachines(prev=>prev.map(m=>m.id===id?{...m,weeklyTargetHours:h}:m));
@@ -3388,12 +3441,24 @@ function ManageMachines({machines,setMachines,departments}){
               )}
             </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
-              <button style={btn("outline",false,true)} onClick={()=>{setEditDeptId(editDeptId===m.id?null:m.id);setEditDeptVal(m.department||"");setEditTargetId(null);}}><i className="ti ti-building-factory"/> Dept</button>
-              <button style={btn("outline",false,true)} onClick={()=>{editTargetId===m.id?setEditTargetId(null):openTarget(m);setEditDeptId(null);}}><i className="ti ti-target"/> Target</button>
+              <button style={btn("outline",false,true)} onClick={()=>{setEditNameId(editNameId===m.id?null:m.id);setEditNameVal(m.name);setEditNameErr("");setEditDeptId(null);setEditTargetId(null);}}><i className="ti ti-pencil"/></button>
+              <button style={btn("outline",false,true)} onClick={()=>{setEditDeptId(editDeptId===m.id?null:m.id);setEditDeptVal(m.department||"");setEditTargetId(null);setEditNameId(null);}}><i className="ti ti-building-factory"/> Dept</button>
+              <button style={btn("outline",false,true)} onClick={()=>{editTargetId===m.id?setEditTargetId(null):openTarget(m);setEditDeptId(null);setEditNameId(null);}}><i className="ti ti-target"/> Target</button>
               <button style={btn(m.active?"outline":"success",false,true)} onClick={()=>toggle(m.id)}>{m.active?"Disable":"Enable"}</button>
               <button style={btn("danger",false,true)} onClick={()=>del(m.id)}><i className="ti ti-trash"/></button>
             </div>
           </div>
+          {editNameId===m.id&&(
+            <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+              <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Rename Machine</div>
+              <input style={inp(editNameErr)} value={editNameVal} onChange={e=>{setEditNameVal(e.target.value);setEditNameErr("");}} autoFocus onKeyDown={e=>{if(e.key==="Enter")saveMachineName(m.id);if(e.key==="Escape")setEditNameId(null);}}/>
+              {editNameErr&&<div style={errMsg}>{editNameErr}</div>}
+              <div style={{display:"flex",gap:8,marginTop:8}}>
+                <button style={btn("outline",true)} onClick={()=>setEditNameId(null)}>Cancel</button>
+                <button style={btn("success",true)} onClick={()=>saveMachineName(m.id)}><i className="ti ti-check"/> Save</button>
+              </div>
+            </div>
+          )}
           {editDeptId===m.id&&(
             <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Department — {m.name}</div>
