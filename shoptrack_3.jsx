@@ -2331,6 +2331,20 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
           <AdminJobCard key={j.id} j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef}/>
         )}/>
       )}
+      {(downtimeLog||[]).length>0&&(
+        <>
+          <div style={{paddingTop:4,borderTop:`1px solid ${C.border}`,marginBottom:10,marginTop:6}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>
+              <i className="ti ti-history"/> Resolved Issues · {(downtimeLog||[]).length}
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+            {[...(downtimeLog||[])].reverse().map(entry=>(
+              <ResolvedIssueCard key={entry.id} entry={entry} setDowntimeLog={setDowntimeLog} saveNow={saveNow}/>
+            ))}
+          </div>
+        </>
+      )}
       {filtered.filter(j=>j.status==="done").length>0&&(
         <>
           <div style={{paddingTop:4,borderTop:`1px solid ${C.border}`,marginBottom:10}}>
@@ -2351,20 +2365,6 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10,marginBottom:16}}>
             {done.map(j=>(
               <AdminJobCard key={j.id} j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef}/>
-            ))}
-          </div>
-        </>
-      )}
-      {(downtimeLog||[]).length>0&&(
-        <>
-          <div style={{paddingTop:4,borderTop:`1px solid ${C.border}`,marginBottom:10,marginTop:6}}>
-            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>
-              <i className="ti ti-history"/> Resolved Issues · {(downtimeLog||[]).length}
-            </div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
-            {[...(downtimeLog||[])].reverse().map(entry=>(
-              <ResolvedIssueCard key={entry.id} entry={entry} setDowntimeLog={setDowntimeLog} saveNow={saveNow}/>
             ))}
           </div>
         </>
