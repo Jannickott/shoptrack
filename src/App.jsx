@@ -2290,10 +2290,12 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
   const [machineFilt,setMachineFilt]=useState("all");
   const [search,setSearch]=useState("");
   const allMachines=[...new Set(jobs.map(j=>j.machine))].sort();
-  const filtered=jobs.filter(j=>
+  const showIssues=statusFilt==="all"||statusFilt==="issues";
+  const showJobs=statusFilt!=="issues";
+  const filtered=showJobs?jobs.filter(j=>
     (statusFilt==="all"||j.status===statusFilt)&&
     (machineFilt==="all"||j.machine===machineFilt)
-  );
+  ):[];
   const active=sortActive(filtered.filter(j=>j.status!=="done"));
   const q=search.trim().toLowerCase();
   const done=filtered.filter(j=>j.status==="done").filter(j=>
@@ -2307,13 +2309,18 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
-        {[["all","All"],["setup","Setup"],["run","Running"],["done","Done"]].map(([f,l])=><button key={f} style={tag(statusFilt===f)} onClick={()=>setStatusFilt(f)}>{l}</button>)}
+        {[["all","All"],["setup","Setup"],["run","Running"],["done","Done"],["issues","Resolved Issues"]].map(([f,l])=>(
+          <button key={f} style={tag(statusFilt===f)} onClick={()=>setStatusFilt(f)}>
+            {l}
+            {f==="issues"&&(downtimeLog||[]).length>0&&<span style={{background:"rgba(255,255,255,.15)",borderRadius:20,fontSize:9,padding:"0px 5px",marginLeft:5,fontWeight:700}}>{(downtimeLog||[]).length}</span>}
+          </button>
+        ))}
       </div>
       {allMachines.length>0&&<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
         <button style={tag(machineFilt==="all")} onClick={()=>setMachineFilt("all")}>All</button>
         {allMachines.map(m=><button key={m} style={tag(machineFilt===m)} onClick={()=>setMachineFilt(m)}>{m}</button>)}
       </div>}
-      {Object.keys(machineIssues).length>0&&(
+      {showIssues&&Object.keys(machineIssues).length>0&&(
         <div style={{marginBottom:16}}>
           <div style={{fontSize:10,color:C.red,letterSpacing:2,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${C.red}40`}}>
             <i className="ti ti-alert-triangle"/> Machine Issues · {Object.keys(machineIssues).length}
@@ -2325,13 +2332,27 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
           </div>
         </div>
       )}
-      {!filtered.length&&!Object.keys(machineIssues).length&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No jobs found.</div>}
-      {active.length>0&&(
+      {showJobs&&!filtered.length&&!Object.keys(machineIssues).length&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}>No jobs found.</div>}
+      {showJobs&&active.length>0&&(
         <ActiveJobsGrid jobs={active} renderCard={j=>(
           <AdminJobCard key={j.id} j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef}/>
         )}/>
       )}
-      {filtered.filter(j=>j.status==="done").length>0&&(
+      {showIssues&&(downtimeLog||[]).length>0&&(
+        <>
+          <div style={{paddingTop:4,borderTop:`1px solid ${C.border}`,marginBottom:10,marginTop:6}}>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>
+              <i className="ti ti-history"/> Resolved Issues · {(downtimeLog||[]).length}
+            </div>
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
+            {[...(downtimeLog||[])].reverse().map(entry=>(
+              <ResolvedIssueCard key={entry.id} entry={entry} setDowntimeLog={setDowntimeLog} saveNow={saveNow}/>
+            ))}
+          </div>
+        </>
+      )}
+      {showJobs&&filtered.filter(j=>j.status==="done").length>0&&(
         <>
           <div style={{paddingTop:4,borderTop:`1px solid ${C.border}`,marginBottom:10}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
@@ -2351,20 +2372,6 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10,marginBottom:16}}>
             {done.map(j=>(
               <AdminJobCard key={j.id} j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef}/>
-            ))}
-          </div>
-        </>
-      )}
-      {(downtimeLog||[]).length>0&&(
-        <>
-          <div style={{paddingTop:4,borderTop:`1px solid ${C.border}`,marginBottom:10,marginTop:6}}>
-            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>
-              <i className="ti ti-history"/> Resolved Issues · {(downtimeLog||[]).length}
-            </div>
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
-            {[...(downtimeLog||[])].reverse().map(entry=>(
-              <ResolvedIssueCard key={entry.id} entry={entry} setDowntimeLog={setDowntimeLog} saveNow={saveNow}/>
             ))}
           </div>
         </>
