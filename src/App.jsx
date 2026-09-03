@@ -444,8 +444,7 @@ export default function App(){
   const resolveIssue=(machineName)=>{
     const issue=machineIssues[machineName]; if(!issue) return;
     const resolvedAt=Date.now();
-    // Calculate downtime from actual timestamps — reliable regardless of counting state
-    const downtimeSec=Math.round((resolvedAt-(issue.reportedAt||resolvedAt))/1000);
+    const downtimeSec=issue.downtimeSec||0; // work-hours-only counter
     setDowntimeLog(prev=>[...prev,{id:resolvedAt,machineName,...issue,resolvedBy:user.name,resolvedAt,downtimeSec}]);
     setMachineIssues(prev=>{const n={...prev};delete n[machineName];return n;});
     setJobs(prev=>prev.map(j=>j.machine===machineName&&j.paused?{...j,paused:false,phaseStartedAt:Date.now(),lastModifiedAt:Date.now()}:j));
@@ -2219,9 +2218,11 @@ function IssueCard({name,issue,setMachineIssues,resolveIssue}){
   const [editing,setEditing]=useState(false);
   const [reason,setReason]=useState(issue.reason||"");
   const [status,setStatus]=useState(issue.status);
+  const [fixDescription,setFixDescription]=useState(issue.fixDescription||"");
+  const [fixCost,setFixCost]=useState(issue.fixCost||"");
   const accentColor=issue.status==="down"?C.red:C.amber;
   const save=()=>{
-    setMachineIssues(prev=>({...prev,[name]:{...prev[name],status,reason}}));
+    setMachineIssues(prev=>({...prev,[name]:{...prev[name],status,reason,fixDescription:fixDescription.trim(),fixCost:fixCost.trim()}}));
     setEditing(false);
   };
   return(
@@ -2231,7 +2232,7 @@ function IssueCard({name,issue,setMachineIssues,resolveIssue}){
           <div style={{fontSize:13,color:C.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
           <div style={{fontSize:10,color:C.muted}}><i className="ti ti-user"/> {issue.reportedBy}</div>
         </div>
-        <button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:14,padding:2}} onClick={()=>{setReason(issue.reason||"");setStatus(issue.status);setEditing(e=>!e);}}>
+        <button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:14,padding:2}} onClick={()=>{setReason(issue.reason||"");setStatus(issue.status);setFixDescription(issue.fixDescription||"");setFixCost(issue.fixCost||"");setEditing(e=>!e);}}>
           <i className={`ti ti-${editing?"x":"pencil"}`}/>
         </button>
       </div>
@@ -2239,6 +2240,12 @@ function IssueCard({name,issue,setMachineIssues,resolveIssue}){
         <span style={badge(issue.status==="down"?"down":"repair")}>{issue.status==="down"?"Down":"Repair"}</span>
         {issue.reason&&!editing&&<span style={{fontSize:10,color:C.muted,alignSelf:"center"}}>{issue.reason}</span>}
       </div>
+      {!editing&&(issue.fixDescription||issue.fixCost)&&(
+        <div style={{background:C.raised,borderRadius:7,padding:"7px 10px",fontSize:10,color:C.muted}}>
+          {issue.fixDescription&&<div style={{color:C.text,marginBottom:issue.fixCost?3:0}}><i className="ti ti-tools"/> {issue.fixDescription}</div>}
+          {issue.fixCost&&<div><i className="ti ti-coin"/> Cost: {issue.fixCost}</div>}
+        </div>
+      )}
       {editing&&(
         <div style={{display:"flex",flexDirection:"column",gap:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
           <div>
@@ -2249,17 +2256,28 @@ function IssueCard({name,issue,setMachineIssues,resolveIssue}){
             </select>
           </div>
           <div>
-            <div style={label}>Reason</div>
-            <input style={inp()} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Describe the issue"/>
+            <div style={label}>Issue Description</div>
+            <input style={inp()} value={reason} onChange={e=>setReason(e.target.value)} placeholder="What is wrong with the machine?"/>
+          </div>
+          <div>
+            <div style={label}>Fix / Solution</div>
+            <input style={inp()} value={fixDescription} onChange={e=>setFixDescription(e.target.value)} placeholder="What was done to fix it?"/>
+          </div>
+          <div>
+            <div style={label}>Cost</div>
+            <input style={inp()} value={fixCost} onChange={e=>setFixCost(e.target.value)} placeholder="e.g. 250 kr or $120 parts"/>
           </div>
           <button style={btn("primary",true,true)} onClick={save}><i className="ti ti-check"/> Save</button>
         </div>
       )}
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:2}}>
-        <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Live</div>
         <div style={{display:"flex",alignItems:"center",gap:4}}>
-          <span style={{width:6,height:6,borderRadius:"50%",background:C.red,display:"inline-block"}}/>
-          <span style={{fontSize:15,color:C.red,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{fmtHM(Math.round((Date.now()-(issue.reportedAt||Date.now()))/1000))}</span>
+          <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Downtime</div>
+          {!issue.counting&&<span style={{fontSize:9,color:C.muted,letterSpacing:.5,textTransform:"uppercase",background:C.raised,padding:"1px 5px",borderRadius:4}}>paused</span>}
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <span style={{width:6,height:6,borderRadius:"50%",background:issue.counting?C.red:"rgba(255,255,255,.2)",display:"inline-block"}}/>
+          <span style={{fontSize:15,color:C.red,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{fmtHM(issue.downtimeSec||0)}</span>
         </div>
       </div>
       <button style={btn("success",true,true)} onClick={()=>resolveIssue(name)}><i className="ti ti-check"/> Resolve</button>
