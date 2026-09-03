@@ -651,10 +651,28 @@ function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetI
   const [sheetPickerOpen,setSheetPickerOpen]=useState(false);
 
   // Past completed jobs matching the typed part number (min 2 chars)
+  const userDepts=user.departments||[];
   const suggestions=job.trim().length>=2
-    ?(jobs||[]).filter(j=>j.status==="done"&&j.job.toLowerCase().includes(job.trim().toLowerCase()))
-       .sort((a,b)=>(b.completedAt||0)-(a.completedAt||0))
-       .slice(0,5)
+    ?(()=>{
+      const q=job.trim().toLowerCase();
+      const sorted=(jobs||[])
+        .filter(j=>{
+          if(j.status!=="done") return false;
+          if(!j.job.toLowerCase().includes(q)) return false;
+          // If machine already chosen, only show runs on that machine
+          if(machine&&j.machine!==machine) return false;
+          // Dept filter: only jobs on machines in the operator's departments
+          if(userDepts.length>0){
+            const mach=(machines||[]).find(m=>m.name===j.machine);
+            const md=mach?.departments||[];
+            if(md.length>0&&!md.some(d=>userDepts.includes(d))) return false;
+          }
+          return true;
+        })
+        .sort((a,b)=>(b.completedAt||0)-(a.completedAt||0));
+      // If machine selected: just the most recent run on that machine
+      return machine?sorted.slice(0,1):sorted.slice(0,5);
+    })()
     :[];
 
   const applyJob=prev=>{
