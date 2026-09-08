@@ -65,6 +65,28 @@ function isInWorkHoursNow(wh){
   const hhmm=`${String(n.getHours()).padStart(2,"0")}:${String(n.getMinutes()).padStart(2,"0")}`;
   return hhmm>=dh.start&&hhmm<dh.end;
 }
+// Returns total available work seconds between two timestamps, based on work hours settings
+function calcAvailableWorkSec(wh,fromMs,toMs){
+  if(!wh||toMs<=fromMs) return 0;
+  let total=0;
+  const cur=new Date(fromMs); cur.setHours(0,0,0,0);
+  const end=new Date(toMs);
+  while(cur<=end){
+    const dk=DAYS_KEY[cur.getDay()];
+    const dh=wh[dk]||(wh.start?{start:wh.start,end:wh.end,enabled:true}:null);
+    if(dh&&dh.enabled&&dh.start&&dh.end){
+      const [sh,sm]=dh.start.split(":").map(Number);
+      const [eh,em]=dh.end.split(":").map(Number);
+      const dayStart=new Date(cur); dayStart.setHours(sh,sm,0,0);
+      const dayEnd=new Date(cur); dayEnd.setHours(eh,em,0,0);
+      const s=Math.max(dayStart.getTime(),fromMs);
+      const e=Math.min(dayEnd.getTime(),toMs);
+      if(e>s) total+=(e-s)/1000;
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+  return total;
+}
 
 // ─── COLOURS ──────────────────────────────────────────────────────────────────
 const C={
@@ -557,9 +579,9 @@ export default function App(){
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
       {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
-      {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals}/>}
+      {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
-      {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals}/>}
+      {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
@@ -1810,22 +1832,29 @@ function DonutChart({title,segments}){
   );
 }
 
-function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,machines,tools,efficiencyGoals}){
+function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,machines,tools,efficiencyGoals,workHours}){
   const done=jobs.filter(j=>j.status==="done"); const active=sortActive(jobs.filter(j=>j.status!=="done"));
   // Efficiency helpers
   const jobEff=j=>{const t=(j.setupSec||0)+(j.runSec||0);return t>0?(j.runSec||0)/t*100:null;};
   const targetEff=efficiencyGoals?.overall??80;
+  // YTD real efficiency: total run time / (available work hours × active machines) — includes work hours + downtime losses
+  const yearStart=new Date(); yearStart.setMonth(0,1); yearStart.setHours(0,0,0,0);
+  const yearStartMs=yearStart.getTime();
+  const nowMs=Date.now();
   const yearStr=String(new Date().getFullYear());
   const yearDone=done.filter(j=>j.completedAt&&String(new Date(j.completedAt).getFullYear())===yearStr);
-  const yearEffJobs=yearDone.filter(j=>jobEff(j)!==null);
-  const realEff=yearEffJobs.length>0?Math.round(yearEffJobs.reduce((s,j)=>s+jobEff(j),0)/yearEffJobs.length):null;
+  const numActiveMachines=Math.max(machines.filter(m=>m.active).length,1);
+  const availableWorkSec=calcAvailableWorkSec(workHours,yearStartMs,nowMs);
+  const totalAvailSec=availableWorkSec*numActiveMachines;
+  const yearRunSec=yearDone.reduce((s,j)=>s+(j.runSec||0),0);
+  const realEff=totalAvailSec>0?Math.round(yearRunSec/totalAvailSec*100):null;
+  // Below-target jobs use job-level efficiency (run vs setup ratio)
   const belowTarget=done.filter(j=>{const e=jobEff(j);return e!==null&&e<targetEff;});
   const machMap={};done.forEach(j=>{if(!machMap[j.machine])machMap[j.machine]={run:0,setup:0,jobs:0};machMap[j.machine].run+=j.runSec;machMap[j.machine].setup+=j.setupSec;machMap[j.machine].jobs++;});
   const maxRun=Math.max(...Object.values(machMap).map(m=>m.run),1);
   const opMap={};done.forEach(j=>{if(!opMap[j.operatorName])opMap[j.operatorName]={jobs:0,pieces:0,run:0};opMap[j.operatorName].jobs++;opMap[j.operatorName].pieces+=j.pieces;opMap[j.operatorName].run+=j.runSec;});
   const issueEntries=Object.entries(machineIssues);
   // Chart data
-  const nowMs=Date.now();
   const todayStr=toDateInput(nowMs);
   const monthStr=todayStr.slice(0,7);
   // Week: Monday → today
@@ -2541,7 +2570,7 @@ function ReportsTab({jobs}){
 // ═══════════════════════════════════════════════════════
 // MACHINE DATA TAB
 // ═══════════════════════════════════════════════════════
-function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals}){
+function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals,workHours}){
   const [selected,setSelected]=useState(null);
   const [search,setSearch]=useState("");
 
@@ -2637,7 +2666,32 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
                     <span style={{fontSize:10,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>{l}</span>
                   </div>
                 ))}
-                {selStats.weeklyTargetSec>0&&(()=>{
+                {(()=>{
+                  const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
+                  const effTarget=goals.machines[selected]!==undefined?goals.machines[selected]:goals.overall;
+                  const denom=selStats.runSec+selStats.setupSec+selStats.downtimeSec;
+                  const effPct=denom>0?Math.round(selStats.runSec/denom*100):null;
+                  const ec=effPct===null?C.muted:effPct>=effTarget?C.green:effPct>=effTarget-10?C.amber:C.red;
+                  // Also compute work-hours-based efficiency for this year
+                  const yStart=new Date(); yStart.setMonth(0,1); yStart.setHours(0,0,0,0);
+                  const availSec=calcAvailableWorkSec(workHours,yStart.getTime(),Date.now());
+                  const utilizPct=availSec>0?Math.round(selStats.runSec/availSec*100):null;
+                  return(
+                    <div style={{borderTop:`1px solid ${C.border}`,paddingTop:10,minWidth:160}}>
+                      <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:6}}>Efficiency (all time)</div>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:4}}>
+                        <span style={{fontSize:24,color:ec,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{effPct!==null?effPct+"%":"–"}</span>
+                        <span style={{fontSize:10,color:C.muted}}>target {effTarget}%</span>
+                      </div>
+                      <div style={{height:6,borderRadius:3,background:C.raised,overflow:"hidden",marginBottom:4}}>
+                        <div style={{height:"100%",width:`${Math.min(effPct||0,100)}%`,background:ec,borderRadius:3,transition:"width .3s"}}/>
+                      </div>
+                      <div style={{fontSize:9,color:C.muted}}>Run ÷ (Run+Setup+Downtime)</div>
+                      {utilizPct!==null&&<div style={{fontSize:10,color:C.muted,marginTop:4}}><i className="ti ti-calendar"/> YTD utilisation: <span style={{color:utilizPct>=effTarget?C.green:C.amber,fontWeight:700}}>{utilizPct}%</span> of work hrs</div>}
+                    </div>
+                  );
+                })()}
+              {selStats.weeklyTargetSec>0&&(()=>{
                   const pct=Math.min(100,Math.round(selStats.weekRunSec/selStats.weeklyTargetSec*100));
                   const over=selStats.weekRunSec>=selStats.weeklyTargetSec;
                   const tgtColor=pct>=100?C.green:pct>=60?C.amber:C.red;
@@ -2719,17 +2773,17 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
       {!selected&&!search&&(()=>{
         const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
         const jobEff=j=>{const t=(j.setupSec||0)+(j.runSec||0);return t>0?(j.runSec||0)/t*100:null;};
-        // Per-machine efficiency
+        // Per-machine efficiency = run / (run + setup + downtime) — uses machStats which already has downtimeSec
         const machEffs=allMachineNames.map(name=>{
-          const mj=jobs.filter(j=>j.machine===name&&j.status==="done");
-          const withEff=mj.filter(j=>jobEff(j)!==null);
-          if(!withEff.length) return null;
-          const avg=Math.round(withEff.reduce((s,j)=>s+jobEff(j),0)/withEff.length);
+          const s=machStats[name];
+          const denom=s.runSec+s.setupSec+s.downtimeSec;
+          if(denom===0) return null;
+          const avg=Math.round(s.runSec/denom*100);
           const target=goals.machines[name]!==undefined?goals.machines[name]:goals.overall;
-          return{name,avg,target,below:avg<target,jobs:mj.length};
+          return{name,avg,target,below:avg<target,jobs:s.totalJobs};
         }).filter(Boolean);
         const belowMachines=machEffs.filter(m=>m.below);
-        // Below-target jobs (done, quick entry excluded)
+        // Below-target jobs use job-level ratio (run vs setup — downtime is machine-level)
         const belowJobs=jobs.filter(j=>{
           if(j.status!=="done") return false;
           const e=jobEff(j); if(e===null) return false;
@@ -2801,10 +2855,10 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
             const pct=hasTgt?Math.min(100,Math.round(s.weekRunSec/s.weeklyTargetSec*100)):0;
             const tgtColor=pct>=100?C.green:pct>=60?C.amber:C.red;
             const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
-            const jobEff2=j=>{const t=(j.setupSec||0)+(j.runSec||0);return t>0?(j.runSec||0)/t*100:null;};
-            const mDoneJobs=jobs.filter(j=>j.machine===name&&j.status==="done");
-            const mEffJobs=mDoneJobs.filter(j=>jobEff2(j)!==null);
-            const mAvgEff=mEffJobs.length?Math.round(mEffJobs.reduce((s,j)=>s+jobEff2(j),0)/mEffJobs.length):null;
+            // Machine efficiency = run / (run + setup + downtime) — includes downtime losses
+            const mTotalRun=s.runSec; const mTotalSetup=s.setupSec; const mTotalDown=s.downtimeSec;
+            const mDenom=mTotalRun+mTotalSetup+mTotalDown;
+            const mAvgEff=mDenom>0?Math.round(mTotalRun/mDenom*100):null;
             const mEffTarget=goals.machines[name]!==undefined?goals.machines[name]:goals.overall;
             const mEffColor=mAvgEff===null?C.muted:mAvgEff>=mEffTarget?C.green:mAvgEff>=mEffTarget-10?C.amber:C.red;
             return(
