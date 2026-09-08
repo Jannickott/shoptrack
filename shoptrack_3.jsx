@@ -201,7 +201,7 @@ export default function App(){
   const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
-  const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,machines:{},departments:{}});
+  const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{}});
 
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
@@ -1876,23 +1876,46 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
   ];
   return(
     <div style={{padding:"14px 16px"}}>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16,background:C.raised,borderRadius:10,padding:"14px 12px",border:`1px solid ${C.border}`}}>
-        <DonutChart title="This Week" segments={chartSegs(
-          weekJobs.reduce((s,j)=>s+j.setupSec,0),
-          weekJobs.reduce((s,j)=>s+j.runSec,0),
-          weekDowntime
-        )}/>
-        <DonutChart title="This Month" segments={chartSegs(
-          monthJobs.reduce((s,j)=>s+j.setupSec,0),
-          monthJobs.reduce((s,j)=>s+j.runSec,0),
-          monthDowntime
-        )}/>
-      </div>
+      {/* Week + Month donuts with efficiency target markers */}
+      {(()=>{
+        const weekTarget=efficiencyGoals?.week??75;
+        const monthTarget=efficiencyGoals?.month??78;
+        const wkSetup=weekJobs.reduce((s,j)=>s+j.setupSec,0);
+        const wkRun=weekJobs.reduce((s,j)=>s+j.runSec,0);
+        const wkTotal=wkSetup+wkRun+weekDowntime;
+        const wkEff=wkTotal>0?Math.round(wkRun/wkTotal*100):null;
+        const moSetup=monthJobs.reduce((s,j)=>s+j.setupSec,0);
+        const moRun=monthJobs.reduce((s,j)=>s+j.runSec,0);
+        const moTotal=moSetup+moRun+monthDowntime;
+        const moEff=moTotal>0?Math.round(moRun/moTotal*100):null;
+        const EffLine=({eff,target})=>{
+          if(eff===null) return null;
+          const c=eff>=target?C.green:eff>=target-10?C.amber:C.red;
+          return(
+            <div style={{marginTop:6,textAlign:"center"}}>
+              <span style={{fontSize:18,color:c,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{eff}%</span>
+              <span style={{fontSize:9,color:C.muted,marginLeft:6}}>target {target}%</span>
+            </div>
+          );
+        };
+        return(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16,background:C.raised,borderRadius:10,padding:"14px 12px",border:`1px solid ${C.border}`}}>
+            <div>
+              <DonutChart title="This Week" segments={chartSegs(wkSetup,wkRun,weekDowntime)}/>
+              <EffLine eff={wkEff} target={weekTarget}/>
+            </div>
+            <div>
+              <DonutChart title="This Month" segments={chartSegs(moSetup,moRun,monthDowntime)}/>
+              <EffLine eff={moEff} target={monthTarget}/>
+            </div>
+          </div>
+        );
+      })()}
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:16}}>
         {[
           [active.length,"Active Jobs",C.amber],
           [done.length,"Completed",C.green],
-          [targetEff+"%","Target Efficiency",C.blue],
+          [targetEff+"%","Year Target",C.green],
           [realEff!==null?realEff+"%":"–","Real Efficiency (YTD)",realEff===null?C.muted:realEff>=targetEff?C.green:C.red],
           [belowTarget.length,"Below Target",belowTarget.length>0?C.red:C.green],
           ["–","Coming Soon",C.muted],
@@ -3295,107 +3318,113 @@ function WorkHoursSettings({workHours,setWorkHours}){
 }
 
 function ManageEfficiencyGoals({efficiencyGoals,setEfficiencyGoals,machines,departments,saveNow}){
-  const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
-  const setOverall=v=>{
+  const goals=efficiencyGoals||{overall:80,week:75,month:78,machines:{},departments:{}};
+
+  const setPeriod=(key,v)=>{
     const n=Math.max(0,Math.min(100,parseInt(v)||0));
-    setEfficiencyGoals(prev=>({...prev,overall:n}));
+    setEfficiencyGoals(prev=>({...prev,[key]:n}));
     saveNow&&saveNow();
   };
   const setMachineGoal=(name,v)=>{
     const n=v===""?undefined:Math.max(0,Math.min(100,parseInt(v)||0));
-    setEfficiencyGoals(prev=>{
-      const m={...prev.machines};
-      if(n===undefined) delete m[name]; else m[name]=n;
-      return{...prev,machines:m};
-    });
+    setEfficiencyGoals(prev=>{const m={...prev.machines};if(n===undefined)delete m[name];else m[name]=n;return{...prev,machines:m};});
     saveNow&&saveNow();
   };
   const setDeptGoal=(name,v)=>{
     const n=v===""?undefined:Math.max(0,Math.min(100,parseInt(v)||0));
-    setEfficiencyGoals(prev=>{
-      const d={...prev.departments};
-      if(n===undefined) delete d[name]; else d[name]=n;
-      return{...prev,departments:d};
-    });
+    setEfficiencyGoals(prev=>{const d={...prev.departments};if(n===undefined)delete d[name];else d[name]=n;return{...prev,departments:d};});
     saveNow&&saveNow();
   };
-  const pctBar=(val,target)=>{
-    const color=val>=target?C.green:val>=target-10?C.amber:C.red;
+
+  const PeriodSlider=({label,icon,colorKey,goalKey,hint})=>{
+    const val=goals[goalKey]??80;
+    const color=C[colorKey]||C.blue;
     return(
-      <div style={{height:6,background:C.border,borderRadius:3,marginTop:4,overflow:"hidden"}}>
-        <div style={{height:"100%",width:`${Math.min(val,100)}%`,background:color,borderRadius:3,transition:"width .3s"}}/>
-      </div>
-    );
-  };
-  return(
-    <div>
-      {/* Overall company target */}
-      <div style={{...card(),marginBottom:10,border:`1px solid ${C.blue}40`}}>
-        <div style={{fontSize:10,color:C.blue,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}><i className="ti ti-building-factory"/> Company-Wide Target</div>
-        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Overall efficiency goal applied to all machines and departments unless overridden below. Efficiency = Run time ÷ (Setup + Run time).</div>
-        <div style={{display:"flex",alignItems:"center",gap:12}}>
-          <input type="range" min="0" max="100" value={goals.overall} onChange={e=>setOverall(e.target.value)} style={{flex:1,accentColor:C.blue}}/>
-          <div style={{display:"flex",alignItems:"center",gap:6,background:C.raised,borderRadius:8,padding:"6px 12px"}}>
-            <input type="number" min="0" max="100" value={goals.overall} onChange={e=>setOverall(e.target.value)} style={{...inp(),width:56,fontSize:20,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color:C.blue,padding:"4px 6px"}}/>
+      <div style={{...card(),marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+          <i className={`ti ${icon}`} style={{color,fontSize:16}}/>
+          <div style={{flex:1}}>
+            <div style={{fontSize:12,color:C.text,fontWeight:700}}>{label}</div>
+            <div style={{fontSize:10,color:C.muted}}>{hint}</div>
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:6,background:C.raised,borderRadius:8,padding:"4px 10px"}}>
+            <input type="number" min="0" max="100" value={val} onChange={e=>setPeriod(goalKey,e.target.value)}
+              style={{...inp(),width:52,fontSize:22,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color,padding:"2px 4px",border:"none",background:"transparent"}}/>
             <span style={{fontSize:16,color:C.muted}}>%</span>
           </div>
         </div>
+        <input type="range" min="0" max="100" value={val} onChange={e=>setPeriod(goalKey,e.target.value)}
+          style={{width:"100%",accentColor:color,cursor:"pointer"}}/>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:C.muted,marginTop:2}}>
+          <span>0%</span><span>50%</span><span>100%</span>
+        </div>
       </div>
+    );
+  };
 
-      {/* Per-machine overrides */}
+  const OverrideRow=({icon,iconColor,name,val,defaultVal,onChange,onClear})=>(
+    <div style={{...card(),marginBottom:6}}>
+      <div style={{display:"flex",alignItems:"center",gap:10}}>
+        <i className={`ti ${icon}`} style={{color:iconColor,flexShrink:0,fontSize:16}}/>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:13,color:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
+          <div style={{fontSize:9,color:val!==undefined?iconColor:C.muted,letterSpacing:1}}>
+            {val!==undefined?`Custom: ${val}%`:`Default (${defaultVal}%)`}
+          </div>
+          <div style={{height:4,background:C.border,borderRadius:2,marginTop:4,overflow:"hidden"}}>
+            <div style={{height:"100%",width:`${val!==undefined?val:defaultVal}%`,background:val!==undefined?iconColor:C.muted,borderRadius:2,transition:"width .3s"}}/>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
+          <input type="number" min="0" max="100" placeholder={String(defaultVal)} value={val!==undefined?val:""}
+            onChange={e=>onChange(e.target.value)}
+            style={{...inp(),width:60,fontSize:18,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color:iconColor,padding:"4px 6px"}}/>
+          <span style={{fontSize:12,color:C.muted}}>%</span>
+          {val!==undefined&&<button style={{...btn("danger",false,true),padding:"4px 8px"}} title="Reset to default" onClick={onClear}><i className="ti ti-rotate-2"/></button>}
+        </div>
+      </div>
+    </div>
+  );
+
+  return(
+    <div>
+      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
+        <i className="ti ti-calendar-stats"/> Period Targets
+      </div>
+      <div style={{fontSize:11,color:C.muted,marginBottom:12}}>Set how efficient you want the shop to be in each time period. Efficiency = Run time ÷ (Run + Setup + Downtime).</div>
+
+      <PeriodSlider label="Weekly Target"  icon="ti-calendar-week"  colorKey="amber" goalKey="week"    hint="Target for any given week"/>
+      <PeriodSlider label="Monthly Target" icon="ti-calendar-month" colorKey="blue"  goalKey="month"   hint="Target for any given month"/>
+      <PeriodSlider label="Yearly Target"  icon="ti-calendar"       colorKey="green" goalKey="overall" hint="Annual target — also used as default for machines &amp; departments"/>
+
       {machines.filter(m=>m.active).length>0&&(
-        <div style={{marginBottom:10}}>
-          <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}><i className="ti ti-robot"/> Machine Targets (overrides company target)</div>
-          {machines.filter(m=>m.active).map(m=>{
-            const val=goals.machines[m.name];
-            const effective=val!==undefined?val:goals.overall;
-            return(
-              <div key={m.id} style={{...card(),marginBottom:6}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <i className="ti ti-robot" style={{color:C.amber,flexShrink:0}}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,color:C.text,fontWeight:600}}>{m.name}</div>
-                    {val===undefined&&<div style={{fontSize:9,color:C.muted,letterSpacing:1}}>Using company default ({goals.overall}%)</div>}
-                    {pctBar(effective,goals.overall)}
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <input type="number" min="0" max="100" placeholder={String(goals.overall)} value={val!==undefined?val:""} onChange={e=>setMachineGoal(m.name,e.target.value)} style={{...inp(),width:64,fontSize:16,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color:C.amber,padding:"4px 6px"}}/>
-                    <span style={{fontSize:12,color:C.muted}}>%</span>
-                    {val!==undefined&&<button style={{...btn("danger",false,true),padding:"4px 8px"}} onClick={()=>setMachineGoal(m.name,"")}><i className="ti ti-x"/></button>}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div style={{marginTop:16,marginBottom:4}}>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>
+            <i className="ti ti-robot"/> Machine Overrides <span style={{color:C.muted,fontWeight:400,letterSpacing:0,textTransform:"none",fontSize:10}}>(leave blank to use yearly target)</span>
+          </div>
+          {machines.filter(m=>m.active).map(m=>(
+            <OverrideRow key={m.id} icon="ti-robot" iconColor={C.amber} name={m.name}
+              val={goals.machines[m.name]} defaultVal={goals.overall}
+              onChange={v=>setMachineGoal(m.name,v)} onClear={()=>setMachineGoal(m.name,"")}/>
+          ))}
         </div>
       )}
 
-      {/* Per-department overrides */}
       {(departments||[]).length>0&&(
-        <div>
-          <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}><i className="ti ti-tag"/> Department Targets (overrides company target)</div>
-          {(departments||[]).map(d=>{
-            const val=goals.departments[d];
-            return(
-              <div key={d} style={{...card(),marginBottom:6}}>
-                <div style={{display:"flex",alignItems:"center",gap:10}}>
-                  <i className="ti ti-tag" style={{color:C.green,flexShrink:0}}/>
-                  <div style={{flex:1}}>
-                    <div style={{fontSize:13,color:C.text,fontWeight:600}}>{d}</div>
-                    {val===undefined&&<div style={{fontSize:9,color:C.muted,letterSpacing:1}}>Using company default ({goals.overall}%)</div>}
-                  </div>
-                  <div style={{display:"flex",alignItems:"center",gap:6}}>
-                    <input type="number" min="0" max="100" placeholder={String(goals.overall)} value={val!==undefined?val:""} onChange={e=>setDeptGoal(d,e.target.value)} style={{...inp(),width:64,fontSize:16,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color:C.green,padding:"4px 6px"}}/>
-                    <span style={{fontSize:12,color:C.muted}}>%</span>
-                    {val!==undefined&&<button style={{...btn("danger",false,true),padding:"4px 8px"}} onClick={()=>setDeptGoal(d,"")}><i className="ti ti-x"/></button>}
-                  </div>
-                </div>
-              </div>
-            );
-          })}
+        <div style={{marginTop:16}}>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>
+            <i className="ti ti-tag"/> Department Overrides <span style={{color:C.muted,fontWeight:400,letterSpacing:0,textTransform:"none",fontSize:10}}>(leave blank to use yearly target)</span>
+          </div>
+          {(departments||[]).map(d=>(
+            <OverrideRow key={d} icon="ti-tag" iconColor={C.green} name={d}
+              val={goals.departments[d]} defaultVal={goals.overall}
+              onChange={v=>setDeptGoal(d,v)} onClear={()=>setDeptGoal(d,"")}/>
+          ))}
         </div>
       )}
-      {(departments||[]).length===0&&<div style={{fontSize:11,color:C.muted,textAlign:"center",padding:"16px 0"}}>Add departments in the Departments tab to set per-department goals.</div>}
+      {(departments||[]).length===0&&machines.filter(m=>m.active).length===0&&(
+        <div style={{fontSize:11,color:C.muted,textAlign:"center",padding:"20px 0"}}>Add machines and departments in their tabs to set per-machine and per-department overrides.</div>
+      )}
     </div>
   );
 }
