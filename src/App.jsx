@@ -962,7 +962,12 @@ function QuickEntryTab({user,machines,setJobs,setTab,saveNow}){
           <label style={label}>Machine <span style={{color:C.red}}>*</span></label>
           <select style={sel(errs.machine)} value={machine} onChange={e=>{setMachine(e.target.value);setErrs(p=>({...p,machine:null}));}}>
             <option value="">— Select Machine —</option>
-            {machines.filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}
+            {machines.filter(m=>{
+              if(!m.active) return false;
+              const userDepts=user.departments||[];
+              if(userDepts.length===0) return true;
+              return !m.department||userDepts.includes(m.department);
+            }).map(m=><option key={m.id}>{m.name}</option>)}
           </select>
           {errs.machine&&<div style={errMsg}><i className="ti ti-alert-triangle"/> {errs.machine}</div>}
         </div>
@@ -1591,7 +1596,12 @@ function MachineStatusTab({user,machines,machineIssues,reportIssue,resolveIssue}
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Machine Status</div>
-      {machines.filter(m=>m.active).map(m=>{
+      {machines.filter(m=>{
+        if(!m.active) return false;
+        const userDepts=user.departments||[];
+        if(userDepts.length===0) return true;
+        return !m.department||userDepts.includes(m.department);
+      }).map(m=>{
         const issue=machineIssues[m.name];
         const isReporting=reporting===m.name;
         return(
