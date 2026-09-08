@@ -179,6 +179,7 @@ export default function App(){
   const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
+  const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,machines:{},departments:{}});
 
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
@@ -226,6 +227,7 @@ export default function App(){
             Object.keys(sd).forEach(k=>{sd[k]=sd[k].map(v=>v==="Affolter 160"?"Affolter":v);});
             setSubDepartments(sd);
           }
+          if(data.efficiencyGoals) setEfficiencyGoals(data.efficiencyGoals);
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
             workHours:data.workHours,
@@ -251,8 +253,8 @@ export default function App(){
   const lastServerRef=useRef({});
   const dataLoadedRef=useRef(false); // prevents saving before server data is loaded
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments]);
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals};
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals]);
 
   // Save to server every 3 seconds — only after data has been loaded
   useEffect(()=>{
@@ -555,13 +557,13 @@ export default function App(){
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
       {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
-      {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools}/>}
+      {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
-      {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues}/>}
+      {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
-      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
+      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
     </div>
@@ -1808,10 +1810,16 @@ function DonutChart({title,segments}){
   );
 }
 
-function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,machines,tools}){
+function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,machines,tools,efficiencyGoals}){
   const done=jobs.filter(j=>j.status==="done"); const active=sortActive(jobs.filter(j=>j.status!=="done"));
-  const totalPieces=done.reduce((s,j)=>s+j.pieces,0);
-  const avgRun=done.length?(done.reduce((s,j)=>s+j.runSec,0)/done.length/60).toFixed(1):0;
+  // Efficiency helpers
+  const jobEff=j=>{const t=(j.setupSec||0)+(j.runSec||0);return t>0?(j.runSec||0)/t*100:null;};
+  const targetEff=efficiencyGoals?.overall??80;
+  const yearStr=String(new Date().getFullYear());
+  const yearDone=done.filter(j=>j.completedAt&&String(new Date(j.completedAt).getFullYear())===yearStr);
+  const yearEffJobs=yearDone.filter(j=>jobEff(j)!==null);
+  const realEff=yearEffJobs.length>0?Math.round(yearEffJobs.reduce((s,j)=>s+jobEff(j),0)/yearEffJobs.length):null;
+  const belowTarget=done.filter(j=>{const e=jobEff(j);return e!==null&&e<targetEff;});
   const machMap={};done.forEach(j=>{if(!machMap[j.machine])machMap[j.machine]={run:0,setup:0,jobs:0};machMap[j.machine].run+=j.runSec;machMap[j.machine].setup+=j.setupSec;machMap[j.machine].jobs++;});
   const maxRun=Math.max(...Object.values(machMap).map(m=>m.run),1);
   const opMap={};done.forEach(j=>{if(!opMap[j.operatorName])opMap[j.operatorName]={jobs:0,pieces:0,run:0};opMap[j.operatorName].jobs++;opMap[j.operatorName].pieces+=j.pieces;opMap[j.operatorName].run+=j.runSec;});
@@ -1852,7 +1860,14 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
         )}/>
       </div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:10,marginBottom:16}}>
-        {[[active.length,"Active Jobs",C.amber],[done.length,"Completed",C.green],[totalPieces,"Total Pieces",C.text],[avgRun+"m","Avg Run",C.muted]].map(([v,l,c])=>(
+        {[
+          [active.length,"Active Jobs",C.amber],
+          [done.length,"Completed",C.green],
+          [targetEff+"%","Target Efficiency",C.blue],
+          [realEff!==null?realEff+"%":"–","Real Efficiency (YTD)",realEff===null?C.muted:realEff>=targetEff?C.green:C.red],
+          [belowTarget.length,"Below Target",belowTarget.length>0?C.red:C.green],
+          ["–","Coming Soon",C.muted],
+        ].map(([v,l,c])=>(
           <div key={l} style={{background:C.raised,borderRadius:8,padding:"14px",textAlign:"center"}}><div style={{fontSize:26,color:c,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{v}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>{l}</div></div>
         ))}
       </div>
@@ -2526,7 +2541,7 @@ function ReportsTab({jobs}){
 // ═══════════════════════════════════════════════════════
 // MACHINE DATA TAB
 // ═══════════════════════════════════════════════════════
-function MachineDataTab({jobs,machines,downtimeLog,machineIssues}){
+function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals}){
   const [selected,setSelected]=useState(null);
   const [search,setSearch]=useState("");
 
@@ -2700,6 +2715,81 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues}){
         </>
       )}
 
+      {/* Below-target efficiency section */}
+      {!selected&&!search&&(()=>{
+        const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
+        const jobEff=j=>{const t=(j.setupSec||0)+(j.runSec||0);return t>0?(j.runSec||0)/t*100:null;};
+        // Per-machine efficiency
+        const machEffs=allMachineNames.map(name=>{
+          const mj=jobs.filter(j=>j.machine===name&&j.status==="done");
+          const withEff=mj.filter(j=>jobEff(j)!==null);
+          if(!withEff.length) return null;
+          const avg=Math.round(withEff.reduce((s,j)=>s+jobEff(j),0)/withEff.length);
+          const target=goals.machines[name]!==undefined?goals.machines[name]:goals.overall;
+          return{name,avg,target,below:avg<target,jobs:mj.length};
+        }).filter(Boolean);
+        const belowMachines=machEffs.filter(m=>m.below);
+        // Below-target jobs (done, quick entry excluded)
+        const belowJobs=jobs.filter(j=>{
+          if(j.status!=="done") return false;
+          const e=jobEff(j); if(e===null) return false;
+          const target=goals.machines[j.machine]!==undefined?goals.machines[j.machine]:goals.overall;
+          return e<target;
+        }).sort((a,b)=>(jobEff(a)||0)-(jobEff(b)||0));
+        if(!belowMachines.length&&!belowJobs.length) return null;
+        return(
+          <div style={{marginBottom:16}}>
+            <div style={{fontSize:10,color:C.red,letterSpacing:2,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${C.red}40`}}>
+              <i className="ti ti-alert-triangle"/> Below Efficiency Target
+            </div>
+            {/* Machines below target */}
+            {belowMachines.length>0&&(
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8,marginBottom:10}}>
+                {belowMachines.map(m=>(
+                  <div key={m.name} onClick={()=>setSelected(m.name)} style={{background:C.surface,border:`1px solid ${C.red}40`,borderLeft:`3px solid ${C.red}`,borderRadius:8,padding:"10px 12px",cursor:"pointer"}}>
+                    <div style={{fontSize:12,color:C.text,fontWeight:700,marginBottom:4}}>{m.name}</div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:C.muted,marginBottom:4}}>
+                      <span>Avg eff.</span><span style={{color:C.red,fontWeight:700}}>{m.avg}%</span>
+                    </div>
+                    <div style={{height:5,borderRadius:3,background:C.raised,overflow:"hidden",marginBottom:4}}>
+                      <div style={{height:"100%",width:`${m.avg}%`,background:C.red,borderRadius:3}}/>
+                    </div>
+                    <div style={{fontSize:9,color:C.muted}}>Target {m.target}% · {m.jobs} jobs</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            {/* Individual jobs below target */}
+            {belowJobs.length>0&&(
+              <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                {belowJobs.slice(0,10).map(j=>{
+                  const e=Math.round(jobEff(j));
+                  const target=goals.machines[j.machine]!==undefined?goals.machines[j.machine]:goals.overall;
+                  return(
+                    <div key={j.id} style={{background:C.surface,border:`1px solid ${C.red}20`,borderRadius:8,padding:"8px 12px",display:"flex",alignItems:"center",gap:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <div style={{fontSize:12,color:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.customer||j.job} <span style={{fontSize:10,color:C.muted,fontWeight:400}}>#{j.job}</span></div>
+                        <div style={{fontSize:10,color:C.muted}}><i className="ti ti-robot"/> {j.machine} · <i className="ti ti-user"/> {j.operatorName}</div>
+                        <div style={{display:"flex",gap:6,marginTop:3}}>
+                          <span style={{fontSize:10,color:C.amber}}><i className="ti ti-settings"/> {fmtHM(j.setupSec)}</span>
+                          <span style={{fontSize:10,color:C.green}}><i className="ti ti-player-play"/> {fmtHM(j.runSec)}</span>
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0}}>
+                        <div style={{fontSize:20,color:C.red,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{e}%</div>
+                        <div style={{fontSize:9,color:C.muted}}>target {target}%</div>
+                        {j.completedAt&&<div style={{fontSize:9,color:C.muted}}>{fmtDate(j.completedAt)}</div>}
+                      </div>
+                    </div>
+                  );
+                })}
+                {belowJobs.length>10&&<div style={{fontSize:11,color:C.muted,textAlign:"center",paddingTop:4}}>{belowJobs.length-10} more — select a machine to drill down</div>}
+              </div>
+            )}
+          </div>
+        );
+      })()}
+
       {/* Overview cards — all machines, no selection, no search */}
       {!selected&&!search&&(
         <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(170px,1fr))",gap:10,marginBottom:16}}>
@@ -2710,6 +2800,13 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues}){
             const hasTgt=s.weeklyTargetSec>0;
             const pct=hasTgt?Math.min(100,Math.round(s.weekRunSec/s.weeklyTargetSec*100)):0;
             const tgtColor=pct>=100?C.green:pct>=60?C.amber:C.red;
+            const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
+            const jobEff2=j=>{const t=(j.setupSec||0)+(j.runSec||0);return t>0?(j.runSec||0)/t*100:null;};
+            const mDoneJobs=jobs.filter(j=>j.machine===name&&j.status==="done");
+            const mEffJobs=mDoneJobs.filter(j=>jobEff2(j)!==null);
+            const mAvgEff=mEffJobs.length?Math.round(mEffJobs.reduce((s,j)=>s+jobEff2(j),0)/mEffJobs.length):null;
+            const mEffTarget=goals.machines[name]!==undefined?goals.machines[name]:goals.overall;
+            const mEffColor=mAvgEff===null?C.muted:mAvgEff>=mEffTarget?C.green:mAvgEff>=mEffTarget-10?C.amber:C.red;
             return(
               <div key={name} onClick={()=>setSelected(name)} style={{
                 background:C.surface,borderRadius:10,padding:12,cursor:"pointer",
@@ -2723,6 +2820,14 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues}){
                   <span style={{fontSize:10,color:C.amber}}><i className="ti ti-settings"/> {fmtHM(s.setupSec)}</span>
                   <span style={{fontSize:10,color:C.green}}><i className="ti ti-player-play"/> {fmtHM(s.runSec)}</span>
                 </div>
+                {mAvgEff!==null&&(
+                  <div>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:9,color:C.muted,marginBottom:3}}><span>Eff. (all jobs)</span><span style={{color:mEffColor,fontWeight:700}}>{mAvgEff}%</span></div>
+                    <div style={{height:4,borderRadius:2,background:C.raised,overflow:"hidden"}}>
+                      <div style={{height:"100%",width:`${mAvgEff}%`,background:mEffColor,borderRadius:2}}/>
+                    </div>
+                  </div>
+                )}
                 {s.downtimeSec>0&&<span style={{fontSize:10,color:C.red}}><i className="ti ti-alert-triangle"/> {fmtHM(s.downtimeSec)} down</span>}
                 {hasTgt&&(
                   <div>
@@ -2805,6 +2910,15 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues}){
               </div>
               {j.twoSided&&<span style={{fontSize:9,color:C.blue,letterSpacing:1}}><i className="ti ti-layers-intersect"/> 2-SIDED</span>}
               {j.completedAt&&<span style={{fontSize:10,color:C.muted,whiteSpace:"nowrap"}}>{fmtDate(j.completedAt)}</span>}
+              {(()=>{
+                const t=(j.setupSec||0)+(j.runSec||0);
+                if(t===0||j.status!=="done") return null;
+                const e=Math.round((j.runSec||0)/t*100);
+                const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
+                const tgt=goals.machines[j.machine]!==undefined?goals.machines[j.machine]:goals.overall;
+                const ec=e>=tgt?C.green:e>=tgt-10?C.amber:C.red;
+                return <span style={{fontSize:11,color:ec,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{e}%</span>;
+              })()}
             </div>
           </div>
         ))}
@@ -2816,7 +2930,7 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues}){
 // ═══════════════════════════════════════════════════════
 // MANAGE TAB
 // ═══════════════════════════════════════════════════════
-function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,departments,setDepartments,saveNow}){
+function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,departments,setDepartments,saveNow,efficiencyGoals,setEfficiencyGoals}){
   const [view,setView]=useState("operators");
   return(
     <div style={{padding:"14px 16px"}}>
@@ -2824,11 +2938,13 @@ function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,d
         <button style={tag(view==="operators")}   onClick={()=>setView("operators")}  ><i className="ti ti-users"/> Operators</button>
         <button style={tag(view==="machines")}    onClick={()=>setView("machines")}   ><i className="ti ti-robot"/> Machines</button>
         <button style={tag(view==="departments")} onClick={()=>setView("departments")}><i className="ti ti-tag"/> Departments</button>
+        <button style={tag(view==="goals")}       onClick={()=>setView("goals")}      ><i className="ti ti-target"/> Goals</button>
         <button style={tag(view==="settings")}    onClick={()=>setView("settings")}   ><i className="ti ti-adjustments"/> Settings</button>
       </div>
       {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments}/>}
       {view==="machines"   &&<ManageMachines    machines={machines} setMachines={setMachines} departments={departments}/>}
       {view==="departments"&&<ManageDepartments departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
+      {view==="goals"      &&<ManageEfficiencyGoals efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} machines={machines} departments={departments} saveNow={saveNow}/>}
       {view==="settings"   &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours}/>}
     </div>
   );
@@ -3120,6 +3236,112 @@ function WorkHoursSettings({workHours,setWorkHours}){
           :<div style={{fontSize:13,color:C.muted}}>Day off — timers will pause on logout.</div>
         }
       </div>
+    </div>
+  );
+}
+
+function ManageEfficiencyGoals({efficiencyGoals,setEfficiencyGoals,machines,departments,saveNow}){
+  const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
+  const setOverall=v=>{
+    const n=Math.max(0,Math.min(100,parseInt(v)||0));
+    setEfficiencyGoals(prev=>({...prev,overall:n}));
+    saveNow&&saveNow();
+  };
+  const setMachineGoal=(name,v)=>{
+    const n=v===""?undefined:Math.max(0,Math.min(100,parseInt(v)||0));
+    setEfficiencyGoals(prev=>{
+      const m={...prev.machines};
+      if(n===undefined) delete m[name]; else m[name]=n;
+      return{...prev,machines:m};
+    });
+    saveNow&&saveNow();
+  };
+  const setDeptGoal=(name,v)=>{
+    const n=v===""?undefined:Math.max(0,Math.min(100,parseInt(v)||0));
+    setEfficiencyGoals(prev=>{
+      const d={...prev.departments};
+      if(n===undefined) delete d[name]; else d[name]=n;
+      return{...prev,departments:d};
+    });
+    saveNow&&saveNow();
+  };
+  const pctBar=(val,target)=>{
+    const color=val>=target?C.green:val>=target-10?C.amber:C.red;
+    return(
+      <div style={{height:6,background:C.border,borderRadius:3,marginTop:4,overflow:"hidden"}}>
+        <div style={{height:"100%",width:`${Math.min(val,100)}%`,background:color,borderRadius:3,transition:"width .3s"}}/>
+      </div>
+    );
+  };
+  return(
+    <div>
+      {/* Overall company target */}
+      <div style={{...card(),marginBottom:10,border:`1px solid ${C.blue}40`}}>
+        <div style={{fontSize:10,color:C.blue,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}><i className="ti ti-building-factory"/> Company-Wide Target</div>
+        <div style={{fontSize:11,color:C.muted,marginBottom:10}}>Overall efficiency goal applied to all machines and departments unless overridden below. Efficiency = Run time ÷ (Setup + Run time).</div>
+        <div style={{display:"flex",alignItems:"center",gap:12}}>
+          <input type="range" min="0" max="100" value={goals.overall} onChange={e=>setOverall(e.target.value)} style={{flex:1,accentColor:C.blue}}/>
+          <div style={{display:"flex",alignItems:"center",gap:6,background:C.raised,borderRadius:8,padding:"6px 12px"}}>
+            <input type="number" min="0" max="100" value={goals.overall} onChange={e=>setOverall(e.target.value)} style={{...inp(),width:56,fontSize:20,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color:C.blue,padding:"4px 6px"}}/>
+            <span style={{fontSize:16,color:C.muted}}>%</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Per-machine overrides */}
+      {machines.filter(m=>m.active).length>0&&(
+        <div style={{marginBottom:10}}>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}><i className="ti ti-robot"/> Machine Targets (overrides company target)</div>
+          {machines.filter(m=>m.active).map(m=>{
+            const val=goals.machines[m.name];
+            const effective=val!==undefined?val:goals.overall;
+            return(
+              <div key={m.id} style={{...card(),marginBottom:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <i className="ti ti-robot" style={{color:C.amber,flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,color:C.text,fontWeight:600}}>{m.name}</div>
+                    {val===undefined&&<div style={{fontSize:9,color:C.muted,letterSpacing:1}}>Using company default ({goals.overall}%)</div>}
+                    {pctBar(effective,goals.overall)}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <input type="number" min="0" max="100" placeholder={String(goals.overall)} value={val!==undefined?val:""} onChange={e=>setMachineGoal(m.name,e.target.value)} style={{...inp(),width:64,fontSize:16,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color:C.amber,padding:"4px 6px"}}/>
+                    <span style={{fontSize:12,color:C.muted}}>%</span>
+                    {val!==undefined&&<button style={{...btn("danger",false,true),padding:"4px 8px"}} onClick={()=>setMachineGoal(m.name,"")}><i className="ti ti-x"/></button>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Per-department overrides */}
+      {(departments||[]).length>0&&(
+        <div>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}><i className="ti ti-tag"/> Department Targets (overrides company target)</div>
+          {(departments||[]).map(d=>{
+            const val=goals.departments[d];
+            return(
+              <div key={d} style={{...card(),marginBottom:6}}>
+                <div style={{display:"flex",alignItems:"center",gap:10}}>
+                  <i className="ti ti-tag" style={{color:C.green,flexShrink:0}}/>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:13,color:C.text,fontWeight:600}}>{d}</div>
+                    {val===undefined&&<div style={{fontSize:9,color:C.muted,letterSpacing:1}}>Using company default ({goals.overall}%)</div>}
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:6}}>
+                    <input type="number" min="0" max="100" placeholder={String(goals.overall)} value={val!==undefined?val:""} onChange={e=>setDeptGoal(d,e.target.value)} style={{...inp(),width:64,fontSize:16,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color:C.green,padding:"4px 6px"}}/>
+                    <span style={{fontSize:12,color:C.muted}}>%</span>
+                    {val!==undefined&&<button style={{...btn("danger",false,true),padding:"4px 8px"}} onClick={()=>setDeptGoal(d,"")}><i className="ti ti-x"/></button>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {(departments||[]).length===0&&<div style={{fontSize:11,color:C.muted,textAlign:"center",padding:"16px 0"}}>Add departments in the Departments tab to set per-department goals.</div>}
     </div>
   );
 }
