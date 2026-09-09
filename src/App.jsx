@@ -581,7 +581,7 @@ export default function App(){
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
-      {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
+      {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
@@ -2603,7 +2603,7 @@ function ReportsTab({jobs}){
 // ═══════════════════════════════════════════════════════
 // MACHINE DATA TAB
 // ═══════════════════════════════════════════════════════
-function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals,workHours}){
+function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals,workHours,clock}){
   const [selected,setSelected]=useState(null);
   const [search,setSearch]=useState("");
 
@@ -2629,10 +2629,10 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
     const activeDown=activeIssue?Math.round((now-(activeIssue.reportedAt||now))/1000):0;
     const machDef=machines.find(m=>m.name===name);
     const weeklyTargetSec=(machDef?.weeklyTargetHours||0)*3600;
-    const weekRunSec=weekJobs.reduce((s,j)=>s+(j.runSec||0),0);
+    const weekRunSec=weekJobs.reduce((s,j)=>{const lt=liveTime(j);return s+lt.run+lt.run2;},0);
     machStats[name]={
-      setupSec:mj.reduce((s,j)=>s+(j.setupSec||0),0),
-      runSec:mj.reduce((s,j)=>s+(j.runSec||0),0),
+      setupSec:mj.reduce((s,j)=>{const lt=liveTime(j);return s+lt.setup+lt.setup2;},0),
+      runSec:mj.reduce((s,j)=>{const lt=liveTime(j);return s+lt.run+lt.run2;},0),
       weekRunSec,
       weeklyTargetSec,
       downtimeSec:logDown+activeDown,
