@@ -1886,13 +1886,17 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
       {(()=>{
         const weekTarget=efficiencyGoals?.week??75;
         const monthTarget=efficiencyGoals?.month??78;
+        const wkSetup=weekJobs.reduce((s,j)=>s+jSetup(j),0);
         const wkRun=weekJobs.reduce((s,j)=>s+jRun(j),0);
         const wkEff=wkTotalAvailSec>0?Math.round(wkRun/wkTotalAvailSec*100):null;
+        const moSetup=monthJobs.reduce((s,j)=>s+jSetup(j),0);
         const moRun=monthJobs.reduce((s,j)=>s+jRun(j),0);
         const moEff=moTotalAvailSec>0?Math.round(moRun/moTotalAvailSec*100):null;
-        const segs=(run,total)=>[
-          {label:"Available",value:Math.max(0,total-run),color:C.border},
-          {label:"Run",      value:run,                  color:C.green},
+        const segs=(run,setup,down,total)=>[
+          {label:"Available",value:Math.max(0,total-run-setup-down),color:C.border},
+          {label:"Issues",   value:down,                             color:C.red},
+          {label:"Setup",    value:setup,                            color:C.amber},
+          {label:"Run",      value:run,                              color:C.green},
         ];
         const EffLine=({eff,target,runSec,totalSec})=>{
           if(eff===null) return null;
@@ -1907,11 +1911,11 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
         return(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16,background:C.raised,borderRadius:10,padding:"14px 12px",border:`1px solid ${C.border}`}}>
             <div>
-              <DonutChart title="This Week" segments={segs(wkRun,wkTotalAvailSec)}/>
+              <DonutChart title="This Week" segments={segs(wkRun,wkSetup,weekDowntime,wkTotalAvailSec)}/>
               <EffLine eff={wkEff} target={weekTarget} runSec={wkRun} totalSec={wkTotalAvailSec}/>
             </div>
             <div>
-              <DonutChart title="This Month" segments={segs(moRun,moTotalAvailSec)}/>
+              <DonutChart title="This Month" segments={segs(moRun,moSetup,monthDowntime,moTotalAvailSec)}/>
               <EffLine eff={moEff} target={monthTarget} runSec={moRun} totalSec={moTotalAvailSec}/>
             </div>
           </div>
