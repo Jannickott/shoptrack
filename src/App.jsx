@@ -201,7 +201,7 @@ export default function App(){
   const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
-  const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{}});
+  const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{},hiddenMachines:[]});
 
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
@@ -2607,10 +2607,11 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
   const [selected,setSelected]=useState(null);
   const [search,setSearch]=useState("");
 
+  const _hiddenMachines=efficiencyGoals?.hiddenMachines||[];
   const allMachineNames=[...new Set([
     ...machines.filter(m=>m.active).map(m=>m.name),
     ...jobs.map(j=>j.machine),
-  ])].sort();
+  ])].filter(n=>!_hiddenMachines.includes(n)).sort();
 
   // Per-machine aggregate stats — downtime from timestamps, always accurate
   const now=Date.now();
@@ -3345,6 +3346,15 @@ function ManageEfficiencyGoals({efficiencyGoals,setEfficiencyGoals,machines,depa
     setEfficiencyGoals(prev=>{const d={...prev.departments};if(n===undefined)delete d[name];else d[name]=n;return{...prev,departments:d};});
     saveNow&&saveNow();
   };
+  const toggleHideMachine=(name)=>{
+    setEfficiencyGoals(prev=>{
+      const hidden=prev.hiddenMachines||[];
+      const next=hidden.includes(name)?hidden.filter(n=>n!==name):[...hidden,name];
+      return{...prev,hiddenMachines:next};
+    });
+    saveNow&&saveNow();
+  };
+  const hiddenMachines=goals.hiddenMachines||[];
 
   const PeriodSlider=({label,icon,colorKey,goalKey,hint})=>{
     const val=goals[goalKey]??80;
@@ -3372,25 +3382,28 @@ function ManageEfficiencyGoals({efficiencyGoals,setEfficiencyGoals,machines,depa
     );
   };
 
-  const OverrideRow=({icon,iconColor,name,val,defaultVal,onChange,onClear})=>(
-    <div style={{...card(),marginBottom:6}}>
+  const OverrideRow=({icon,iconColor,name,val,defaultVal,onChange,onClear,hidden,onToggleHide})=>(
+    <div style={{...card(),marginBottom:6,opacity:hidden?0.45:1}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
-        <i className={`ti ${icon}`} style={{color:iconColor,flexShrink:0,fontSize:16}}/>
+        <i className={`ti ${icon}`} style={{color:hidden?C.muted:iconColor,flexShrink:0,fontSize:16}}/>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,color:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
-          <div style={{fontSize:9,color:val!==undefined?iconColor:C.muted,letterSpacing:1}}>
-            {val!==undefined?`Custom: ${val}%`:`Default (${defaultVal}%)`}
+          <div style={{fontSize:13,color:hidden?C.muted:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:hidden?"line-through":"none"}}>{name}</div>
+          <div style={{fontSize:9,color:hidden?C.muted:val!==undefined?iconColor:C.muted,letterSpacing:1}}>
+            {hidden?"Hidden from data views":val!==undefined?`Custom: ${val}%`:`Default (${defaultVal}%)`}
           </div>
-          <div style={{height:4,background:C.border,borderRadius:2,marginTop:4,overflow:"hidden"}}>
+          {!hidden&&<div style={{height:4,background:C.border,borderRadius:2,marginTop:4,overflow:"hidden"}}>
             <div style={{height:"100%",width:`${val!==undefined?val:defaultVal}%`,background:val!==undefined?iconColor:C.muted,borderRadius:2,transition:"width .3s"}}/>
-          </div>
+          </div>}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-          <input type="number" min="0" max="100" placeholder={String(defaultVal)} value={val!==undefined?val:""}
+          {!hidden&&<><input type="number" min="0" max="100" placeholder={String(defaultVal)} value={val!==undefined?val:""}
             onChange={e=>onChange(e.target.value)}
             style={{...inp(),width:60,fontSize:18,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color:iconColor,padding:"4px 6px"}}/>
           <span style={{fontSize:12,color:C.muted}}>%</span>
-          {val!==undefined&&<button style={{...btn("danger",false,true),padding:"4px 8px"}} title="Reset to default" onClick={onClear}><i className="ti ti-rotate-2"/></button>}
+          {val!==undefined&&<button style={{...btn("danger",false,true),padding:"4px 8px"}} title="Reset to default" onClick={onClear}><i className="ti ti-rotate-2"/></button>}</>}
+          {onToggleHide&&<button style={{...btn(hidden?"success":"secondary",false,true),padding:"4px 8px"}} title={hidden?"Show in data":"Hide from data"} onClick={onToggleHide}>
+            <i className={`ti ${hidden?"ti-eye":"ti-eye-off"}`}/>
+          </button>}
         </div>
       </div>
     </div>
@@ -3415,7 +3428,8 @@ function ManageEfficiencyGoals({efficiencyGoals,setEfficiencyGoals,machines,depa
           {machines.filter(m=>m.active).map(m=>(
             <OverrideRow key={m.id} icon="ti-robot" iconColor={C.amber} name={m.name}
               val={goals.machines[m.name]} defaultVal={goals.overall}
-              onChange={v=>setMachineGoal(m.name,v)} onClear={()=>setMachineGoal(m.name,"")}/>
+              onChange={v=>setMachineGoal(m.name,v)} onClear={()=>setMachineGoal(m.name,"")}
+              hidden={hiddenMachines.includes(m.name)} onToggleHide={()=>toggleHideMachine(m.name)}/>
           ))}
         </div>
       )}
