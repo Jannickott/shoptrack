@@ -1863,6 +1863,9 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
   const weekStart=monday.getTime();
   const weekJobs=jobs.filter(j=>(j.createdAt||0)>=weekStart);
   const monthJobs=jobs.filter(j=>toDateInput(j.createdAt).startsWith(monthStr));
+  // Use liveTime so donut values update every second for running jobs
+  const jSetup=j=>{const lt=liveTime(j);return lt.setup+lt.setup2;};
+  const jRun=j=>{const lt=liveTime(j);return lt.run+lt.run2;};
   const weekDowntime=
     downtimeLog.filter(d=>(d.resolvedAt||0)>=weekStart).reduce((s,d)=>s+d.downtimeSec,0)+
     Object.values(machineIssues).filter(i=>(i.reportedAt||0)>=weekStart).reduce((s,i)=>s+Math.round((nowMs-(i.reportedAt||nowMs))/1000),0);
@@ -1880,12 +1883,12 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
       {(()=>{
         const weekTarget=efficiencyGoals?.week??75;
         const monthTarget=efficiencyGoals?.month??78;
-        const wkSetup=weekJobs.reduce((s,j)=>s+j.setupSec,0);
-        const wkRun=weekJobs.reduce((s,j)=>s+j.runSec,0);
+        const wkSetup=weekJobs.reduce((s,j)=>s+jSetup(j),0);
+        const wkRun=weekJobs.reduce((s,j)=>s+jRun(j),0);
         const wkTotal=wkSetup+wkRun+weekDowntime;
         const wkEff=wkTotal>0?Math.round(wkRun/wkTotal*100):null;
-        const moSetup=monthJobs.reduce((s,j)=>s+j.setupSec,0);
-        const moRun=monthJobs.reduce((s,j)=>s+j.runSec,0);
+        const moSetup=monthJobs.reduce((s,j)=>s+jSetup(j),0);
+        const moRun=monthJobs.reduce((s,j)=>s+jRun(j),0);
         const moTotal=moSetup+moRun+monthDowntime;
         const moEff=moTotal>0?Math.round(moRun/moTotal*100):null;
         const EffLine=({eff,target})=>{
