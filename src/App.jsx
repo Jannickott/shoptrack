@@ -2559,7 +2559,9 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
   const [count,setCount]=useState(6);
   const [entityA,setEntityA]=useState('');
   const [entityB,setEntityB]=useState('');
+  const [showAll,setShowAll]=useState(false);
   const [jobSearch,setJobSearch]=useState('');
+  const [machFilter,setMachFilter]=useState('all');
 
   const jEff=j=>{const t=(j.runSec||0)+(j.setupSec||0);return t>0?Math.round((j.runSec||0)/t*100):null;};
   const avgEff=arr=>{const v=arr.map(j=>jEff(j)).filter(e=>e!==null);return v.length?Math.round(v.reduce((s,e)=>s+e,0)/v.length):null;};
@@ -2593,20 +2595,27 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
     return res;
   };
 
-  const hasB=!!entityB&&mode!=='job';
+  const hasB=!!entityB&&mode!=='job'&&!showAll;
   const buckets=getBuckets();
 
   let chartData=[];
   if(mode==='job'){
     const q=jobSearch.toLowerCase().trim();
     if(q){
-      const matched=done.filter(j=>(j.job||'').toLowerCase().includes(q)||(j.customer||'').toLowerCase().includes(q));
+      const matched=done
+        .filter(j=>(j.job||'').toLowerCase().includes(q)||(j.customer||'').toLowerCase().includes(q))
+        .filter(j=>machFilter==='all'||j.machine===machFilter);
       const byMach={};
       matched.forEach(j=>{if(!byMach[j.machine])byMach[j.machine]=[];byMach[j.machine].push(j);});
       chartData=Object.entries(byMach).sort((a,b)=>b[1].length-a[1].length).map(([mach,mj])=>({
         label:mach,effA:avgEff(mj),countA:mj.length
       }));
     }
+  } else if(showAll){
+    const entities=mode==='machine'?allMachNames:allDepts;
+    const b=buckets[buckets.length-1];
+    const inRange=j=>(j.completedAt||0)>=b.start&&(j.completedAt||0)<b.end;
+    chartData=entities.map(name=>{const ej=entityJobs(name).filter(inRange);return{label:name,effA:avgEff(ej),countA:ej.length};});
   } else if(entityA){
     chartData=buckets.map(b=>{
       const inRange=j=>(j.completedAt||0)>=b.start&&(j.completedAt||0)<b.end;
@@ -2624,9 +2633,9 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
   const barW=Math.min(hasB?grpW*0.34:grpW*0.52,36);
   const yPct=v=>MT+cH*(1-v/100);
   const xCtr=i=>ML+grpW*(i+0.5);
-  const rotLabels=count>8||mode==='job';
+  const rotLabels=count>8||mode==='job'||showAll;
 
-  const showChart=(mode==='job'?jobSearch.trim().length>0:!!entityA)&&chartData.length>0;
+  const showChart=(mode==='job'?jobSearch.trim().length>0:showAll||!!entityA)&&chartData.length>0;
 
   const drawBar=(eff,bx,color,cnt,cntY)=>{
     if(eff===null||eff===undefined) return null;
@@ -2646,7 +2655,7 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
       {/* Mode + period controls */}
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         {[['machine','ti-robot','Machine'],['department','ti-tag','Department'],['job','ti-search','Job / Part']].map(([m,ic,lb])=>(
-          <button key={m} onClick={()=>{setMode(m);setEntityA('');setEntityB('');setJobSearch('');}}
+          <button key={m} onClick={()=>{setMode(m);setEntityA('');setEntityB('');setJobSearch('');setShowAll(false);setMachFilter('all');}}
             style={{padding:'6px 12px',borderRadius:8,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontWeight:mode===m?700:400,
               border:`1px solid ${mode===m?C.blue:C.border}`,background:mode===m?`${C.blue}22`:C.surface,color:mode===m?C.blue:C.muted}}>
             <i className={`ti ${ic}`}/>{lb}
@@ -2671,53 +2680,85 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
 
       {/* Entity pickers */}
       {mode==='machine'&&(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
-          <div>
-            <label style={label}>Machine A <span style={{color:C.blue,fontSize:10}}>●</span></label>
-            <select style={sel()} value={entityA} onChange={e=>setEntityA(e.target.value)}>
-              <option value=''>— Pick a machine —</option>
-              {allMachNames.filter(n=>n!==entityB).map(n=><option key={n}>{n}</option>)}
-            </select>
+        <div style={{marginBottom:14}}>
+          <div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
+            <button onClick={()=>{setShowAll(!showAll);setEntityA('');setEntityB('');}}
+              style={{padding:'5px 12px',borderRadius:7,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontWeight:showAll?700:400,
+                border:`1px solid ${showAll?C.green:C.border}`,background:showAll?`${C.green}22`:C.surface,color:showAll?C.green:C.muted}}>
+              <i className="ti ti-layout-grid"/> All Machines
+            </button>
+            {showAll&&<span style={{fontSize:10,color:C.muted}}>Showing {allMachNames.length} machines · {period==='week'?'this week':period==='month'?'this month':'this year'}</span>}
           </div>
-          <div>
-            <label style={label}>Machine B <span style={{color:C.amber,fontSize:10}}>●</span> <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
-            <select style={sel()} value={entityB} onChange={e=>setEntityB(e.target.value)}>
-              <option value=''>— None (trend only) —</option>
-              {allMachNames.filter(n=>n!==entityA).map(n=><option key={n}>{n}</option>)}
-            </select>
-          </div>
+          {!showAll&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div>
+              <label style={label}>Machine A <span style={{color:C.blue,fontSize:10}}>●</span></label>
+              <select style={sel()} value={entityA} onChange={e=>setEntityA(e.target.value)}>
+                <option value=''>— Pick a machine —</option>
+                {allMachNames.filter(n=>n!==entityB).map(n=><option key={n}>{n}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={label}>Machine B <span style={{color:C.amber,fontSize:10}}>●</span> <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+              <select style={sel()} value={entityB} onChange={e=>setEntityB(e.target.value)}>
+                <option value=''>— None (trend only) —</option>
+                {allMachNames.filter(n=>n!==entityA).map(n=><option key={n}>{n}</option>)}
+              </select>
+            </div>
+          </div>}
         </div>
       )}
       {mode==='department'&&(
-        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,marginBottom:14}}>
-          <div>
-            <label style={label}>Department A <span style={{color:C.blue,fontSize:10}}>●</span></label>
-            <select style={sel()} value={entityA} onChange={e=>setEntityA(e.target.value)}>
-              <option value=''>— Pick a department —</option>
-              {allDepts.filter(d=>d!==entityB).map(d=><option key={d}>{d}</option>)}
-            </select>
+        <div style={{marginBottom:14}}>
+          <div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
+            <button onClick={()=>{setShowAll(!showAll);setEntityA('');setEntityB('');}}
+              style={{padding:'5px 12px',borderRadius:7,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontWeight:showAll?700:400,
+                border:`1px solid ${showAll?C.green:C.border}`,background:showAll?`${C.green}22`:C.surface,color:showAll?C.green:C.muted}}>
+              <i className="ti ti-layout-grid"/> All Departments
+            </button>
+            {showAll&&<span style={{fontSize:10,color:C.muted}}>Showing {allDepts.length} departments · {period==='week'?'this week':period==='month'?'this month':'this year'}</span>}
           </div>
-          <div>
-            <label style={label}>Department B <span style={{color:C.amber,fontSize:10}}>●</span> <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
-            <select style={sel()} value={entityB} onChange={e=>setEntityB(e.target.value)}>
-              <option value=''>— None (trend only) —</option>
-              {allDepts.filter(d=>d!==entityA).map(d=><option key={d}>{d}</option>)}
-            </select>
-          </div>
+          {!showAll&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div>
+              <label style={label}>Department A <span style={{color:C.blue,fontSize:10}}>●</span></label>
+              <select style={sel()} value={entityA} onChange={e=>setEntityA(e.target.value)}>
+                <option value=''>— Pick a department —</option>
+                {allDepts.filter(d=>d!==entityB).map(d=><option key={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={label}>Department B <span style={{color:C.amber,fontSize:10}}>●</span> <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+              <select style={sel()} value={entityB} onChange={e=>setEntityB(e.target.value)}>
+                <option value=''>— None (trend only) —</option>
+                {allDepts.filter(d=>d!==entityA).map(d=><option key={d}>{d}</option>)}
+              </select>
+            </div>
+          </div>}
         </div>
       )}
       {mode==='job'&&(
         <div style={{marginBottom:14}}>
-          <label style={label}>Job number / Part / Customer</label>
-          <div style={{position:'relative'}}>
-            <i className="ti ti-search" style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:C.muted,fontSize:14,pointerEvents:'none'}}/>
-            <input style={{...inp(),paddingLeft:32,fontSize:12}} placeholder="Search job #, part number, customer…"
-              value={jobSearch} onChange={e=>setJobSearch(e.target.value)}/>
-            {jobSearch&&<button onClick={()=>setJobSearch('')} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:14}}><i className="ti ti-x"/></button>}
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,alignItems:'end'}}>
+            <div>
+              <label style={label}>Job number / Part / Customer</label>
+              <div style={{position:'relative'}}>
+                <i className="ti ti-search" style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:C.muted,fontSize:14,pointerEvents:'none'}}/>
+                <input style={{...inp(),paddingLeft:32,fontSize:12}} placeholder="Search job #, part number, customer…"
+                  value={jobSearch} onChange={e=>setJobSearch(e.target.value)}/>
+                {jobSearch&&<button onClick={()=>setJobSearch('')} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:14}}><i className="ti ti-x"/></button>}
+              </div>
+            </div>
+            <div>
+              <label style={label}>Machine</label>
+              <select style={{...sel(),minWidth:130}} value={machFilter} onChange={e=>setMachFilter(e.target.value)}>
+                <option value='all'>All Machines</option>
+                {allMachNames.map(n=><option key={n}>{n}</option>)}
+              </select>
+            </div>
           </div>
           {jobSearch&&(()=>{
-            const c=done.filter(j=>(j.job||'').toLowerCase().includes(jobSearch.toLowerCase())||(j.customer||'').toLowerCase().includes(jobSearch.toLowerCase())).length;
-            return<div style={{fontSize:10,color:C.muted,marginTop:4}}>{c} completed job{c!==1?'s':''} found</div>;
+            const q=jobSearch.toLowerCase();
+            const c=done.filter(j=>((j.job||'').toLowerCase().includes(q)||(j.customer||'').toLowerCase().includes(q))&&(machFilter==='all'||j.machine===machFilter)).length;
+            return<div style={{fontSize:10,color:C.muted,marginTop:6}}>{c} completed job{c!==1?'s':''} found{machFilter!=='all'?` on ${machFilter}`:''}</div>;
           })()}
         </div>
       )}
@@ -2785,7 +2826,7 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
       {/* Job search — table of matching runs */}
       {mode==='job'&&jobSearch&&(()=>{
         const q=jobSearch.toLowerCase();
-        const matched=done.filter(j=>(j.job||'').toLowerCase().includes(q)||(j.customer||'').toLowerCase().includes(q))
+        const matched=done.filter(j=>((j.job||'').toLowerCase().includes(q)||(j.customer||'').toLowerCase().includes(q))&&(machFilter==='all'||j.machine===machFilter))
           .sort((a,b)=>(b.completedAt||0)-(a.completedAt||0));
         if(!matched.length) return <div style={{textAlign:'center',padding:'20px',color:C.muted,fontSize:12}}>No completed jobs match "{jobSearch}".</div>;
         return(
