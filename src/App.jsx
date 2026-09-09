@@ -1843,7 +1843,8 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
   const nowMs=Date.now();
   const yearStr=String(new Date().getFullYear());
   const yearDone=done.filter(j=>j.completedAt&&String(new Date(j.completedAt).getFullYear())===yearStr);
-  const numActiveMachines=Math.max(machines.filter(m=>m.active).length,1);
+  const _hiddenGoalMachines=efficiencyGoals?.hiddenMachines||[];
+  const numActiveMachines=Math.max(machines.filter(m=>m.active&&!_hiddenGoalMachines.includes(m.name)).length,1);
   const availableWorkSec=calcAvailableWorkSec(workHours,yearStartMs,nowMs);
   const totalAvailSec=availableWorkSec*numActiveMachines;
   const yearRunSec=yearDone.reduce((s,j)=>s+(j.runSec||0),0);
@@ -1872,51 +1873,46 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
   const monthDowntime=
     downtimeLog.filter(d=>toDateInput(d.resolvedAt).startsWith(monthStr)).reduce((s,d)=>s+d.downtimeSec,0)+
     Object.values(machineIssues).filter(i=>toDateInput(i.reportedAt).startsWith(monthStr)).reduce((s,i)=>s+Math.round((nowMs-(i.reportedAt||nowMs))/1000),0);
-  // Month start = first day of current month 00:00
+  // Full week capacity: Monday 00:00 → next Monday 00:00 (weekend days contribute 0 via workHours)
+  const weekEnd=new Date(monday); weekEnd.setDate(monday.getDate()+7);
+  const wkTotalAvailSec=calcAvailableWorkSec(workHours,weekStart,weekEnd.getTime())*numActiveMachines;
+  // Full month capacity: first of month → first of next month
   const monthStart=new Date(nowMs); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
-  // Available work seconds for each period × number of machines
-  const wkAvailSec=calcAvailableWorkSec(workHours,weekStart,nowMs)*numActiveMachines;
-  const moAvailSec=calcAvailableWorkSec(workHours,monthStart.getTime(),nowMs)*numActiveMachines;
+  const monthEnd=new Date(monthStart); monthEnd.setMonth(monthStart.getMonth()+1);
+  const moTotalAvailSec=calcAvailableWorkSec(workHours,monthStart.getTime(),monthEnd.getTime())*numActiveMachines;
   return(
     <div style={{padding:"14px 16px"}}>
-      {/* Week + Month donuts with available-capacity idle segment */}
+      {/* Week + Month donuts — full period capacity, run hours only */}
       {(()=>{
         const weekTarget=efficiencyGoals?.week??75;
         const monthTarget=efficiencyGoals?.month??78;
-        const wkSetup=weekJobs.reduce((s,j)=>s+jSetup(j),0);
         const wkRun=weekJobs.reduce((s,j)=>s+jRun(j),0);
-        const wkIdle=Math.max(0,wkAvailSec-wkRun-wkSetup-weekDowntime);
-        // Efficiency = run / available (includes idle time in denominator)
-        const wkEff=wkAvailSec>0?Math.round(wkRun/wkAvailSec*100):null;
-        const moSetup=monthJobs.reduce((s,j)=>s+jSetup(j),0);
+        const wkEff=wkTotalAvailSec>0?Math.round(wkRun/wkTotalAvailSec*100):null;
         const moRun=monthJobs.reduce((s,j)=>s+jRun(j),0);
-        const moIdle=Math.max(0,moAvailSec-moRun-moSetup-monthDowntime);
-        const moEff=moAvailSec>0?Math.round(moRun/moAvailSec*100):null;
-        const segs=(setup,run,down,idle)=>[
-          {label:"Idle",   value:idle,  color:C.border},
-          {label:"Issues", value:down,  color:C.red},
-          {label:"Setup",  value:setup, color:C.amber},
-          {label:"Run",    value:run,   color:C.green},
+        const moEff=moTotalAvailSec>0?Math.round(moRun/moTotalAvailSec*100):null;
+        const segs=(run,total)=>[
+          {label:"Available",value:Math.max(0,total-run),color:C.border},
+          {label:"Run",      value:run,                  color:C.green},
         ];
-        const EffLine=({eff,target,availSec})=>{
+        const EffLine=({eff,target,runSec,totalSec})=>{
           if(eff===null) return null;
           const c=eff>=target?C.green:eff>=target-10?C.amber:C.red;
           return(
             <div style={{marginTop:6,textAlign:"center"}}>
               <span style={{fontSize:18,color:c,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{eff}%</span>
-              <span style={{fontSize:9,color:C.muted,marginLeft:6}}>target {target}% · {fmtHM(availSec)} avail.</span>
+              <span style={{fontSize:9,color:C.muted,marginLeft:6}}>target {target}% · {fmtHM(runSec)} / {fmtHM(totalSec)}</span>
             </div>
           );
         };
         return(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16,background:C.raised,borderRadius:10,padding:"14px 12px",border:`1px solid ${C.border}`}}>
             <div>
-              <DonutChart title="This Week" segments={segs(wkSetup,wkRun,weekDowntime,wkIdle)}/>
-              <EffLine eff={wkEff} target={weekTarget} availSec={wkAvailSec}/>
+              <DonutChart title="This Week" segments={segs(wkRun,wkTotalAvailSec)}/>
+              <EffLine eff={wkEff} target={weekTarget} runSec={wkRun} totalSec={wkTotalAvailSec}/>
             </div>
             <div>
-              <DonutChart title="This Month" segments={segs(moSetup,moRun,monthDowntime,moIdle)}/>
-              <EffLine eff={moEff} target={monthTarget} availSec={moAvailSec}/>
+              <DonutChart title="This Month" segments={segs(moRun,moTotalAvailSec)}/>
+              <EffLine eff={moEff} target={monthTarget} runSec={moRun} totalSec={moTotalAvailSec}/>
             </div>
           </div>
         );
