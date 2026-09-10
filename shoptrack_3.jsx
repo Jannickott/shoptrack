@@ -198,10 +198,10 @@ export default function App(){
     "Turning":["Chuck Name","Chuck Overhang","Clamping Pressure","Zero Point","Workpiece Stop","Spindle Speed","Feed Rate","Coolant Pressure","Tool Offset","Bar Diameter","Chuck Jaw","RPM","Cutting Speed","DOC"],
     "Affolter":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
   };
-  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter"]};
+  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter","MZ"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
-  const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{}});
+  const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{},hiddenMachines:[]});
 
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
@@ -581,8 +581,8 @@ export default function App(){
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
-      {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
-      {tab==="reports"  &&<ReportsTab        jobs={visibleJobs}/>}
+      {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
+      {tab==="reports"  &&<ReportsTab        jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals}/>}
@@ -1843,7 +1843,8 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
   const nowMs=Date.now();
   const yearStr=String(new Date().getFullYear());
   const yearDone=done.filter(j=>j.completedAt&&String(new Date(j.completedAt).getFullYear())===yearStr);
-  const numActiveMachines=Math.max(machines.filter(m=>m.active).length,1);
+  const _hiddenGoalMachines=efficiencyGoals?.hiddenMachines||[];
+  const numActiveMachines=Math.max(machines.filter(m=>m.active&&!_hiddenGoalMachines.includes(m.name)).length,1);
   const availableWorkSec=calcAvailableWorkSec(workHours,yearStartMs,nowMs);
   const totalAvailSec=availableWorkSec*numActiveMachines;
   const yearRunSec=yearDone.reduce((s,j)=>s+(j.runSec||0),0);
@@ -1872,44 +1873,50 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
   const monthDowntime=
     downtimeLog.filter(d=>toDateInput(d.resolvedAt).startsWith(monthStr)).reduce((s,d)=>s+d.downtimeSec,0)+
     Object.values(machineIssues).filter(i=>toDateInput(i.reportedAt).startsWith(monthStr)).reduce((s,i)=>s+Math.round((nowMs-(i.reportedAt||nowMs))/1000),0);
-  const chartSegs=(setup,run,down)=>[
-    {label:"Issues",  value:down,  color:C.red},
-    {label:"Setup",   value:setup, color:C.amber},
-    {label:"Run",     value:run,   color:C.green},
-  ];
+  // Full week capacity: Monday 00:00 → next Monday 00:00 (weekend days contribute 0 via workHours)
+  const weekEnd=new Date(monday); weekEnd.setDate(monday.getDate()+7);
+  const wkTotalAvailSec=calcAvailableWorkSec(workHours,weekStart,weekEnd.getTime())*numActiveMachines;
+  // Full month capacity: first of month → first of next month
+  const monthStart=new Date(nowMs); monthStart.setDate(1); monthStart.setHours(0,0,0,0);
+  const monthEnd=new Date(monthStart); monthEnd.setMonth(monthStart.getMonth()+1);
+  const moTotalAvailSec=calcAvailableWorkSec(workHours,monthStart.getTime(),monthEnd.getTime())*numActiveMachines;
   return(
     <div style={{padding:"14px 16px"}}>
-      {/* Week + Month donuts with efficiency target markers */}
+      {/* Week + Month donuts — full period capacity, run hours only */}
       {(()=>{
         const weekTarget=efficiencyGoals?.week??75;
         const monthTarget=efficiencyGoals?.month??78;
         const wkSetup=weekJobs.reduce((s,j)=>s+jSetup(j),0);
         const wkRun=weekJobs.reduce((s,j)=>s+jRun(j),0);
-        const wkTotal=wkSetup+wkRun+weekDowntime;
-        const wkEff=wkTotal>0?Math.round(wkRun/wkTotal*100):null;
+        const wkEff=wkTotalAvailSec>0?Math.round(wkRun/wkTotalAvailSec*100):null;
         const moSetup=monthJobs.reduce((s,j)=>s+jSetup(j),0);
         const moRun=monthJobs.reduce((s,j)=>s+jRun(j),0);
-        const moTotal=moSetup+moRun+monthDowntime;
-        const moEff=moTotal>0?Math.round(moRun/moTotal*100):null;
-        const EffLine=({eff,target})=>{
+        const moEff=moTotalAvailSec>0?Math.round(moRun/moTotalAvailSec*100):null;
+        const segs=(run,setup,down,total)=>[
+          {label:"Available",value:Math.max(0,total-run-setup-down),color:C.border},
+          {label:"Issues",   value:down,                             color:C.red},
+          {label:"Setup",    value:setup,                            color:C.amber},
+          {label:"Run",      value:run,                              color:C.green},
+        ];
+        const EffLine=({eff,target,runSec,totalSec})=>{
           if(eff===null) return null;
           const c=eff>=target?C.green:eff>=target-10?C.amber:C.red;
           return(
             <div style={{marginTop:6,textAlign:"center"}}>
               <span style={{fontSize:18,color:c,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{eff}%</span>
-              <span style={{fontSize:9,color:C.muted,marginLeft:6}}>target {target}%</span>
+              <span style={{fontSize:9,color:C.muted,marginLeft:6}}>target {target}% · {fmtHM(runSec)} / {fmtHM(totalSec)}</span>
             </div>
           );
         };
         return(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,marginBottom:16,background:C.raised,borderRadius:10,padding:"14px 12px",border:`1px solid ${C.border}`}}>
             <div>
-              <DonutChart title="This Week" segments={chartSegs(wkSetup,wkRun,weekDowntime)}/>
-              <EffLine eff={wkEff} target={weekTarget}/>
+              <DonutChart title="This Week" segments={segs(wkRun,wkSetup,weekDowntime,wkTotalAvailSec)}/>
+              <EffLine eff={wkEff} target={weekTarget} runSec={wkRun} totalSec={wkTotalAvailSec}/>
             </div>
             <div>
-              <DonutChart title="This Month" segments={chartSegs(moSetup,moRun,monthDowntime)}/>
-              <EffLine eff={moEff} target={monthTarget}/>
+              <DonutChart title="This Month" segments={segs(moRun,moSetup,monthDowntime,moTotalAvailSec)}/>
+              <EffLine eff={moEff} target={monthTarget} runSec={moRun} totalSec={moTotalAvailSec}/>
             </div>
           </div>
         );
@@ -2540,55 +2547,314 @@ function ResolvedIssueCard({entry,setDowntimeLog,saveNow}){
 // ═══════════════════════════════════════════════════════
 // REPORTS — date range + filters + export
 // ═══════════════════════════════════════════════════════
-function ReportsTab({jobs}){
-  const today=toDateInput(Date.now());
-  const [from,setFrom]=useState(""); const [to,setTo]=useState("");
-  const [opF,setOpF]=useState("all"); const [machF,setMachF]=useState("all");
-  const allDone=jobs.filter(j=>j.status==="done");
-  const ops=[...new Set(allDone.map(j=>j.operatorName))];
-  const machs=[...new Set(allDone.map(j=>j.machine))];
-  const filtered=allDone.filter(j=>{
-    if(from&&j.completedAt<new Date(from).getTime()) return false;
-    if(to  &&j.completedAt>new Date(to).getTime()+86399999) return false;
-    if(opF !=="all"&&j.operatorName!==opF) return false;
-    if(machF!=="all"&&j.machine!==machF) return false;
-    return true;
-  });
-  const totalSetup=filtered.reduce((s,j)=>s+j.setupSec,0);
-  const totalRun  =filtered.reduce((s,j)=>s+j.runSec,0);
-  const totalPcs  =filtered.reduce((s,j)=>s+j.pieces,0);
+function ReportsTab({jobs,machines,departments,efficiencyGoals}){
+  const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const done=jobs.filter(j=>j.status==='done');
+  const allMachNames=[...new Set([...machines.filter(m=>m.active).map(m=>m.name),...done.map(j=>j.machine)])].sort();
+  const allDepts=departments||[];
+  const targetEff=efficiencyGoals?.overall??80;
+
+  const [mode,setMode]=useState('machine');
+  const [period,setPeriod]=useState('month');
+  const [count,setCount]=useState(6);
+  const [entityA,setEntityA]=useState('');
+  const [entityB,setEntityB]=useState('');
+  const [showAll,setShowAll]=useState(false);
+  const [jobSearch,setJobSearch]=useState('');
+  const [machFilter,setMachFilter]=useState('all');
+
+  const jEff=j=>{const t=(j.runSec||0)+(j.setupSec||0);return t>0?Math.round((j.runSec||0)/t*100):null;};
+  const avgEff=arr=>{const v=arr.map(j=>jEff(j)).filter(e=>e!==null);return v.length?Math.round(v.reduce((s,e)=>s+e,0)/v.length):null;};
+
+  const entityJobs=name=>{
+    if(mode==='machine') return done.filter(j=>j.machine===name);
+    const ms=machines.filter(m=>m.department===name).map(m=>m.name);
+    return done.filter(j=>ms.includes(j.machine));
+  };
+
+  const getBuckets=()=>{
+    const now=new Date(); const res=[];
+    for(let i=count-1;i>=0;i--){
+      let start,end,label;
+      if(period==='week'){
+        const mon=new Date(now); mon.setDate(now.getDate()-((now.getDay()+6)%7)-i*7); mon.setHours(0,0,0,0);
+        const nxt=new Date(mon); nxt.setDate(mon.getDate()+7);
+        start=mon.getTime(); end=nxt.getTime();
+        label=`${mon.getDate()}/${mon.getMonth()+1}`;
+      } else if(period==='month'){
+        const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+        const nxt=new Date(d.getFullYear(),d.getMonth()+1,1);
+        start=d.getTime(); end=nxt.getTime();
+        label=MONTHS[d.getMonth()]+(d.getMonth()===0||i===count-1?` '${String(d.getFullYear()).slice(2)}`:'');
+      } else {
+        const yr=now.getFullYear()-i;
+        start=new Date(yr,0,1).getTime(); end=new Date(yr+1,0,1).getTime(); label=String(yr);
+      }
+      res.push({start,end,label});
+    }
+    return res;
+  };
+
+  const hasB=!!entityB&&mode!=='job'&&!showAll;
+  const buckets=getBuckets();
+
+  let chartData=[];
+  if(mode==='job'){
+    const q=jobSearch.toLowerCase().trim();
+    if(q){
+      const matched=done
+        .filter(j=>(j.job||'').toLowerCase().includes(q)||(j.customer||'').toLowerCase().includes(q))
+        .filter(j=>machFilter==='all'||j.machine===machFilter);
+      const byMach={};
+      matched.forEach(j=>{if(!byMach[j.machine])byMach[j.machine]=[];byMach[j.machine].push(j);});
+      chartData=Object.entries(byMach).sort((a,b)=>b[1].length-a[1].length).map(([mach,mj])=>({
+        label:mach,effA:avgEff(mj),countA:mj.length
+      }));
+    }
+  } else if(showAll){
+    const entities=mode==='machine'?allMachNames:allDepts;
+    const b=buckets[buckets.length-1];
+    const inRange=j=>(j.completedAt||0)>=b.start&&(j.completedAt||0)<b.end;
+    chartData=entities.map(name=>{const ej=entityJobs(name).filter(inRange);return{label:name,effA:avgEff(ej),countA:ej.length};});
+  } else if(entityA){
+    chartData=buckets.map(b=>{
+      const inRange=j=>(j.completedAt||0)>=b.start&&(j.completedAt||0)<b.end;
+      const ajA=entityJobs(entityA).filter(inRange);
+      const ajB=entityB?entityJobs(entityB).filter(inRange):[];
+      return{label:b.label,effA:avgEff(ajA),effB:entityB?avgEff(ajB):undefined,countA:ajA.length,countB:ajB.length};
+    });
+  }
+
+  // SVG chart dimensions
+  const W=560,H=220,ML=42,MT=14,MR=52,MB=50;
+  const cW=W-ML-MR, cH=H-MT-MB;
+  const n=Math.max(chartData.length,1);
+  const grpW=cW/n;
+  const barW=Math.min(hasB?grpW*0.34:grpW*0.52,36);
+  const yPct=v=>MT+cH*(1-v/100);
+  const xCtr=i=>ML+grpW*(i+0.5);
+  const rotLabels=count>8||mode==='job'||showAll;
+
+  const showChart=(mode==='job'?jobSearch.trim().length>0:showAll||!!entityA)&&chartData.length>0;
+
+  const drawBar=(eff,bx,color,cnt,cntY)=>{
+    if(eff===null||eff===undefined) return null;
+    const bh=Math.max(cH*(eff/100),2); const by=MT+cH-bh;
+    const inside=bh>18;
+    return(
+      <g>
+        <rect x={bx-barW/2} y={by} width={barW} height={bh} fill={color} fillOpacity={0.88} rx={2}/>
+        <text x={bx} y={inside?by+bh/2+3.5:by-3} textAnchor="middle" fontSize={9} fill={inside?"white":color} fontWeight="700">{eff}%</text>
+        {cnt>0&&<text x={bx} y={cntY} textAnchor="middle" fontSize={7} fill={C.muted}>{cnt}</text>}
+      </g>
+    );
+  };
+
   return(
-    <div style={{padding:"14px 16px"}}>
-      {/* Filter card */}
-      <div style={{...card(),border:`1px solid ${C.amber}`,marginBottom:16}}>
-        <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}><i className="ti ti-filter"/> Filter &amp; Export</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
-          <div><label style={label}>From Date</label><input type="date" style={{...inp(),fontSize:12}} value={from} max={today} onChange={e=>setFrom(e.target.value)}/></div>
-          <div><label style={label}>To Date</label><input type="date" style={{...inp(),fontSize:12}} value={to} max={today} onChange={e=>setTo(e.target.value)}/></div>
-        </div>
-        <div style={{marginBottom:10}}><label style={label}>Operator</label><select style={sel()} value={opF} onChange={e=>setOpF(e.target.value)}><option value="all">All Operators</option>{ops.map(o=><option key={o}>{o}</option>)}</select></div>
-        <div style={{marginBottom:14}}><label style={label}>Machine</label><select style={sel()} value={machF} onChange={e=>setMachF(e.target.value)}><option value="all">All Machines</option>{machs.map(m=><option key={m}>{m}</option>)}</select></div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
-          <button style={btn("primary",true)} onClick={()=>exportCSV(filtered,from,to)} disabled={!filtered.length}>
-            <i className="ti ti-download"/> Export {filtered.length} Jobs to CSV
+    <div style={{padding:'14px 16px'}}>
+      {/* Mode + period controls */}
+      <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
+        {[['machine','ti-robot','Machine'],['department','ti-tag','Department'],['job','ti-search','Job / Part']].map(([m,ic,lb])=>(
+          <button key={m} onClick={()=>{setMode(m);setEntityA('');setEntityB('');setJobSearch('');setShowAll(false);setMachFilter('all');}}
+            style={{padding:'6px 12px',borderRadius:8,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontWeight:mode===m?700:400,
+              border:`1px solid ${mode===m?C.blue:C.border}`,background:mode===m?`${C.blue}22`:C.surface,color:mode===m?C.blue:C.muted}}>
+            <i className={`ti ${ic}`}/>{lb}
           </button>
-          {(from||to||opF!=="all"||machF!=="all")&&<button style={btn("outline",false,true)} onClick={()=>{setFrom("");setTo("");setOpF("all");setMachF("all");}}>Clear</button>}
-        </div>
-      </div>
-      {/* Summary */}
-      {filtered.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:16}}>
-        {[[filtered.length,"Jobs",C.amber],[(totalPcs),"Pieces",C.text],[(totalRun/60).toFixed(0)+"m","Total Run",C.green]].map(([v,l,c])=>(
-          <div key={l} style={{...statBox,padding:10}}><div style={{fontSize:20,color:c,fontFamily:"'Share Tech Mono',monospace"}}>{v}</div><div style={{fontSize:9,letterSpacing:2,color:C.muted,textTransform:"uppercase",marginTop:4}}>{l}</div></div>
         ))}
-      </div>}
-      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>
-        Log {filtered.length!==allDone.length?`(${filtered.length} of ${allDone.length})`:""}
+        <div style={{flex:1}}/>
+        {mode!=='job'&&(
+          <div style={{display:'flex',gap:4,alignItems:'center',flexWrap:'wrap'}}>
+            {['week','month','year'].map(p=>(
+              <button key={p} onClick={()=>setPeriod(p)}
+                style={{padding:'4px 9px',borderRadius:6,fontSize:10,cursor:'pointer',fontWeight:period===p?700:400,
+                  border:`1px solid ${period===p?C.amber:C.border}`,background:period===p?`${C.amber}22`:C.surface,color:period===p?C.amber:C.muted}}>
+                {p==='week'?'Week':p==='month'?'Month':'Year'}
+              </button>
+            ))}
+            <select style={{...sel(),fontSize:10,padding:'4px 6px'}} value={count} onChange={e=>setCount(Number(e.target.value))}>
+              {[4,6,8,12,24].map(v=><option key={v} value={v}>Last {v}</option>)}
+            </select>
+          </div>
+        )}
       </div>
-      {!filtered.length?<div style={{textAlign:"center",padding:"30px 16px",color:C.muted,fontSize:12}}><i className="ti ti-calendar-off" style={{fontSize:28,display:"block",marginBottom:10,opacity:0.3}}/>No jobs match filters.</div>
-        :<div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
-          <thead><tr>{["Job","Machine","Operator","Type","Setup","Run","Deburr","Per Piece","Pcs","Photo","Date"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
-          <tbody>{filtered.map(j=><tr key={j.id}><td style={td}>{j.job}{j.twoSided&&<span style={{marginLeft:4,fontSize:9,color:C.blue}}><i className="ti ti-layers-intersect"/></span>}</td><td style={td}>{j.machine}</td><td style={td}>{j.operatorName}</td><td style={td}><span style={{...badge(j.quickEntry?"admin":"run"),fontSize:9}}>{j.quickEntry?"Quick":"Timed"}</span></td><td style={{...td,color:C.amber}}>{fmtHM(j.setupSec)}</td><td style={{...td,color:C.green}}>{fmtHM(j.runSec)}</td><td style={{...td,color:C.deburr}}>{j.deburSec>0?fmtHM(j.deburSec):"-"}</td><td style={{...td,color:C.blue}}>{j.pieces>0?fmtDetail(Math.round((j.setupSec+j.runSec)/j.pieces)):"-"}</td><td style={td}>{j.pieces}</td><td style={td}>{j.twoSided?<span style={{color:j.photoData&&j.photoData2?C.green:C.red}}>{j.photoData&&j.photoData2?"✓✓":"✗"}</span>:(j.photoData?<span style={{color:C.green}}>✓</span>:<span style={{color:C.red}}>✗</span>)}</td><td style={{...td,color:C.muted,fontSize:10}}>{fmtDate(j.completedAt)}</td></tr>)}</tbody>
-        </table></div>}
+
+      {/* Entity pickers */}
+      {mode==='machine'&&(
+        <div style={{marginBottom:14}}>
+          <div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
+            <button onClick={()=>{setShowAll(!showAll);setEntityA('');setEntityB('');}}
+              style={{padding:'5px 12px',borderRadius:7,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontWeight:showAll?700:400,
+                border:`1px solid ${showAll?C.green:C.border}`,background:showAll?`${C.green}22`:C.surface,color:showAll?C.green:C.muted}}>
+              <i className="ti ti-layout-grid"/> All Machines
+            </button>
+            {showAll&&<span style={{fontSize:10,color:C.muted}}>Showing {allMachNames.length} machines · {period==='week'?'this week':period==='month'?'this month':'this year'}</span>}
+          </div>
+          {!showAll&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div>
+              <label style={label}>Machine A <span style={{color:C.blue,fontSize:10}}>●</span></label>
+              <select style={sel()} value={entityA} onChange={e=>setEntityA(e.target.value)}>
+                <option value=''>— Pick a machine —</option>
+                {allMachNames.filter(n=>n!==entityB).map(n=><option key={n}>{n}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={label}>Machine B <span style={{color:C.amber,fontSize:10}}>●</span> <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+              <select style={sel()} value={entityB} onChange={e=>setEntityB(e.target.value)}>
+                <option value=''>— None (trend only) —</option>
+                {allMachNames.filter(n=>n!==entityA).map(n=><option key={n}>{n}</option>)}
+              </select>
+            </div>
+          </div>}
+        </div>
+      )}
+      {mode==='department'&&(
+        <div style={{marginBottom:14}}>
+          <div style={{display:'flex',gap:6,marginBottom:8,alignItems:'center'}}>
+            <button onClick={()=>{setShowAll(!showAll);setEntityA('');setEntityB('');}}
+              style={{padding:'5px 12px',borderRadius:7,fontSize:11,cursor:'pointer',display:'flex',alignItems:'center',gap:5,fontWeight:showAll?700:400,
+                border:`1px solid ${showAll?C.green:C.border}`,background:showAll?`${C.green}22`:C.surface,color:showAll?C.green:C.muted}}>
+              <i className="ti ti-layout-grid"/> All Departments
+            </button>
+            {showAll&&<span style={{fontSize:10,color:C.muted}}>Showing {allDepts.length} departments · {period==='week'?'this week':period==='month'?'this month':'this year'}</span>}
+          </div>
+          {!showAll&&<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            <div>
+              <label style={label}>Department A <span style={{color:C.blue,fontSize:10}}>●</span></label>
+              <select style={sel()} value={entityA} onChange={e=>setEntityA(e.target.value)}>
+                <option value=''>— Pick a department —</option>
+                {allDepts.filter(d=>d!==entityB).map(d=><option key={d}>{d}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={label}>Department B <span style={{color:C.amber,fontSize:10}}>●</span> <span style={{color:C.muted,fontWeight:400}}>(optional)</span></label>
+              <select style={sel()} value={entityB} onChange={e=>setEntityB(e.target.value)}>
+                <option value=''>— None (trend only) —</option>
+                {allDepts.filter(d=>d!==entityA).map(d=><option key={d}>{d}</option>)}
+              </select>
+            </div>
+          </div>}
+        </div>
+      )}
+      {mode==='job'&&(
+        <div style={{marginBottom:14}}>
+          <div style={{display:'grid',gridTemplateColumns:'1fr auto',gap:10,alignItems:'end'}}>
+            <div>
+              <label style={label}>Job number / Part / Customer</label>
+              <div style={{position:'relative'}}>
+                <i className="ti ti-search" style={{position:'absolute',left:10,top:'50%',transform:'translateY(-50%)',color:C.muted,fontSize:14,pointerEvents:'none'}}/>
+                <input style={{...inp(),paddingLeft:32,fontSize:12}} placeholder="Search job #, part number, customer…"
+                  value={jobSearch} onChange={e=>setJobSearch(e.target.value)}/>
+                {jobSearch&&<button onClick={()=>setJobSearch('')} style={{position:'absolute',right:8,top:'50%',transform:'translateY(-50%)',background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:14}}><i className="ti ti-x"/></button>}
+              </div>
+            </div>
+            <div>
+              <label style={label}>Machine</label>
+              <select style={{...sel(),minWidth:130}} value={machFilter} onChange={e=>setMachFilter(e.target.value)}>
+                <option value='all'>All Machines</option>
+                {allMachNames.map(n=><option key={n}>{n}</option>)}
+              </select>
+            </div>
+          </div>
+          {jobSearch&&(()=>{
+            const q=jobSearch.toLowerCase();
+            const c=done.filter(j=>((j.job||'').toLowerCase().includes(q)||(j.customer||'').toLowerCase().includes(q))&&(machFilter==='all'||j.machine===machFilter)).length;
+            return<div style={{fontSize:10,color:C.muted,marginTop:6}}>{c} completed job{c!==1?'s':''} found{machFilter!=='all'?` on ${machFilter}`:''}</div>;
+          })()}
+        </div>
+      )}
+
+      {/* Chart */}
+      {showChart?(
+        <div style={{...card(),padding:'14px 10px',marginBottom:16}}>
+          <svg viewBox={`0 0 ${W} ${H}`} style={{width:'100%',height:'auto',display:'block'}} xmlns="http://www.w3.org/2000/svg">
+            {[0,20,40,60,80,100].map(v=>(
+              <g key={v}>
+                <line x1={ML} x2={ML+cW} y1={yPct(v)} y2={yPct(v)} stroke={C.border} strokeWidth={v===0?1:0.5} strokeOpacity={0.6}/>
+                <text x={ML-4} y={yPct(v)+3.5} textAnchor="end" fontSize={9} fill={C.muted}>{v}%</text>
+              </g>
+            ))}
+            {targetEff>0&&targetEff<100&&(
+              <g>
+                <line x1={ML} x2={ML+cW} y1={yPct(targetEff)} y2={yPct(targetEff)} stroke={C.green} strokeWidth={1.2} strokeDasharray="5,3" strokeOpacity={0.8}/>
+                <text x={ML+cW+3} y={yPct(targetEff)+3.5} fontSize={8} fill={C.green} fontWeight="600">target {targetEff}%</text>
+              </g>
+            )}
+            {chartData.map((d,i)=>{
+              const cx=xCtr(i);
+              const bxA=hasB?cx-barW*0.58:cx;
+              const bxB=cx+barW*0.58;
+              const cntY=MT+cH+(rotLabels?40:30);
+              const lblY=MT+cH+(rotLabels?14:16);
+              return(
+                <g key={i}>
+                  {drawBar(d.effA,bxA,C.blue,d.countA,cntY)}
+                  {hasB&&drawBar(d.effB,bxB,C.amber,d.countB,cntY+8)}
+                  {rotLabels
+                    ?<text x={cx} y={MT+cH+8} textAnchor="end" fontSize={8} fill={C.muted} transform={`rotate(-35,${cx},${MT+cH+8})`}>{d.label}</text>
+                    :<text x={cx} y={lblY} textAnchor="middle" fontSize={9} fill={C.muted}>{d.label}</text>
+                  }
+                </g>
+              );
+            })}
+            <line x1={ML} x2={ML} y1={MT} y2={MT+cH} stroke={C.border} strokeWidth={1}/>
+            <line x1={ML} x2={ML+cW} y1={MT+cH} y2={MT+cH} stroke={C.border} strokeWidth={1}/>
+          </svg>
+          <div style={{display:'flex',gap:14,justifyContent:'center',marginTop:8,flexWrap:'wrap'}}>
+            {mode==='job'
+              ?<span style={{fontSize:10,color:C.muted,display:'flex',alignItems:'center',gap:5}}><span style={{width:10,height:10,borderRadius:2,background:C.blue,display:'inline-block'}}/>Avg efficiency per machine · "{jobSearch}"</span>
+              :<>
+                {entityA&&<span style={{fontSize:10,color:C.blue,display:'flex',alignItems:'center',gap:5,fontWeight:600}}><span style={{width:10,height:10,borderRadius:2,background:C.blue,display:'inline-block'}}/>{entityA}</span>}
+                {entityB&&<span style={{fontSize:10,color:C.amber,display:'flex',alignItems:'center',gap:5,fontWeight:600}}><span style={{width:10,height:10,borderRadius:2,background:C.amber,display:'inline-block'}}/>{entityB}</span>}
+              </>
+            }
+            <span style={{fontSize:10,color:C.green,display:'flex',alignItems:'center',gap:5}}>
+              <span style={{width:14,height:2,background:C.green,display:'inline-block'}}/> Target {targetEff}%
+            </span>
+          </div>
+        </div>
+      ):(
+        <div style={{...card(),textAlign:'center',padding:'36px 16px',color:C.muted,marginBottom:16}}>
+          <i className="ti ti-chart-bar" style={{fontSize:36,display:'block',marginBottom:10,opacity:0.2}}/>
+          <div style={{fontSize:12}}>
+            {mode==='machine'?'Select a machine above to see its efficiency trend'
+             :mode==='department'?'Select a department above to see its efficiency trend'
+             :'Search a job number, part, or customer to compare efficiency across machines'}
+          </div>
+        </div>
+      )}
+
+      {/* Job search — table of matching runs */}
+      {mode==='job'&&jobSearch&&(()=>{
+        const q=jobSearch.toLowerCase();
+        const matched=done.filter(j=>((j.job||'').toLowerCase().includes(q)||(j.customer||'').toLowerCase().includes(q))&&(machFilter==='all'||j.machine===machFilter))
+          .sort((a,b)=>(b.completedAt||0)-(a.completedAt||0));
+        if(!matched.length) return <div style={{textAlign:'center',padding:'20px',color:C.muted,fontSize:12}}>No completed jobs match "{jobSearch}".</div>;
+        return(
+          <div>
+            <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:'uppercase',marginBottom:8}}><i className="ti ti-list"/> {matched.length} Matching Runs</div>
+            <div style={{overflowX:'auto'}}>
+              <table style={{width:'100%',borderCollapse:'collapse',fontSize:11}}>
+                <thead><tr>{['Job','Machine','Operator','Setup','Run','Eff %','Date'].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+                <tbody>{matched.map(j=>{
+                  const e=jEff(j);
+                  const ec=e===null?C.muted:e>=targetEff?C.green:e>=targetEff-10?C.amber:C.red;
+                  return(
+                    <tr key={j.id}>
+                      <td style={td}>{j.job}</td>
+                      <td style={td}>{j.machine}</td>
+                      <td style={td}>{j.operatorName}</td>
+                      <td style={{...td,color:C.amber}}>{fmtHM(j.setupSec)}</td>
+                      <td style={{...td,color:C.green}}>{fmtHM(j.runSec)}</td>
+                      <td style={{...td,color:ec,fontWeight:700}}>{e!==null?e+'%':'—'}</td>
+                      <td style={{...td,color:C.muted,fontSize:10}}>{fmtDate(j.completedAt)}</td>
+                    </tr>
+                  );
+                })}</tbody>
+              </table>
+            </div>
+          </div>
+        );
+      })()}
     </div>
   );
 }
@@ -2596,14 +2862,15 @@ function ReportsTab({jobs}){
 // ═══════════════════════════════════════════════════════
 // MACHINE DATA TAB
 // ═══════════════════════════════════════════════════════
-function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals,workHours}){
+function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals,workHours,clock}){
   const [selected,setSelected]=useState(null);
   const [search,setSearch]=useState("");
 
+  const _hiddenMachines=efficiencyGoals?.hiddenMachines||[];
   const allMachineNames=[...new Set([
     ...machines.filter(m=>m.active).map(m=>m.name),
     ...jobs.map(j=>j.machine),
-  ])].sort();
+  ])].filter(n=>!_hiddenMachines.includes(n)).sort();
 
   // Per-machine aggregate stats — downtime from timestamps, always accurate
   const now=Date.now();
@@ -2621,10 +2888,10 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
     const activeDown=activeIssue?Math.round((now-(activeIssue.reportedAt||now))/1000):0;
     const machDef=machines.find(m=>m.name===name);
     const weeklyTargetSec=(machDef?.weeklyTargetHours||0)*3600;
-    const weekRunSec=weekJobs.reduce((s,j)=>s+(j.runSec||0),0);
+    const weekRunSec=weekJobs.reduce((s,j)=>{const lt=liveTime(j);return s+lt.run+lt.run2;},0);
     machStats[name]={
-      setupSec:mj.reduce((s,j)=>s+(j.setupSec||0),0),
-      runSec:mj.reduce((s,j)=>s+(j.runSec||0),0),
+      setupSec:mj.reduce((s,j)=>{const lt=liveTime(j);return s+lt.setup+lt.setup2;},0),
+      runSec:mj.reduce((s,j)=>{const lt=liveTime(j);return s+lt.run+lt.run2;},0),
       weekRunSec,
       weeklyTargetSec,
       downtimeSec:logDown+activeDown,
@@ -3338,6 +3605,15 @@ function ManageEfficiencyGoals({efficiencyGoals,setEfficiencyGoals,machines,depa
     setEfficiencyGoals(prev=>{const d={...prev.departments};if(n===undefined)delete d[name];else d[name]=n;return{...prev,departments:d};});
     saveNow&&saveNow();
   };
+  const toggleHideMachine=(name)=>{
+    setEfficiencyGoals(prev=>{
+      const hidden=prev.hiddenMachines||[];
+      const next=hidden.includes(name)?hidden.filter(n=>n!==name):[...hidden,name];
+      return{...prev,hiddenMachines:next};
+    });
+    saveNow&&saveNow();
+  };
+  const hiddenMachines=goals.hiddenMachines||[];
 
   const PeriodSlider=({label,icon,colorKey,goalKey,hint})=>{
     const val=goals[goalKey]??80;
@@ -3365,25 +3641,28 @@ function ManageEfficiencyGoals({efficiencyGoals,setEfficiencyGoals,machines,depa
     );
   };
 
-  const OverrideRow=({icon,iconColor,name,val,defaultVal,onChange,onClear})=>(
-    <div style={{...card(),marginBottom:6}}>
+  const OverrideRow=({icon,iconColor,name,val,defaultVal,onChange,onClear,hidden,onToggleHide})=>(
+    <div style={{...card(),marginBottom:6,opacity:hidden?0.45:1}}>
       <div style={{display:"flex",alignItems:"center",gap:10}}>
-        <i className={`ti ${icon}`} style={{color:iconColor,flexShrink:0,fontSize:16}}/>
+        <i className={`ti ${icon}`} style={{color:hidden?C.muted:iconColor,flexShrink:0,fontSize:16}}/>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:13,color:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{name}</div>
-          <div style={{fontSize:9,color:val!==undefined?iconColor:C.muted,letterSpacing:1}}>
-            {val!==undefined?`Custom: ${val}%`:`Default (${defaultVal}%)`}
+          <div style={{fontSize:13,color:hidden?C.muted:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap",textDecoration:hidden?"line-through":"none"}}>{name}</div>
+          <div style={{fontSize:9,color:hidden?C.muted:val!==undefined?iconColor:C.muted,letterSpacing:1}}>
+            {hidden?"Hidden from data views":val!==undefined?`Custom: ${val}%`:`Default (${defaultVal}%)`}
           </div>
-          <div style={{height:4,background:C.border,borderRadius:2,marginTop:4,overflow:"hidden"}}>
+          {!hidden&&<div style={{height:4,background:C.border,borderRadius:2,marginTop:4,overflow:"hidden"}}>
             <div style={{height:"100%",width:`${val!==undefined?val:defaultVal}%`,background:val!==undefined?iconColor:C.muted,borderRadius:2,transition:"width .3s"}}/>
-          </div>
+          </div>}
         </div>
         <div style={{display:"flex",alignItems:"center",gap:6,flexShrink:0}}>
-          <input type="number" min="0" max="100" placeholder={String(defaultVal)} value={val!==undefined?val:""}
+          {!hidden&&<><input type="number" min="0" max="100" placeholder={String(defaultVal)} value={val!==undefined?val:""}
             onChange={e=>onChange(e.target.value)}
             style={{...inp(),width:60,fontSize:18,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",color:iconColor,padding:"4px 6px"}}/>
           <span style={{fontSize:12,color:C.muted}}>%</span>
-          {val!==undefined&&<button style={{...btn("danger",false,true),padding:"4px 8px"}} title="Reset to default" onClick={onClear}><i className="ti ti-rotate-2"/></button>}
+          {val!==undefined&&<button style={{...btn("danger",false,true),padding:"4px 8px"}} title="Reset to default" onClick={onClear}><i className="ti ti-rotate-2"/></button>}</>}
+          {onToggleHide&&<button style={{...btn(hidden?"success":"secondary",false,true),padding:"4px 8px"}} title={hidden?"Show in data":"Hide from data"} onClick={onToggleHide}>
+            <i className={`ti ${hidden?"ti-eye":"ti-eye-off"}`}/>
+          </button>}
         </div>
       </div>
     </div>
@@ -3408,7 +3687,8 @@ function ManageEfficiencyGoals({efficiencyGoals,setEfficiencyGoals,machines,depa
           {machines.filter(m=>m.active).map(m=>(
             <OverrideRow key={m.id} icon="ti-robot" iconColor={C.amber} name={m.name}
               val={goals.machines[m.name]} defaultVal={goals.overall}
-              onChange={v=>setMachineGoal(m.name,v)} onClear={()=>setMachineGoal(m.name,"")}/>
+              onChange={v=>setMachineGoal(m.name,v)} onClear={()=>setMachineGoal(m.name,"")}
+              hidden={hiddenMachines.includes(m.name)} onToggleHide={()=>toggleHideMachine(m.name)}/>
           ))}
         </div>
       )}
@@ -5007,7 +5287,42 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
       {!sheet.subDepartment&&filledTools.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Main</div>{renderToolList(filledTools,C.amber)}</div>}
       {filledTools2.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.blue,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Sub</div>{renderToolList(filledTools2,C.blue)}</div>}
       {filledTools3.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — 3rd</div>{renderToolList(filledTools3,C.green)}</div>}
-      {params.length>0&&(
+      {sheet.subDepartment==="MZ"&&(()=>{
+        const mz=sheet.mzSetup||{};
+        const bool=v=>(v===true||v==="Ja")?"Ja":"Nej";
+        const items=[
+          ["Forlænger",mz.fraesForlaenger||null],
+          ["Fræser Mn",mz.fraesMn||null],
+          ["Stop Ø",mz.stopDia||null],
+          ["Tang tryk",mz.tangTryk!=null&&mz.tangTryk!==""?String(mz.tangTryk):null],
+          ["Værktøj i tang",mz.vaerktoejITang!=null?bool(mz.vaerktoejITang):null],
+          ["Tang nr.",mz.tangNummer||null],
+          ["Tang form",mz.tangForm||null],
+          ["Pinoltryk",mz.pinoltryk!=null&&mz.pinoltryk!==""?String(mz.pinoltryk):null],
+          ["Pinoldok",mz.pinoldokType||null],
+          ["Hastighed",mz.hastighed!=null&&mz.hastighed!==""?String(mz.hastighed):null],
+          ["Luft",mz.luft!=null?bool(mz.luft):null],
+          ["Spindel",mz.spindel||null],
+          ["Olie",mz.olie||null],
+          ["Emne udhæng",mz.emneUdhaeng||null],
+          ["Pinoldok udhæng",mz.pinoldokUdhaeng||null],
+        ].filter(([,v])=>v!==null);
+        if(!items.length) return null;
+        return(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Setup Parameters</div>
+            <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+              {items.map(([k,v])=>(
+                <div key={k} style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:8,alignItems:"center",padding:"8px 14px",borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:10,color:C.muted,fontWeight:600}}>{k}</div>
+                  <div style={{fontSize:16,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.green}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+      {sheet.subDepartment!=="MZ"&&params.length>0&&(
         <div style={{marginBottom:14}}>
           <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Setup Parameters</div>
           <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"14px"}}>
@@ -5057,7 +5372,8 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
 function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
-  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:""};
+  const MZ_BLANK={fraesForlaenger:"",fraesMn:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneUdhaeng:"",pinoldokUdhaeng:""};
+  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{}};
   const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}:blank);
   // Sub-depts available for current dept
   const deptSubDepts=(subDepartments||{})[form.department]||[];
@@ -5153,6 +5469,57 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       </div>
     );
   };
+  const mzSetupEditor=()=>{
+    const mz={...MZ_BLANK,...(form.mzSetup||{})};
+    const setMz=(k,v)=>setF("mzSetup",{...(form.mzSetup||{}),[k]:v});
+    const togRow=(lbl,k,opts)=>(
+      <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8,alignItems:"center",padding:"9px 14px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:.4}}>{lbl}</div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {opts.map(o=>{const active=mz[k]===o;return(<button key={o} type="button" style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?C.amber:C.border}`,background:active?"rgba(240,165,0,.15)":C.raised,color:active?C.amber:C.muted,fontSize:12,fontWeight:active?700:400,cursor:"pointer"}} onClick={()=>setMz(k,o)}>{o}</button>);})}
+        </div>
+      </div>
+    );
+    const yesNoRow=(lbl,k)=>{
+      const isYes=mz[k]===true||mz[k]==="Ja";
+      return(
+        <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8,alignItems:"center",padding:"9px 14px",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:.4}}>{lbl}</div>
+          <div style={{display:"flex",gap:4}}>
+            {[["Ja",true],[" Nej",false]].map(([lbl2,val])=>{const active=(mz[k]===val||(val===true&&mz[k]==="Ja")||(val===false&&mz[k]==="Nej"));const col=val?C.green:C.red;return(<button key={String(val)} type="button" style={{padding:"4px 14px",borderRadius:20,border:`1px solid ${active?col:C.border}`,background:active?`${col}22`:C.raised,color:active?col:C.muted,fontSize:12,fontWeight:active?700:400,cursor:"pointer"}} onClick={()=>setMz(k,val)}>{lbl2.trim()}</button>);})}
+          </div>
+        </div>
+      );
+    };
+    const txtRow=(lbl,k,ph,mono=true,w="100%")=>(
+      <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8,alignItems:"center",padding:"9px 14px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:.4}}>{lbl}</div>
+        <input style={{...inp(),width:w,...(mono?{fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:15}:{})}} value={mz[k]||""} onChange={e=>setMz(k,e.target.value)} placeholder={ph}/>
+      </div>
+    );
+    return(
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+        {togRow("Forlænger","fraesForlaenger",["Kort","Mellem","Lang"])}
+        {txtRow("Fræser Mn","fraesMn","0,6 20°")}
+        {txtRow("Stop Ø","stopDia","13/8/4 – 172")}
+        {txtRow("Tang tryk","tangTryk","7",true,"80px")}
+        {yesNoRow("Værktøj i tang","vaerktoejITang")}
+        {txtRow("Tang nr.","tangNummer","X055")}
+        {togRow("Tang form","tangForm",["Spids","Flad"])}
+        {txtRow("Pinoltryk","pinoltryk","8",true,"80px")}
+        {togRow("Pinoldok","pinoldokType",["Pinol","Værktøj"])}
+        {txtRow("Hastighed","hastighed","2",true,"80px")}
+        {yesNoRow("Luft","luft")}
+        {txtRow("Spindel","spindel","",false)}
+        {txtRow("Olie","olie","",false)}
+        {txtRow("Emne udhæng","emneUdhaeng","42 mm til forkant",false)}
+        <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8,alignItems:"center",padding:"9px 14px"}}>
+          <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:.4}}>Pinoldok udhæng</div>
+          <input style={{...inp(),width:"100%"}} value={mz.pinoldokUdhaeng||""} onChange={e=>setMz("pinoldokUdhaeng",e.target.value)} placeholder=""/>
+        </div>
+      </div>
+    );
+  };
   const save=()=>{
     const e={};
     if(!form.partNumber.trim()) e.partNumber="Required";
@@ -5226,10 +5593,12 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       ):(
         <button style={{...btn("outline",true,true),borderColor:C.blue,color:C.blue,marginBottom:14}} onClick={()=>setShowList2(true)}><i className="ti ti-plus"/> Add Sub Tool List</button>
       ))}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+      {form.subDepartment==="MZ"&&<div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Setup Parameters</div>}
+      {form.subDepartment==="MZ"&&mzSetupEditor()}
+      {form.subDepartment!=="MZ"&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
         <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Setup Parameters</div>
-      </div>
-      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+      </div>}
+      {form.subDepartment!=="MZ"&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
         {(form.params||[]).length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No parameters added yet</div>}
         {(form.params||[]).map((p,i)=>(
           <div key={i} style={{display:"flex",gap:8,alignItems:"center",padding:"8px 12px",borderBottom:`1px solid ${C.border}`}}>
@@ -5244,7 +5613,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             {(setupParamOptions||[]).filter(name=>!(form.params||[]).find(p=>p.key===name)).map(name=><option key={name} value={name}>{name}</option>)}
           </select>
         </div>
-      </div>
+      </div>}
       <div style={{marginBottom:20}}><label style={label}>Notes</label><textarea style={{...inp(),minHeight:80,resize:"vertical",display:"block"}} value={form.notes||""} onChange={e=>setF("notes",e.target.value)} placeholder="e.g. EMNE TID 1 MINUT OG 22 SEKUNDER"/></div>
       <div style={{marginBottom:20}}>
         <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Photos</div>

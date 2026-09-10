@@ -198,7 +198,7 @@ export default function App(){
     "Turning":["Chuck Name","Chuck Overhang","Clamping Pressure","Zero Point","Workpiece Stop","Spindle Speed","Feed Rate","Coolant Pressure","Tool Offset","Bar Diameter","Chuck Jaw","RPM","Cutting Speed","DOC"],
     "Affolter":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
   };
-  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter"]};
+  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter","MZ"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
   const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{},hiddenMachines:[]});
@@ -5287,7 +5287,42 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
       {!sheet.subDepartment&&filledTools.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Main</div>{renderToolList(filledTools,C.amber)}</div>}
       {filledTools2.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.blue,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — Sub</div>{renderToolList(filledTools2,C.blue)}</div>}
       {filledTools3.length>0&&<div style={{marginBottom:14}}><div style={{fontSize:8,color:C.green,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tool List — 3rd</div>{renderToolList(filledTools3,C.green)}</div>}
-      {params.length>0&&(
+      {sheet.subDepartment==="MZ"&&(()=>{
+        const mz=sheet.mzSetup||{};
+        const bool=v=>(v===true||v==="Ja")?"Ja":"Nej";
+        const items=[
+          ["Forlænger",mz.fraesForlaenger||null],
+          ["Fræser Mn",mz.fraesMn||null],
+          ["Stop Ø",mz.stopDia||null],
+          ["Tang tryk",mz.tangTryk!=null&&mz.tangTryk!==""?String(mz.tangTryk):null],
+          ["Værktøj i tang",mz.vaerktoejITang!=null?bool(mz.vaerktoejITang):null],
+          ["Tang nr.",mz.tangNummer||null],
+          ["Tang form",mz.tangForm||null],
+          ["Pinoltryk",mz.pinoltryk!=null&&mz.pinoltryk!==""?String(mz.pinoltryk):null],
+          ["Pinoldok",mz.pinoldokType||null],
+          ["Hastighed",mz.hastighed!=null&&mz.hastighed!==""?String(mz.hastighed):null],
+          ["Luft",mz.luft!=null?bool(mz.luft):null],
+          ["Spindel",mz.spindel||null],
+          ["Olie",mz.olie||null],
+          ["Emne udhæng",mz.emneUdhaeng||null],
+          ["Pinoldok udhæng",mz.pinoldokUdhaeng||null],
+        ].filter(([,v])=>v!==null);
+        if(!items.length) return null;
+        return(
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Setup Parameters</div>
+            <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden"}}>
+              {items.map(([k,v])=>(
+                <div key={k} style={{display:"grid",gridTemplateColumns:"130px 1fr",gap:8,alignItems:"center",padding:"8px 14px",borderBottom:`1px solid ${C.border}`}}>
+                  <div style={{fontSize:10,color:C.muted,fontWeight:600}}>{k}</div>
+                  <div style={{fontSize:16,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.green}}>{v}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })()}
+      {sheet.subDepartment!=="MZ"&&params.length>0&&(
         <div style={{marginBottom:14}}>
           <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Setup Parameters</div>
           <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"14px"}}>
@@ -5337,7 +5372,8 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
 function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
-  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:""};
+  const MZ_BLANK={fraesForlaenger:"",fraesMn:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneUdhaeng:"",pinoldokUdhaeng:""};
+  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{}};
   const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}:blank);
   // Sub-depts available for current dept
   const deptSubDepts=(subDepartments||{})[form.department]||[];
@@ -5433,6 +5469,57 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       </div>
     );
   };
+  const mzSetupEditor=()=>{
+    const mz={...MZ_BLANK,...(form.mzSetup||{})};
+    const setMz=(k,v)=>setF("mzSetup",{...(form.mzSetup||{}),[k]:v});
+    const togRow=(lbl,k,opts)=>(
+      <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8,alignItems:"center",padding:"9px 14px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:.4}}>{lbl}</div>
+        <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          {opts.map(o=>{const active=mz[k]===o;return(<button key={o} type="button" style={{padding:"4px 12px",borderRadius:20,border:`1px solid ${active?C.amber:C.border}`,background:active?"rgba(240,165,0,.15)":C.raised,color:active?C.amber:C.muted,fontSize:12,fontWeight:active?700:400,cursor:"pointer"}} onClick={()=>setMz(k,o)}>{o}</button>);})}
+        </div>
+      </div>
+    );
+    const yesNoRow=(lbl,k)=>{
+      const isYes=mz[k]===true||mz[k]==="Ja";
+      return(
+        <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8,alignItems:"center",padding:"9px 14px",borderBottom:`1px solid ${C.border}`}}>
+          <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:.4}}>{lbl}</div>
+          <div style={{display:"flex",gap:4}}>
+            {[["Ja",true],[" Nej",false]].map(([lbl2,val])=>{const active=(mz[k]===val||(val===true&&mz[k]==="Ja")||(val===false&&mz[k]==="Nej"));const col=val?C.green:C.red;return(<button key={String(val)} type="button" style={{padding:"4px 14px",borderRadius:20,border:`1px solid ${active?col:C.border}`,background:active?`${col}22`:C.raised,color:active?col:C.muted,fontSize:12,fontWeight:active?700:400,cursor:"pointer"}} onClick={()=>setMz(k,val)}>{lbl2.trim()}</button>);})}
+          </div>
+        </div>
+      );
+    };
+    const txtRow=(lbl,k,ph,mono=true,w="100%")=>(
+      <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8,alignItems:"center",padding:"9px 14px",borderBottom:`1px solid ${C.border}`}}>
+        <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:.4}}>{lbl}</div>
+        <input style={{...inp(),width:w,...(mono?{fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:15}:{})}} value={mz[k]||""} onChange={e=>setMz(k,e.target.value)} placeholder={ph}/>
+      </div>
+    );
+    return(
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+        {togRow("Forlænger","fraesForlaenger",["Kort","Mellem","Lang"])}
+        {txtRow("Fræser Mn","fraesMn","0,6 20°")}
+        {txtRow("Stop Ø","stopDia","13/8/4 – 172")}
+        {txtRow("Tang tryk","tangTryk","7",true,"80px")}
+        {yesNoRow("Værktøj i tang","vaerktoejITang")}
+        {txtRow("Tang nr.","tangNummer","X055")}
+        {togRow("Tang form","tangForm",["Spids","Flad"])}
+        {txtRow("Pinoltryk","pinoltryk","8",true,"80px")}
+        {togRow("Pinoldok","pinoldokType",["Pinol","Værktøj"])}
+        {txtRow("Hastighed","hastighed","2",true,"80px")}
+        {yesNoRow("Luft","luft")}
+        {txtRow("Spindel","spindel","",false)}
+        {txtRow("Olie","olie","",false)}
+        {txtRow("Emne udhæng","emneUdhaeng","42 mm til forkant",false)}
+        <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8,alignItems:"center",padding:"9px 14px"}}>
+          <div style={{fontSize:10,color:C.muted,fontWeight:600,letterSpacing:.4}}>Pinoldok udhæng</div>
+          <input style={{...inp(),width:"100%"}} value={mz.pinoldokUdhaeng||""} onChange={e=>setMz("pinoldokUdhaeng",e.target.value)} placeholder=""/>
+        </div>
+      </div>
+    );
+  };
   const save=()=>{
     const e={};
     if(!form.partNumber.trim()) e.partNumber="Required";
@@ -5506,10 +5593,12 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       ):(
         <button style={{...btn("outline",true,true),borderColor:C.blue,color:C.blue,marginBottom:14}} onClick={()=>setShowList2(true)}><i className="ti ti-plus"/> Add Sub Tool List</button>
       ))}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+      {form.subDepartment==="MZ"&&<div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Setup Parameters</div>}
+      {form.subDepartment==="MZ"&&mzSetupEditor()}
+      {form.subDepartment!=="MZ"&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
         <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Setup Parameters</div>
-      </div>
-      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+      </div>}
+      {form.subDepartment!=="MZ"&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
         {(form.params||[]).length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No parameters added yet</div>}
         {(form.params||[]).map((p,i)=>(
           <div key={i} style={{display:"flex",gap:8,alignItems:"center",padding:"8px 12px",borderBottom:`1px solid ${C.border}`}}>
@@ -5524,7 +5613,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             {(setupParamOptions||[]).filter(name=>!(form.params||[]).find(p=>p.key===name)).map(name=><option key={name} value={name}>{name}</option>)}
           </select>
         </div>
-      </div>
+      </div>}
       <div style={{marginBottom:20}}><label style={label}>Notes</label><textarea style={{...inp(),minHeight:80,resize:"vertical",display:"block"}} value={form.notes||""} onChange={e=>setF("notes",e.target.value)} placeholder="e.g. EMNE TID 1 MINUT OG 22 SEKUNDER"/></div>
       <div style={{marginBottom:20}}>
         <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Photos</div>
