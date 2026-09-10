@@ -5354,6 +5354,52 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
           <button onClick={()=>setLightboxUrl(null)} style={{marginTop:16,background:"rgba(255,255,255,.12)",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,color:"#fff",fontSize:14,fontWeight:700,padding:"10px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}><i className="ti ti-x"/> Close</button>
         </div>
       )}
+      {sheet.subDepartment==="MZ"&&(()=>{
+        const adv=sheet.mzAdvanced||{};
+        const [mzDetOpen,setMzDetOpen]=React.useState({schnecke:false,werkstuck:false,entgraten:false});
+        const hdr=(key,de,en,icon)=>(
+          <button type="button" style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:mzDetOpen[key]?"rgba(240,165,0,.1)":C.surface,border:"none",borderBottom:mzDetOpen[key]?`1px solid ${C.border}`:"none",cursor:"pointer",textAlign:"left"}} onClick={()=>setMzDetOpen(p=>({...p,[key]:!p[key]}))}>
+            <i className={`ti ${icon}`} style={{color:C.amber,fontSize:15,flexShrink:0}}/>
+            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{de}</div><div style={{fontSize:10,color:C.muted}}>{en}</div></div>
+            <i className={`ti ti-chevron-${mzDetOpen[key]?"up":"down"}`} style={{color:C.muted,fontSize:13}}/>
+          </button>
+        );
+        const row=(de,en,val,unit)=>val!=null&&val!==""?(<div style={{display:"grid",gridTemplateColumns:"1fr auto 70px",gap:6,alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}>
+          <div><div style={{fontSize:11,fontWeight:600,color:C.text}}>{de}</div><div style={{fontSize:9,color:C.muted}}>{en}</div></div>
+          {unit?<div style={{fontSize:9,color:C.muted,whiteSpace:"nowrap"}}>{unit}</div>:<div/>}
+          <div style={{fontSize:15,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.green,textAlign:"right"}}>{val}</div>
+        </div>):null;
+        const subHdr=t=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
+        const s=adv.schnecke||{},w=adv.werkstuck||{},ev=adv.entgratenVorne||{},eh=adv.entgratenHinten||{};
+        const entRows=(d,de,en)=>(<div>{subHdr(`${de} / ${en}`)}{row("Entgraten","Deburring",d.entgraten,"0=Nein 1=Ja")}{row("Startpunkt in X","Start Point X",d.startpunktX,"[mm]")}{row("Startdurchmesser","Start Diameter",d.startdurchmesser,"[mm]")}{row("Kerndurchmesser","Core Diameter",d.kerndurchmesser,"[mm]")}{row("Verdrehung in Z","Rotation in Z",d.verdrehungZ,"[Grad]")}{row("Steigung","Pitch",d.steigung,"[mm]")}{row("Versatz","Offset",d.versatz,"[mm]")}{row("Entgratwinkel","Deburring Angle",d.entgratwinkel,"[Grad]")}{row("Gangzahl Fräser","Cutter Starts",d.gangzahlFraeser,"[1,2]")}</div>);
+        const hasSchnecke=Object.values(s).some(v=>v!=="");
+        const hasWerk=Object.values(w).some(v=>v!=="");
+        const hasEntgraten=Object.values(ev).some(v=>v!=="")||Object.values(eh).some(v=>v!=="");
+        if(!hasSchnecke&&!hasWerk&&!hasEntgraten) return null;
+        return(<div style={{marginBottom:14}}>
+          {hasSchnecke&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden"}}>
+            {hdr("schnecke","Schnecke","Worm","ti-rotate-clockwise")}
+            {mzDetOpen.schnecke&&<div>
+              {subHdr("Parameter Schnecke / Worm Parameters")}
+              {row("Gewindesteigung","Thread Pitch",s.gewindesteigung,"[mm]")}{row("Steigungswinkel","Helix Angle",s.steigungswinkel,"[Grad]")}{row("Vorlauf","Pre-run",s.vorlauf,"[mm]")}{row("Eintauchlänge X","Plunge Length X",s.eintauchlaengeX,"[mm]")}{row("Fräslänge","Milling Length",s.fraeslaenge,"[mm]")}{row("Austauchlänge X","Exit Length X",s.austauchlaengeX,"[mm]")}{row("Ausgangsstellung X","Start Position X",s.ausgangsstellungX,"[mm]")}{row("Konizität","Conicity",s.konizitaet,"[mm/Fräslänge]")}{row("Steigungskorrektur","Pitch Correction",s.steigungskorrektur,"[mm/Messlänge]")}{row("Messlänge","Measuring Length",s.messlaenge,"[mm]")}
+              {subHdr("Durchmesser / Diameters")}
+              {row("Startdurchmesser","Start Diameter",s.startdurchmesser,"[mm]")}{row("Eintauchdurchmesser","Plunge Diameter",s.eintauchdurchmesser,"[mm]")}{row("Kerndurchmesser","Core Diameter",s.kerndurchmesser,"[mm]")}{row("Austauchdurchmesser","Exit Diameter",s.austauchdurchmesser,"[mm]")}{row("Enddurchmesser","End Diameter",s.enddurchmesser,"[mm]")}{row("Schlichtzustellung","Finishing Infeed",s.schlichtzustellung,"[mm]")}{row("Rechts=1, Links=2","Right=1, Left=2",s.rechtsLinks,"")}{row("Gleichlauf=1, Gegenlauf=2","Climb=1, Conventional=2",s.gleichlaufGegenlauf,"")}
+            </div>}
+          </div>}
+          {hasWerk&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden"}}>
+            {hdr("werkstuck","Werkstückparameter","Workpiece Parameters","ti-settings")}
+            {mzDetOpen.werkstuck&&<div>
+              {row("Fräserdurchmesser","Cutter Diameter",w.fraeserdurchmesser,"[mm]")}{row("Stückzahl","Quantity",w.stueckzahl,"")}{row("Teilung","Pitch",w.teilung,"[1–99]")}{row("Vorschub Tauchen","Feed Plunge",w.vorschubTauchen,"[mm/min]")}{row("Vorschub Fräsen","Feed Milling",w.vorschubFraesen,"[mm/min]")}{row("Phasenverschiebung","Phase Shift",w.phasenverschiebung,"[Grad]")}{row("Ladestellung X-Achse","Load Position X",w.ladestellungX,"[mm]")}{row("Ladestellung Y-Achse","Load Position Y",w.ladestellungY,"[mm]")}{row("Drehrichtung Fräser","Cutter Rotation",w.drehrichtungFraeser,"[+1/-1]")}
+              {subHdr("Nute / Groove")}
+              {row("Nute einstechen","Groove Plunge",w.nuteEinstechen,"[1=Ja, 0=Nein]")}{row("Einstechposition","Plunge Position",w.einstechposition,"[mm]")}{row("Kerndurchmesser Nut","Groove Core Diameter",w.kerndurchmesserNut,"[mm]")}{row("Schwenkwinkel","Pivot Angle",w.schwenkwinkel,"[Grad]")}{row("Lader","Loader",w.lader,"[1,2,3,4]")}{row("Zange=1, Tasseau=2, Spitze=3","Collet=1, Tasseau=2, Tip=3",w.zangeType,"")}
+            </div>}
+          </div>}
+          {hasEntgraten&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden"}}>
+            {hdr("entgraten","Entgratunsparameter","Deburring Parameters","ti-tool")}
+            {mzDetOpen.entgraten&&<div>{entRows(ev,"Vorne","Front")}{entRows(eh,"Hinten","Rear")}</div>}
+          </div>}
+        </div>);
+      })()}
       <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
         <button style={btn("primary",true)} onClick={printPdf}><i className="ti ti-file-type-pdf"/> Export PDF</button>
         <button style={btn("outline",true)} onClick={onEdit}><i className="ti ti-edit"/> Edit Setup Sheet</button>
@@ -5375,7 +5421,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
   const MZ_BLANK={fraesForlaenger:"",fraesMn:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneUdhaeng:"",pinoldokUdhaeng:""};
-  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{}};
+  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{},mzAdvanced:{schnecke:{},werkstuck:{},entgratenVorne:{},entgratenHinten:{}}};
   const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}:blank);
   // Sub-depts available for current dept
   const deptSubDepts=(subDepartments||{})[form.department]||[];
@@ -5522,6 +5568,95 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       </div>
     );
   };
+  const [mzOpenSec,setMzOpenSec]=useState({schnecke:false,werkstuck:false,entgraten:false});
+  const setMzAdv=(sec,k,v)=>setF("mzAdvanced",{...(form.mzAdvanced||{}),[sec]:{...((form.mzAdvanced||{})[sec]||{}),[k]:v}});
+  const getMzAdv=sec=>(form.mzAdvanced||{})[sec]||{};
+  const mzAdvancedEditor=()=>{
+    const accHdr=(key,labelDe,labelEn,icon)=>(
+      <button type="button" style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:mzOpenSec[key]?"rgba(240,165,0,.1)":C.surface,border:"none",borderBottom:mzOpenSec[key]?`1px solid ${C.border}`:"none",cursor:"pointer",textAlign:"left"}} onClick={()=>setMzOpenSec(p=>({...p,[key]:!p[key]}))}>
+        <i className={`ti ${icon}`} style={{color:C.amber,fontSize:15,flexShrink:0}}/>
+        <div style={{flex:1}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.text}}>{labelDe}</div>
+          <div style={{fontSize:10,color:C.muted}}>{labelEn}</div>
+        </div>
+        <i className={`ti ti-chevron-${mzOpenSec[key]?"up":"down"}`} style={{color:C.muted,fontSize:13}}/>
+      </button>
+    );
+    const fld=(sec,k,de,en,unit)=>{const d=getMzAdv(sec);return(
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto 88px",gap:6,alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}>
+        <div><div style={{fontSize:11,fontWeight:600,color:C.text}}>{de}</div><div style={{fontSize:9,color:C.muted}}>{en}</div></div>
+        {unit?<div style={{fontSize:9,color:C.muted,whiteSpace:"nowrap",textAlign:"right"}}>{unit}</div>:<div/>}
+        <input style={{...inp(),fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:14,textAlign:"right"}} value={d[k]||""} onChange={e=>setMzAdv(sec,k,e.target.value)} placeholder="—"/>
+      </div>
+    );};
+    const subHdr=t=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
+    const entSec=(sec,de,en)=>(<div>{subHdr(`${de} / ${en}`)}
+      {fld(sec,"entgraten","Entgraten","Deburring","0=Nein 1=Ja")}
+      {fld(sec,"startpunktX","Startpunkt in X","Start Point X","[mm]")}
+      {fld(sec,"startdurchmesser","Startdurchmesser","Start Diameter","[mm]")}
+      {fld(sec,"kerndurchmesser","Kerndurchmesser","Core Diameter","[mm]")}
+      {fld(sec,"verdrehungZ","Verdrehung in Z","Rotation in Z","[Grad]")}
+      {fld(sec,"steigung","Steigung","Pitch","[mm]")}
+      {fld(sec,"versatz","Versatz","Offset","[mm]")}
+      {fld(sec,"entgratwinkel","Entgratwinkel","Deburring Angle","[Grad]")}
+      {fld(sec,"gangzahlFraeser","Gangzahl Fräser","Cutter Starts","[1, 2]")}
+    </div>);
+    return(<>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:10,overflow:"hidden"}}>
+        {accHdr("schnecke","Schnecke","Worm","ti-rotate-clockwise")}
+        {mzOpenSec.schnecke&&<div>
+          {subHdr("Parameter Schnecke / Worm Parameters")}
+          {fld("schnecke","gewindesteigung","Gewindesteigung","Thread Pitch","[mm]")}
+          {fld("schnecke","steigungswinkel","Steigungswinkel","Helix Angle","[Grad]")}
+          {fld("schnecke","vorlauf","Vorlauf","Pre-run","[mm]")}
+          {fld("schnecke","eintauchlaengeX","Eintauchlänge X","Plunge Length X","[mm]")}
+          {fld("schnecke","fraeslaenge","Fräslänge","Milling Length","[mm]")}
+          {fld("schnecke","austauchlaengeX","Austauchlänge X","Exit Length X","[mm]")}
+          {fld("schnecke","ausgangsstellungX","Ausgangsstellung X","Start Position X","[mm]")}
+          {fld("schnecke","konizitaet","Konizität","Conicity","[mm/Fräslänge]")}
+          {fld("schnecke","steigungskorrektur","Steigungskorrektur","Pitch Correction","[mm/Messlänge]")}
+          {fld("schnecke","messlaenge","Messlänge","Measuring Length","[mm]")}
+          {subHdr("Durchmesser / Diameters")}
+          {fld("schnecke","startdurchmesser","Startdurchmesser","Start Diameter","[mm]")}
+          {fld("schnecke","eintauchdurchmesser","Eintauchdurchmesser","Plunge Diameter","[mm]")}
+          {fld("schnecke","kerndurchmesser","Kerndurchmesser","Core Diameter","[mm]")}
+          {fld("schnecke","austauchdurchmesser","Austauchdurchmesser","Exit Diameter","[mm]")}
+          {fld("schnecke","enddurchmesser","Enddurchmesser","End Diameter","[mm]")}
+          {fld("schnecke","schlichtzustellung","Schlichtzustellung","Finishing Infeed","[mm]")}
+          {fld("schnecke","rechtsLinks","Rechts = 1, Links = 2","Right = 1, Left = 2","")}
+          {fld("schnecke","gleichlaufGegenlauf","Gleichlauf = 1, Gegenlauf = 2","Climb = 1, Conventional = 2","")}
+        </div>}
+      </div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:10,overflow:"hidden"}}>
+        {accHdr("werkstuck","Werkstückparameter","Workpiece Parameters","ti-settings")}
+        {mzOpenSec.werkstuck&&<div>
+          {fld("werkstuck","fraeserdurchmesser","Fräserdurchmesser","Cutter Diameter","[mm]")}
+          {fld("werkstuck","stueckzahl","Stückzahl","Quantity","")}
+          {fld("werkstuck","teilung","Teilung","Pitch","[1–99]")}
+          {fld("werkstuck","vorschubTauchen","Vorschub Tauchen","Feed Plunge","[mm/min]")}
+          {fld("werkstuck","vorschubFraesen","Vorschub Fräsen","Feed Milling","[mm/min]")}
+          {fld("werkstuck","phasenverschiebung","Phasenverschiebung","Phase Shift","[Grad]")}
+          {fld("werkstuck","ladestellungX","Ladestellung X-Achse","Load Position X","[mm]")}
+          {fld("werkstuck","ladestellungY","Ladestellung Y-Achse","Load Position Y","[mm]")}
+          {fld("werkstuck","drehrichtungFraeser","Drehrichtung Fräser","Cutter Rotation","[+1 / -1]")}
+          {subHdr("Nute / Groove")}
+          {fld("werkstuck","nuteEinstechen","Nute einstechen","Groove Plunge","[1=Ja, 0=Nein]")}
+          {fld("werkstuck","einstechposition","Einstechposition","Plunge Position","[mm]")}
+          {fld("werkstuck","kerndurchmesserNut","Kerndurchmesser Nut","Groove Core Diameter","[mm]")}
+          {fld("werkstuck","schwenkwinkel","Schwenkwinkel","Pivot Angle","[Grad]")}
+          {fld("werkstuck","lader","Lader","Loader","[1, 2, 3, 4]")}
+          {fld("werkstuck","zangeType","Zange=1, Tasseau=2, Spitze=3","Collet=1, Tasseau=2, Tip=3","")}
+        </div>}
+      </div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:14,overflow:"hidden"}}>
+        {accHdr("entgraten","Entgratunsparameter","Deburring Parameters","ti-tool")}
+        {mzOpenSec.entgraten&&<div>
+          {entSec("entgratenVorne","Vorne","Front")}
+          {entSec("entgratenHinten","Hinten","Rear")}
+        </div>}
+      </div>
+    </>);
+  };
   const save=()=>{
     const e={};
     if(!form.partNumber.trim()) e.partNumber="Required";
@@ -5661,6 +5796,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
           }}/>
         </label>
       </div>
+      {form.subDepartment==="MZ"&&mzAdvancedEditor()}
       <button style={btn("primary",true)} onClick={save}><i className="ti ti-check"/> Save Setup Sheet</button>
     </div>
   );
