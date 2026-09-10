@@ -247,6 +247,8 @@ export default function App(){
             // Migrate "Affolter 160" → "Affolter" in sub-dept lists
             const sd=data.subDepartments;
             Object.keys(sd).forEach(k=>{sd[k]=sd[k].map(v=>v==="Affolter 160"?"Affolter":v);});
+            // Ensure MZ is always in Fortanding sub-depts
+            if(sd["Fortanding"]&&!sd["Fortanding"].includes("MZ")) sd["Fortanding"].push("MZ");
             setSubDepartments(sd);
           }
           if(data.efficiencyGoals) setEfficiencyGoals(data.efficiencyGoals);
