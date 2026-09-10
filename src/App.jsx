@@ -5517,6 +5517,26 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       </div>
     );
   };
+  const mzToolEditor=()=>{
+    const t=(form.tools||[])[0]||{position:1,description:"",label:"",toolId:null};
+    const setTool=(fld,val)=>setForm(p=>{const arr=[...(p.tools||[])];if(arr.length===0)arr.push({position:1,description:"",label:"",toolId:null});arr[0]={...arr[0],[fld]:val};return{...p,tools:arr};});
+    return(
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,overflow:"hidden",marginBottom:14}}>
+        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.amber,flexShrink:0,minWidth:80}}>Modul</div>
+          <input style={{...inp(),flex:1,fontSize:16,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="e.g. 0,9"/>
+        </div>
+        <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
+          <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Tool description — optional"/>
+          <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool("toolId",e.target.value||null)}>
+            <option value="">— No cabinet tool —</option>
+            {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
+          </select>
+          <input style={{...inp(),fontSize:11}} value={t.label||""} onChange={e=>setTool("label",e.target.value)} placeholder="Notes — optional"/>
+        </div>
+      </div>
+    );
+  };
   const mzSetupEditor=()=>{
     const mz={...MZ_BLANK,...(form.mzSetup||{})};
     const setMz=(k,v)=>setF("mzSetup",{...(form.mzSetup||{}),[k]:v});
@@ -5704,8 +5724,10 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         <div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:6,padding:"6px 10px"}}>Tool 8 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(8)}</span>&nbsp;·&nbsp;Tool 1 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(1)}</span></div>
       </div>
       </>}
-      {deptSubDepts.length>0&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Clamping Tools</div>}
-      {deptSubDepts.length>0&&fortandingToolEditor()}
+      {deptSubDepts.length>0&&form.subDepartment!=="MZ"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Clamping Tools</div>}
+      {deptSubDepts.length>0&&form.subDepartment!=="MZ"&&fortandingToolEditor()}
+      {form.subDepartment==="MZ"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool</div>}
+      {form.subDepartment==="MZ"&&mzToolEditor()}
       {deptSubDepts.length===0&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool List — Main</div>}
       {deptSubDepts.length===0&&toolListEditor("tools",C.amber)}
       {deptSubDepts.length===0&&(showList2?(
@@ -5732,6 +5754,22 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       ))}
       {form.subDepartment==="MZ"&&<div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Setup Parameters</div>}
       {form.subDepartment==="MZ"&&mzSetupEditor()}
+      {form.subDepartment==="MZ"&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+        {(form.params||[]).length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No extra parameters added yet</div>}
+        {(form.params||[]).map((p,i)=>(
+          <div key={i} style={{display:"flex",gap:8,alignItems:"center",padding:"8px 12px",borderBottom:`1px solid ${C.border}`}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.text,width:130,flexShrink:0}}>{p.key}</div>
+            <input style={{...inp(),flex:1,fontSize:14,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.green}} value={p.value||""} onChange={e=>setForm(pr=>({...pr,params:pr.params.map((x,j)=>j===i?{...x,value:e.target.value}:x)}))} placeholder="Value…"/>
+            <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:15,padding:"2px 4px",flexShrink:0}} onClick={()=>setForm(pr=>({...pr,params:pr.params.filter((_,j)=>j!==i)}))}><i className="ti ti-x"/></button>
+          </div>
+        ))}
+        <div style={{padding:"10px 12px",display:"flex",gap:8,alignItems:"center"}}>
+          <select style={{...sel(),flex:1}} defaultValue="" onChange={e=>{const v=e.target.value;if(!v)return;if((form.params||[]).find(p=>p.key===v))return;setForm(pr=>({...pr,params:[...(pr.params||[]),{key:v,value:""}]}));e.target.value="";}}>
+            <option value="">+ Add parameter…</option>
+            {(setupParamOptions||[]).filter(name=>!(form.params||[]).find(p=>p.key===name)).map(name=><option key={name} value={name}>{name}</option>)}
+          </select>
+        </div>
+      </div>}
       {form.subDepartment!=="MZ"&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
         <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Setup Parameters</div>
       </div>}
