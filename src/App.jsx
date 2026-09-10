@@ -5142,6 +5142,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
 function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const [lightboxUrl,setLightboxUrl]=useState(null);
+  const [mzDetOpen,setMzDetOpen]=useState({schnecke:false,werkstuck:false,entgraten:false});
   const rc=pos=>{if(!pos)return"";return(sheet.restartPrefix||"NAT")+String(pos).padStart(sheet.restartPad||2,"0");};
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
   const filledTools2=(sheet.tools2||[]).filter(t=>t.description||t.label);
@@ -5356,7 +5357,6 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
       )}
       {sheet.subDepartment==="MZ"&&(()=>{
         const adv=sheet.mzAdvanced||{};
-        const [mzDetOpen,setMzDetOpen]=React.useState({schnecke:false,werkstuck:false,entgraten:false});
         const hdr=(key,de,en,icon)=>(
           <button type="button" style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:mzDetOpen[key]?"rgba(240,165,0,.1)":C.surface,border:"none",borderBottom:mzDetOpen[key]?`1px solid ${C.border}`:"none",cursor:"pointer",textAlign:"left"}} onClick={()=>setMzDetOpen(p=>({...p,[key]:!p[key]}))}>
             <i className={`ti ${icon}`} style={{color:C.amber,fontSize:15,flexShrink:0}}/>
