@@ -5621,8 +5621,12 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     // (e.g. c inside b) shares the shaft — drawn as a smaller circle inside
     // the larger one. Amber group drawn first so blue renders on top.
     // Input column on right, color-coded to match, space-evenly distributed.
+    // Gear section: SVG on left contains circles + straight leader lines + label letters.
+    // Input column on right is absolutely positioned so each "= [input]" row aligns
+    // exactly with its circle's cy coordinate.
     const gearSvgSection=(title,totalKey,totalPh,ratioKey,gears)=>{
-      const VW=106;
+      const VW=100; // SVG viewport width
+      const LBL=12; // units reserved on right for label text
       const maxY=Math.max(...gears.map(g=>g.cy+g.r+8));
       return(
         <div style={{padding:"8px 10px 8px"}}>
@@ -5631,31 +5635,36 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             {totalKey&&<div style={{flex:1}}><div style={{fontSize:8,color:C.muted,marginBottom:2}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
             {ratioKey&&<div style={{flex:1}}><div style={{fontSize:8,color:C.muted,marginBottom:2}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
           </div>}
-          <div style={{display:"flex",borderTop:`1px solid ${C.border}`,marginTop:2}}>
-            {/* Gear diagram: amber first so blue renders on top */}
-            <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"46%",flexShrink:0,display:"block",borderRight:`1px solid ${C.border}`}}>
+          {/* position:relative so input column can overlay the right side */}
+          <div style={{position:"relative"}}>
+            {/* SVG: circles drawn amber-first so blue overlaps. Leader line from circle
+                right edge → straight right → label letter at SVG right edge */}
+            <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"50%",display:"block"}}>
               {["amber","blue"].flatMap(col=>gears.filter(g=>g.color===col).map(g=>{
                 const stroke=col==="blue"?C.blue:C.amber;
                 return(
                   <g key={g.label}>
-                    <circle cx={g.cx} cy={g.cy} r={g.r} fill={stroke+"18"} stroke={stroke} strokeWidth="1.5"/>
-                    <line x1={g.cx-g.r*0.38} y1={g.cy} x2={g.cx+g.r*0.38} y2={g.cy} stroke={stroke} strokeWidth="0.7"/>
-                    <line x1={g.cx} y1={g.cy-g.r*0.38} x2={g.cx} y2={g.cy+g.r*0.38} stroke={stroke} strokeWidth="0.7"/>
-                    {/* Horizontal leader line to right edge of SVG */}
-                    <line x1={g.cx+g.r} y1={g.cy} x2={VW} y2={g.cy} stroke={stroke} strokeWidth="0.9"/>
+                    <circle cx={g.cx} cy={g.cy} r={g.r} fill={stroke+"1a"} stroke={stroke} strokeWidth="1.5"/>
+                    {/* Crosshairs */}
+                    <line x1={g.cx-g.r*0.36} y1={g.cy} x2={g.cx+g.r*0.36} y2={g.cy} stroke={stroke} strokeWidth="0.6" opacity="0.8"/>
+                    <line x1={g.cx} y1={g.cy-g.r*0.36} x2={g.cx} y2={g.cy+g.r*0.36} stroke={stroke} strokeWidth="0.6" opacity="0.8"/>
+                    {/* Straight horizontal leader line: from circle edge to just before label */}
+                    <line x1={g.cx+g.r} y1={g.cy} x2={VW-LBL} y2={g.cy} stroke={stroke} strokeWidth="1"/>
+                    {/* Label letter at end of leader line */}
+                    <text x={VW-1} y={g.cy+3.5} textAnchor="end" fontSize="9" fontWeight="800"
+                      fill={stroke} fontFamily="monospace" letterSpacing="0">{g.label}</text>
                   </g>
                 );
               }))}
             </svg>
-            {/* Input column — space-evenly to spread across SVG height */}
-            <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"space-evenly",padding:"2px 0"}}>
+            {/* Input boxes: absolutely positioned on the right half, top% aligns with circle cy */}
+            <div style={{position:"absolute",top:0,left:"50%",right:0,height:"100%"}}>
               {gears.map(g=>{
                 const col=g.color==="blue"?C.blue:C.amber;
                 return(
-                  <div key={g.label} style={{display:"flex",alignItems:"center",gap:3,padding:"1px 5px"}}>
-                    <span style={{fontSize:11,fontWeight:800,color:col,fontFamily:"'Share Tech Mono',monospace",flexShrink:0,minWidth:22}}>{g.label}</span>
-                    <span style={{color:C.muted,fontSize:10,flexShrink:0}}>=</span>
-                    <input style={{flex:1,minWidth:0,height:20,background:C.raised,border:`1px solid ${col}66`,borderRadius:3,color:C.green,fontSize:11,textAlign:"right",padding:"0 3px",fontFamily:"'Share Tech Mono',monospace",outline:"none"}}
+                  <div key={g.label} style={{position:"absolute",top:`${g.cy/maxY*100}%`,left:4,right:2,transform:"translateY(-50%)",display:"flex",alignItems:"center",gap:2}}>
+                    <span style={{color:C.muted,fontSize:9,flexShrink:0}}>=</span>
+                    <input style={{flex:1,minWidth:0,height:19,background:C.raised,border:`1px solid ${col}55`,borderRadius:2,color:C.green,fontSize:10,textAlign:"right",padding:"0 3px",fontFamily:"'Share Tech Mono',monospace",outline:"none"}}
                       value={e[g.inputKey]||""} onChange={ev=>setE(g.inputKey,ev.target.value)}/>
                   </div>
                 );
@@ -5690,43 +5699,56 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         </div>
       );
     };
-    // ── Gear circle positions for each section ────────────────────────────
-    // color:"amber" = orange group (one shaft side)
-    // color:"blue"  = blue group (other shaft side)
-    // Circles OVERLAP where gears mesh (touching circles = meshing gears).
-    // The "inner" blue gear (e.g. c) shares a shaft with the large amber gear
-    // (b) — drawn inside it to show the compound-gear pair.
+    // ── Gear circle positions ─────────────────────────────────────────────
+    // Amber group and blue group are the two color families from the paper.
+    // Touching circles = meshing gears (distance between centers = sum of radii).
+    // "c inside b" = compound gear: c is drawn inside b (offset slightly so
+    // both leader lines are at different y-values and remain readable).
+    // All circles kept within cx+r ≤ 88 so the leader line is always visible.
     //
-    // Steigung (confirmed by paper): amber a→Zw→b, blue c (inside b)→d
+    // Steigung: amber a→Zw→b (chain), blue c (compound inside b)→d (touches c)
     const steigungGears=[
-      {label:"a", inputKey:"steigA",  cx:13, cy:14,  r:12,  color:"amber"},
-      {label:"Zw",inputKey:"steigZw", cx:38, cy:34,  r:21,  color:"amber"},
-      {label:"b", inputKey:"steigB",  cx:44, cy:88,  r:32,  color:"amber"},
-      {label:"c", inputKey:"steigC",  cx:58, cy:80,  r:14,  color:"blue"},
-      {label:"d", inputKey:"steigD",  cx:78, cy:112, r:24,  color:"blue"},
+      {label:"a", inputKey:"steigA",  cx:10, cy:12, r:10, color:"amber"},
+      {label:"Zw",inputKey:"steigZw", cx:26, cy:34, r:16, color:"amber"},
+      // b touches Zw: dist(b,Zw)=sqrt(20²+32²)≈37.7 ≈ 16+22
+      {label:"b", inputKey:"steigB",  cx:46, cy:66, r:22, color:"amber"},
+      // c is the compound gear on b's shaft — drawn inside b, offset 6 px
+      {label:"c", inputKey:"steigC",  cx:50, cy:70, r:13, color:"blue"},
+      // d touches c: dist(d,c)=sqrt(9²+25²)≈26.6 ≈ 13+14
+      {label:"d", inputKey:"steigD",  cx:59, cy:95, r:14, color:"blue"},
     ];
-    // Zahnzahl: amber d→Zw→c (top chain), blue b (large, outer)→a (inner compound inside b)
+    // Zahnzahl: amber d→Zw (vertical touch)→c, blue b→a (b and a touch externally)
     const zahnzahlGears=[
-      {label:"d", inputKey:"zahnD",  cx:65, cy:14,  r:18,  color:"amber"},
-      {label:"Zw",inputKey:"zahnZw", cx:42, cy:48,  r:11,  color:"amber"},
-      {label:"c", inputKey:"zahnC",  cx:63, cy:70,  r:15,  color:"amber"},
-      {label:"b", inputKey:"zahnB",  cx:36, cy:108, r:26,  color:"blue"},
-      {label:"a", inputKey:"zahnA",  cx:44, cy:102, r:11,  color:"blue"},
+      {label:"d", inputKey:"zahnD",  cx:60, cy:12, r:14, color:"amber"},
+      // Zw touches d vertically: dist=14+11=25, cy_Zw=12+25=37
+      {label:"Zw",inputKey:"zahnZw", cx:60, cy:37, r:11, color:"amber"},
+      // c touches Zw: dist(c,Zw)=sqrt(12²+20²)≈23.3 ≈ 11+12
+      {label:"c", inputKey:"zahnC",  cx:48, cy:57, r:12, color:"amber"},
+      {label:"b", inputKey:"zahnB",  cx:22, cy:86, r:20, color:"blue"},
+      // a touches b externally: dist(a,b)=sqrt(24²+20²)≈31.2 ≈ 20+11
+      {label:"a", inputKey:"zahnA",  cx:46, cy:66, r:11, color:"blue"},
     ];
-    // Fräserdrehzahl: amber a→b (outer compound), blue c (inside b)→d
+    // Fräserdrehzahl: amber a→b (a touches b), blue c (compound inside b)→d (touches c)
     const fraesDrehzahlGears=[
-      {label:"a", inputKey:"fraesA",  cx:24, cy:36,  r:11,  color:"amber"},
-      {label:"b", inputKey:"fraesB",  cx:50, cy:60,  r:24,  color:"amber"},
-      {label:"c", inputKey:"fraesC",  cx:56, cy:55,  r:13,  color:"blue"},
-      {label:"d", inputKey:"fraesD",  cx:76, cy:84,  r:20,  color:"blue"},
+      {label:"a", inputKey:"fraesA",  cx:12, cy:22, r:11, color:"amber"},
+      // b touches a: dist(b,a)=sqrt(23²+24²)≈33.2 ≈ 11+22
+      {label:"b", inputKey:"fraesB",  cx:35, cy:46, r:22, color:"amber"},
+      // c is compound inside b, offset 7 px
+      {label:"c", inputKey:"fraesC",  cx:41, cy:52, r:12, color:"blue"},
+      // d touches c: dist(d,c)=sqrt(20²+20²)≈28.3 ≈ 12+16
+      {label:"d", inputKey:"fraesD",  cx:61, cy:72, r:16, color:"blue"},
     ];
-    // Längsvorschub: amber a→b (outer compound), blue c (inside b)→Zw→d
+    // Längsvorschub: amber a→b (touches), blue c (compound inside b)→Zw (touches c)→d (touches Zw)
     const laengsGears=[
-      {label:"a", inputKey:"laengsA",  cx:12, cy:26,  r:11,  color:"amber"},
-      {label:"b", inputKey:"laengsB",  cx:40, cy:55,  r:28,  color:"amber"},
-      {label:"c", inputKey:"laengsC",  cx:53, cy:49,  r:13,  color:"blue"},
-      {label:"Zw",inputKey:"laengsZw", cx:72, cy:72,  r:12,  color:"blue"},
-      {label:"d", inputKey:"laengsD",  cx:76, cy:108, r:22,  color:"blue"},
+      {label:"a", inputKey:"laengsA",  cx:12, cy:22, r:10, color:"amber"},
+      // b touches a: dist(b,a)=sqrt(21²+25²)≈32.6 ≈ 10+22
+      {label:"b", inputKey:"laengsB",  cx:33, cy:47, r:22, color:"amber"},
+      // c compound inside b, offset 6 px
+      {label:"c", inputKey:"laengsC",  cx:38, cy:52, r:11, color:"blue"},
+      // Zw touches c horizontally: dist=11+10=21, cx_Zw=38+21=59
+      {label:"Zw",inputKey:"laengsZw", cx:59, cy:52, r:10, color:"blue"},
+      // d touches Zw: dist(d,Zw)=sqrt(4²+24²)≈24.3 ≈ 10+14
+      {label:"d", inputKey:"laengsD",  cx:63, cy:76, r:14, color:"blue"},
     ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
