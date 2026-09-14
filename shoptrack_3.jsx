@@ -5627,7 +5627,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     const gearSvgSection=(title,totalKey,totalPh,ratioKey,gears)=>{
       const VW=100; // SVG viewport width
       const LBL=12; // units reserved on right for label text
-      const maxY=Math.max(...gears.map(g=>g.cy+g.r+8));
+      const maxY=Math.max(...gears.map(g=>Math.max(g.cy+g.r, g.cy+(g.exitDy||0))+8));
       return(
         <div style={{padding:"8px 10px 8px"}}>
           <div style={{fontSize:9,color:C.amber,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:4}}>{title}</div>
@@ -5642,27 +5642,33 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"50%",display:"block"}}>
               {["amber","blue"].flatMap(col=>gears.filter(g=>g.color===col).map(g=>{
                 const stroke=col==="blue"?C.blue:C.amber;
+                // Line can exit from any point on the circle. exitDy shifts the exit
+                // point vertically along the circle edge (useful for compound gears).
+                const edy=g.exitDy||0;
+                const edx=Math.sqrt(Math.max(0,g.r*g.r-edy*edy));
+                const ex=g.cx+edx, ey=g.cy+edy;
                 return(
                   <g key={g.label}>
                     <circle cx={g.cx} cy={g.cy} r={g.r} fill={stroke+"1a"} stroke={stroke} strokeWidth="1.5"/>
                     {/* Crosshairs */}
                     <line x1={g.cx-g.r*0.36} y1={g.cy} x2={g.cx+g.r*0.36} y2={g.cy} stroke={stroke} strokeWidth="0.6" opacity="0.8"/>
                     <line x1={g.cx} y1={g.cy-g.r*0.36} x2={g.cx} y2={g.cy+g.r*0.36} stroke={stroke} strokeWidth="0.6" opacity="0.8"/>
-                    {/* Straight horizontal leader line: from circle edge to just before label */}
-                    <line x1={g.cx+g.r} y1={g.cy} x2={VW-LBL} y2={g.cy} stroke={stroke} strokeWidth="1"/>
+                    {/* Leader line from exit point on circle edge → label */}
+                    <line x1={ex} y1={ey} x2={VW-LBL} y2={ey} stroke={stroke} strokeWidth="1"/>
                     {/* Label letter at end of leader line */}
-                    <text x={VW-1} y={g.cy+3.5} textAnchor="end" fontSize="9" fontWeight="800"
+                    <text x={VW-1} y={ey+3.5} textAnchor="end" fontSize="9" fontWeight="800"
                       fill={stroke} fontFamily="monospace" letterSpacing="0">{g.label}</text>
                   </g>
                 );
               }))}
             </svg>
-            {/* Input boxes: absolutely positioned on the right half, top% aligns with circle cy */}
+            {/* Input boxes: absolutely positioned on the right half, top% aligns with line exit y */}
             <div style={{position:"absolute",top:0,left:"50%",right:0,height:"100%"}}>
               {gears.map(g=>{
                 const col=g.color==="blue"?C.blue:C.amber;
+                const ey=g.cy+(g.exitDy||0);
                 return(
-                  <div key={g.label} style={{position:"absolute",top:`${g.cy/maxY*100}%`,left:4,right:2,transform:"translateY(-50%)",display:"flex",alignItems:"center",gap:2}}>
+                  <div key={g.label} style={{position:"absolute",top:`${ey/maxY*100}%`,left:4,right:2,transform:"translateY(-50%)",display:"flex",alignItems:"center",gap:2}}>
                     <span style={{color:C.muted,fontSize:9,flexShrink:0}}>=</span>
                     <input style={{flex:1,minWidth:0,height:19,background:C.raised,border:`1px solid ${col}55`,borderRadius:2,color:C.green,fontSize:10,textAlign:"right",padding:"0 3px",fontFamily:"'Share Tech Mono',monospace",outline:"none"}}
                       value={e[g.inputKey]||""} onChange={ev=>setE(g.inputKey,ev.target.value)}/>
@@ -5739,16 +5745,18 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       {label:"d", inputKey:"fraesD",  cx:61, cy:72, r:16, color:"blue"},
     ];
     // Längsvorschub: amber a→b (touches), blue c (compound inside b)→Zw (touches c)→d (touches Zw)
+    // Zw placed below-right of c so it sits clearly outside b and at a distinct height.
     const laengsGears=[
-      {label:"a", inputKey:"laengsA",  cx:12, cy:22, r:10, color:"amber"},
-      // b touches a: dist(b,a)=sqrt(21²+25²)≈32.6 ≈ 10+22
-      {label:"b", inputKey:"laengsB",  cx:33, cy:47, r:22, color:"amber"},
-      // c compound inside b, offset 6 px
-      {label:"c", inputKey:"laengsC",  cx:38, cy:52, r:11, color:"blue"},
-      // Zw touches c horizontally: dist=11+10=21, cx_Zw=38+21=59
-      {label:"Zw",inputKey:"laengsZw", cx:59, cy:52, r:10, color:"blue"},
-      // d touches Zw: dist(d,Zw)=sqrt(4²+24²)≈24.3 ≈ 10+14
-      {label:"d", inputKey:"laengsD",  cx:63, cy:76, r:14, color:"blue"},
+      {label:"a", inputKey:"laengsA",  cx:12, cy:14, r:10, color:"amber"},
+      // b touches a: dist(b,a)=sqrt(17²+25²)≈30.2 ≈ 10+20
+      {label:"b", inputKey:"laengsB",  cx:29, cy:39, r:20, color:"amber"},
+      // c compound inside b, offset ~8 px from b center
+      {label:"c", inputKey:"laengsC",  cx:35, cy:45, r:11, color:"blue"},
+      // Zw touches c, placed below-right so it is clearly OUTSIDE b and at distinct cy
+      // dist(Zw,c)=sqrt(11²+18²)≈21≈11+10; dist(Zw,b)=sqrt(17²+24²)≈29>20 (outside b)
+      {label:"Zw",inputKey:"laengsZw", cx:46, cy:63, r:10, color:"blue"},
+      // d touches Zw: dist(d,Zw)=sqrt(17²+17²)≈24≈10+14
+      {label:"d", inputKey:"laengsD",  cx:63, cy:80, r:14, color:"blue"},
     ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
