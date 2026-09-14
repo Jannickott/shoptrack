@@ -198,7 +198,7 @@ export default function App(){
     "Turning":["Chuck Name","Chuck Overhang","Clamping Pressure","Zero Point","Workpiece Stop","Spindle Speed","Feed Rate","Coolant Pressure","Tool Offset","Bar Diameter","Chuck Jaw","RPM","Cutting Speed","DOC"],
     "Affolter":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
   };
-  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter","MZ"]};
+  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter","MZ","150"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
   const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{},hiddenMachines:[]});
@@ -249,6 +249,7 @@ export default function App(){
             Object.keys(sd).forEach(k=>{sd[k]=sd[k].map(v=>v==="Affolter 160"?"Affolter":v);});
             // Ensure MZ is always in Fortanding sub-depts
             if(sd["Fortanding"]&&!sd["Fortanding"].includes("MZ")) sd["Fortanding"].push("MZ");
+            if(sd["Fortanding"]&&!sd["Fortanding"].includes("150")) sd["Fortanding"].push("150");
             setSubDepartments(sd);
           }
           if(data.efficiencyGoals) setEfficiencyGoals(data.efficiencyGoals);
@@ -5142,6 +5143,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
 function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const [lightboxUrl,setLightboxUrl]=useState(null);
+  const [mzDetOpen,setMzDetOpen]=useState({schnecke:false,werkstuck:false,entgraten:false});
   const rc=pos=>{if(!pos)return"";return(sheet.restartPrefix||"NAT")+String(pos).padStart(sheet.restartPad||2,"0");};
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
   const filledTools2=(sheet.tools2||[]).filter(t=>t.description||t.label);
@@ -5354,6 +5356,122 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
           <button onClick={()=>setLightboxUrl(null)} style={{marginTop:16,background:"rgba(255,255,255,.12)",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,color:"#fff",fontSize:14,fontWeight:700,padding:"10px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}><i className="ti ti-x"/> Close</button>
         </div>
       )}
+      {sheet.subDepartment==="150"&&(()=>{
+        const e={...ERIKS_BLANK,...(sheet.eriksSetup||{})};
+        const mono={fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:15};
+        const kv=(lbl,val,unit)=>val?(<div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}><div style={{fontSize:10,color:C.muted,fontWeight:600,minWidth:130}}>{lbl}</div><div style={{...mono,flex:1}}>{val}</div>{unit&&<div style={{fontSize:9,color:C.muted}}>{unit}</div>}</div>):null;
+        const secH=(t)=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
+        const gearRow=(label,fields)=>{
+          const vals=fields.filter(([,v])=>v);
+          if(!vals.length) return null;
+          return(<div style={{padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:10,color:C.muted,fontWeight:600}}>{label}: </span>{vals.map(([k,v])=><span key={k} style={{marginRight:12}}><span style={{fontSize:9,color:C.muted}}>{k}=</span><span style={{...mono,fontSize:13}}>{v}</span></span>)}</div>);
+        };
+        const fraesImg=(side)=>(
+          <svg width="90" height="80" viewBox="0 0 100 90">
+            <rect x="5" y="72" width="90" height="6" rx="1" fill="none" stroke={C.muted} strokeWidth="1.2"/>
+            <ellipse cx="50" cy="68" rx="14" ry="6" fill="none" stroke={C.muted} strokeWidth="1.2"/>
+            <g transform={`rotate(${side==="L"?-28:28},50,68)`}>
+              <line x1="50" y1="68" x2="50" y2="18" stroke={C.muted} strokeWidth="2"/>
+              <circle cx="50" cy="14" r="13" fill="none" stroke={C.amber} strokeWidth="1.5"/>
+              <circle cx="50" cy="14" r="3" fill={C.amber} opacity="0.6"/>
+              {[0,30,60,90,120,150,180,210,240,270,300,330].map(a=>(<line key={a} x1={50+13*Math.cos(a*Math.PI/180)} y1={14+13*Math.sin(a*Math.PI/180)} x2={50+16*Math.cos(a*Math.PI/180)} y2={14+16*Math.sin(a*Math.PI/180)} stroke={C.muted} strokeWidth="1"/>))}
+            </g>
+            <text x="50" y="88" textAnchor="middle" fontSize="8" fill={C.muted}>{side==="L"?"Links":"Rechts"}</text>
+          </svg>
+        );
+        return(<div style={{marginBottom:14}}>
+          <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:8}}>
+            {secH("Fräser / Cutter")}
+            <div style={{padding:"8px 14px",display:"flex",gap:16,flexWrap:"wrap",borderBottom:`1px solid ${C.border}`}}>
+              {[["mn",e.mn],["Z",e.z],["β",e.beta],["dk",e.dk],["uo",e.uo],["df",e.df]].filter(([,v])=>v).map(([lbl,v])=>(<span key={lbl} style={{marginRight:8}}><span style={{fontSize:9,color:C.muted}}>{lbl}=</span><span style={{...mono,fontSize:13}}>{v}</span></span>))}
+              {e.fraeserDia&&<span><span style={{fontSize:9,color:C.muted}}>Fräser Ø </span><span style={{...mono,fontSize:13}}>{e.fraeserDia}</span></span>}
+            </div>
+            {(e.fraesLagerLinks||e.fraesLagerRechts)&&(<>
+              {secH("Fräslagerstellung / Cutter Position")}
+              <div style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+                {[["L",e.fraesLagerLinks],["R",e.fraesLagerRechts]].map(([side,val])=>(<div key={side} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
+                  {fraesImg(side)}
+                  {val&&<div style={{...mono,fontSize:14,textAlign:"center"}}>{val}</div>}
+                </div>))}
+              </div>
+            </>)}
+            {secH("Laufrichtung / Direction")}
+            <div style={{padding:"8px 14px",display:"flex",gap:16,borderBottom:`1px solid ${C.border}`}}>
+              <span style={{fontSize:12,fontWeight:700,color:C.amber}}>{e.richtung}</span>
+              <span style={{fontSize:12,color:C.blue}}>Diff. {e.differential}</span>
+            </div>
+            {secH("Zahnzahl / Tooth Count")}
+            {kv("Zahnzahl",e.zahnzahl,"")}
+            {kv("i",e.zahnzahlRatio,"")}
+            {gearRow("Räder",[["d",e.zahnD],["Zw",e.zahnZw],["c",e.zahnC],["b",e.zahnB],["a",e.zahnA]])}
+            {secH("Steigung / Pitch")}
+            {kv("Steigung",e.steigung,"")}
+            {gearRow("Räder",[["a",e.steigA],["Zw",e.steigZw],["b",e.steigB],["C",e.steigC],["d",e.steigD]])}
+            {secH("Fräserdrehzahl / Cutter RPM")}
+            {kv("Fräserdrehzahl",e.fraesDrehzahl,"")}
+            {gearRow("Räder",[["a",e.fraesA],["b",e.fraesB],["c",e.fraesC],["d",e.fraesD]])}
+            {secH("Längsvorschub / Longitudinal Feed")}
+            {kv("Längsvorschub",e.laengs,"")}
+            {gearRow("Räder",[["a",e.laengsA],["b",e.laengsB],["c",e.laengsC],["Zw",e.laengsZw],["d",e.laengsD]])}
+            {(e.schalterA2||e.schalterA3||e.schalterA4||e.schalterA5)&&(<>
+              {secH("Schalterstellungen / Switch Positions")}
+              <div style={{padding:"8px 14px",display:"flex",gap:16,flexWrap:"wrap",borderBottom:`1px solid ${C.border}`}}>
+                {[["a2",e.schalterA2],["a3",e.schalterA3],["a4",e.schalterA4],["a5",e.schalterA5]].filter(([,v])=>v).map(([lbl,v])=>(<span key={lbl}><span style={{fontSize:9,color:C.muted}}>{lbl}=</span><span style={{...mono,fontSize:13}}>{v}</span></span>))}
+              </div>
+            </>)}
+            {kv("Tauchsteuerung",e.tauchsteuerung,"")}
+            {kv("Stck/Std",e.stckStd,"")}
+            {kv("Stck/Spannung",e.stckSpannung,"")}
+            {secH("Eingang / Input Drive")}
+            <div style={{padding:"8px 14px"}}><span style={{fontSize:12,fontWeight:700,color:C.amber}}>{e.eingang||"—"}</span></div>
+          </div>
+        </div>);
+      })()}
+      {sheet.subDepartment==="MZ"&&(()=>{
+        const adv=sheet.mzAdvanced||{};
+        const hdr=(key,de,en,icon)=>(
+          <button type="button" style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:mzDetOpen[key]?"rgba(240,165,0,.1)":C.surface,border:"none",borderBottom:mzDetOpen[key]?`1px solid ${C.border}`:"none",cursor:"pointer",textAlign:"left"}} onClick={()=>setMzDetOpen(p=>({...p,[key]:!p[key]}))}>
+            <i className={`ti ${icon}`} style={{color:C.amber,fontSize:15,flexShrink:0}}/>
+            <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:C.text}}>{de}</div><div style={{fontSize:10,color:C.muted}}>{en}</div></div>
+            <i className={`ti ti-chevron-${mzDetOpen[key]?"up":"down"}`} style={{color:C.muted,fontSize:13}}/>
+          </button>
+        );
+        const row=(de,en,val,unit)=>val!=null&&val!==""?(<div style={{display:"grid",gridTemplateColumns:"1fr auto 70px",gap:6,alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}>
+          <div><div style={{fontSize:11,fontWeight:600,color:C.text}}>{de}</div><div style={{fontSize:9,color:C.muted}}>{en}</div></div>
+          {unit?<div style={{fontSize:9,color:C.muted,whiteSpace:"nowrap"}}>{unit}</div>:<div/>}
+          <div style={{fontSize:15,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.green,textAlign:"right"}}>{val}</div>
+        </div>):null;
+        const subHdr=t=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
+        const s=adv.schnecke||{},w=adv.werkstuck||{},ev=adv.entgratenVorne||{},eh=adv.entgratenHinten||{};
+        const entRows=(d,de,en)=>(<div>{subHdr(`${de} / ${en}`)}{row("Entgraten","Deburring",d.entgraten,"0=Nein 1=Ja")}{row("Startpunkt in X","Start Point X",d.startpunktX,"[mm]")}{row("Startdurchmesser","Start Diameter",d.startdurchmesser,"[mm]")}{row("Kerndurchmesser","Core Diameter",d.kerndurchmesser,"[mm]")}{row("Verdrehung in Z","Rotation in Z",d.verdrehungZ,"[Grad]")}{row("Steigung","Pitch",d.steigung,"[mm]")}{row("Versatz","Offset",d.versatz,"[mm]")}{row("Entgratwinkel","Deburring Angle",d.entgratwinkel,"[Grad]")}{row("Gangzahl Fräser","Cutter Starts",d.gangzahlFraeser,"[1,2]")}</div>);
+        const hasSchnecke=Object.values(s).some(v=>v!=="");
+        const hasWerk=Object.values(w).some(v=>v!=="");
+        const hasEntgraten=Object.values(ev).some(v=>v!=="")||Object.values(eh).some(v=>v!=="");
+        if(!hasSchnecke&&!hasWerk&&!hasEntgraten) return null;
+        return(<div style={{marginBottom:14}}>
+          {hasSchnecke&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden"}}>
+            {hdr("schnecke","Schnecke","Worm","ti-rotate-clockwise")}
+            {mzDetOpen.schnecke&&<div>
+              {subHdr("Parameter Schnecke / Worm Parameters")}
+              {row("Gewindesteigung","Thread Pitch",s.gewindesteigung,"[mm]")}{row("Steigungswinkel","Helix Angle",s.steigungswinkel,"[Grad]")}{row("Vorlauf","Pre-run",s.vorlauf,"[mm]")}{row("Eintauchlänge X","Plunge Length X",s.eintauchlaengeX,"[mm]")}{row("Fräslänge","Milling Length",s.fraeslaenge,"[mm]")}{row("Austauchlänge X","Exit Length X",s.austauchlaengeX,"[mm]")}{row("Ausgangsstellung X","Start Position X",s.ausgangsstellungX,"[mm]")}{row("Konizität","Conicity",s.konizitaet,"[mm/Fräslänge]")}{row("Steigungskorrektur","Pitch Correction",s.steigungskorrektur,"[mm/Messlänge]")}{row("Messlänge","Measuring Length",s.messlaenge,"[mm]")}
+              {subHdr("Durchmesser / Diameters")}
+              {row("Startdurchmesser","Start Diameter",s.startdurchmesser,"[mm]")}{row("Eintauchdurchmesser","Plunge Diameter",s.eintauchdurchmesser,"[mm]")}{row("Kerndurchmesser","Core Diameter",s.kerndurchmesser,"[mm]")}{row("Austauchdurchmesser","Exit Diameter",s.austauchdurchmesser,"[mm]")}{row("Enddurchmesser","End Diameter",s.enddurchmesser,"[mm]")}{row("Schlichtzustellung","Finishing Infeed",s.schlichtzustellung,"[mm]")}{row("Rechts=1, Links=2","Right=1, Left=2",s.rechtsLinks,"")}{row("Gleichlauf=1, Gegenlauf=2","Climb=1, Conventional=2",s.gleichlaufGegenlauf,"")}
+            </div>}
+          </div>}
+          {hasWerk&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden"}}>
+            {hdr("werkstuck","Werkstückparameter","Workpiece Parameters","ti-settings")}
+            {mzDetOpen.werkstuck&&<div>
+              {row("Fräserdurchmesser","Cutter Diameter",w.fraeserdurchmesser,"[mm]")}{row("Stückzahl","Quantity",w.stueckzahl,"")}{row("Teilung","Pitch",w.teilung,"[1–99]")}{row("Vorschub Tauchen","Feed Plunge",w.vorschubTauchen,"[mm/min]")}{row("Vorschub Fräsen","Feed Milling",w.vorschubFraesen,"[mm/min]")}{row("Phasenverschiebung","Phase Shift",w.phasenverschiebung,"[Grad]")}{row("Ladestellung X-Achse","Load Position X",w.ladestellungX,"[mm]")}{row("Ladestellung Y-Achse","Load Position Y",w.ladestellungY,"[mm]")}{row("Drehrichtung Fräser","Cutter Rotation",w.drehrichtungFraeser,"[+1/-1]")}
+              {subHdr("Nute / Groove")}
+              {row("Nute einstechen","Groove Plunge",w.nuteEinstechen,"[1=Ja, 0=Nein]")}{row("Einstechposition","Plunge Position",w.einstechposition,"[mm]")}{row("Kerndurchmesser Nut","Groove Core Diameter",w.kerndurchmesserNut,"[mm]")}{row("Schwenkwinkel","Pivot Angle",w.schwenkwinkel,"[Grad]")}{row("Lader","Loader",w.lader,"[1,2,3,4]")}{row("Zange=1, Tasseau=2, Spitze=3","Collet=1, Tasseau=2, Tip=3",w.zangeType,"")}
+            </div>}
+          </div>}
+          {hasEntgraten&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:8,overflow:"hidden"}}>
+            {hdr("entgraten","Entgratunsparameter","Deburring Parameters","ti-tool")}
+            {mzDetOpen.entgraten&&<div>{entRows(ev,"Vorne","Front")}{entRows(eh,"Hinten","Rear")}</div>}
+          </div>}
+        </div>);
+      })()}
       <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
         <button style={btn("primary",true)} onClick={printPdf}><i className="ti ti-file-type-pdf"/> Export PDF</button>
         <button style={btn("outline",true)} onClick={onEdit}><i className="ti ti-edit"/> Edit Setup Sheet</button>
@@ -5375,7 +5493,8 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
   const MZ_BLANK={fraesForlaenger:"",fraesMn:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneUdhaeng:"",pinoldokUdhaeng:""};
-  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{}};
+  const ERIKS_BLANK={mn:"",z:"",beta:"",dk:"",uo:"",df:"",fraeserDia:"",fraesLagerLinks:"",fraesLagerRechts:"",richtung:"Gegenlauf",differential:"ausgerastet",zahnzahl:"",zahnzahlRatio:"",zahnD:"",zahnZw:"",zahnC:"",zahnB:"",zahnA:"",steigung:"",steigA:"",steigZw:"",steigB:"",steigC:"",steigD:"",fraesDrehzahl:"",fraesA:"",fraesB:"",fraesC:"",fraesD:"",laengs:"",laengsA:"",laengsB:"",laengsC:"",laengsZw:"",laengsD:"",schalterA2:"",schalterA3:"",schalterA4:"",schalterA5:"",tauchsteuerung:"",eingang:"m. Zwischenrad",stckStd:"",stckSpannung:""};
+  const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{},mzAdvanced:{schnecke:{},werkstuck:{},entgratenVorne:{},entgratenHinten:{}},eriksSetup:{}};
   const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}:blank);
   // Sub-depts available for current dept
   const deptSubDepts=(subDepartments||{})[form.department]||[];
@@ -5471,6 +5590,233 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       </div>
     );
   };
+  const eriksToolEditor=()=>{
+    const t=(form.tools||[])[0]||{position:1,description:"",label:"",toolId:null};
+    const setTool=(fld,val)=>setForm(p=>{const arr=[...(p.tools||[])];if(arr.length===0)arr.push({position:1,description:"",label:"",toolId:null});arr[0]={...arr[0],[fld]:val};return{...p,tools:arr};});
+    return(
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,overflow:"hidden",marginBottom:14}}>
+        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.amber,flexShrink:0,minWidth:80}}>Modul</div>
+          <input style={{...inp(),flex:1,fontSize:16,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="e.g. 0,8"/>
+        </div>
+        <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
+          <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Fräser description — optional"/>
+          <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool("toolId",e.target.value||null)}>
+            <option value="">— No cabinet tool —</option>
+            {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
+          </select>
+          <input style={{...inp(),fontSize:11}} value={t.label||""} onChange={e=>setTool("label",e.target.value)} placeholder="Notes — optional"/>
+        </div>
+      </div>
+    );
+  };
+  const eriksSetupEditor=()=>{
+    const e={...ERIKS_BLANK,...(form.eriksSetup||{})};
+    const setE=(k,v)=>setF("eriksSetup",{...(form.eriksSetup||{}),[k]:v});
+    const mono={fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:15};
+    const numInp=(k,ph="—")=>(<input style={{...inp(),...mono,width:"100%",textAlign:"right",fontSize:16}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder={ph}/>);
+    const secHdr=(t)=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
+    // Two-shaft gear train: left shaft (a top, b bottom), optional Zw idler, right shaft (c bottom, d top)
+    const gearTrain=(valueKeys,hasZw)=>{
+      // valueKeys: {a,b,c,d,zw} key names into e
+      const [ak,bk,ck,dk,zwk]=valueKeys;
+      const va=e[ak]||"", vb=e[bk]||"", vc=e[ck]||"", vd=e[dk]||"", vzw=hasZw?(e[zwk]||""):"";
+      // SVG layout: viewBox 0 0 260 140
+      // shaft1 x=55, shaft2 x=205, gear radius 26, spacing 90
+      const R=26,S1=55,S2=205,YT=32,YB=108,YM=70;
+      const gearCirc=(cx,cy,label,val,col=C.amber)=>(
+        <g key={label}>
+          <circle cx={cx} cy={cy} r={R} fill={col+"18"} stroke={col} strokeWidth="2"/>
+          {/* Teeth marks around circle */}
+          {[0,30,60,90,120,150,180,210,240,270,300,330].map(a=>{
+            const rx=cx+R*Math.cos(a*Math.PI/180), ry=cy+R*Math.sin(a*Math.PI/180);
+            const ox=cx+(R+6)*Math.cos(a*Math.PI/180), oy=cy+(R+6)*Math.sin(a*Math.PI/180);
+            return <line key={a} x1={rx} y1={ry} x2={ox} y2={oy} stroke={col} strokeWidth="1.5" opacity="0.5"/>;
+          })}
+          <text x={cx} y={cy-6} textAnchor="middle" fontSize="13" fontWeight="800" fill={col}>{label}</text>
+          <text x={cx} y={cy+9} textAnchor="middle" fontSize="11" fontWeight="700" fill={val?C.green:C.muted} fontFamily="'Share Tech Mono',monospace">{val||"—"}</text>
+        </g>
+      );
+      const zwCirc=hasZw&&(
+        <g>
+          <circle cx={130} cy={YM} r={18} fill={C.muted+"18"} stroke={C.muted} strokeWidth="1.5" strokeDasharray="4,3"/>
+          {[0,45,90,135,180,225,270,315].map(a=>{
+            const rx=130+18*Math.cos(a*Math.PI/180), ry=YM+18*Math.sin(a*Math.PI/180);
+            const ox=130+22*Math.cos(a*Math.PI/180), oy=YM+22*Math.sin(a*Math.PI/180);
+            return <line key={a} x1={rx} y1={ry} x2={ox} y2={oy} stroke={C.muted} strokeWidth="1.5" opacity="0.5"/>;
+          })}
+          <text x={130} y={YM-5} textAnchor="middle" fontSize="10" fontWeight="700" fill={C.muted}>Zw</text>
+          <text x={130} y={YM+8} textAnchor="middle" fontSize="10" fontWeight="700" fill={vzw?C.green:C.muted} fontFamily="'Share Tech Mono',monospace">{vzw||"—"}</text>
+        </g>
+      );
+      return(
+        <svg viewBox="0 0 260 145" style={{width:"100%",display:"block",marginBottom:4}}>
+          {/* Shaft lines */}
+          <line x1={S1} y1={YT-R} x2={S1} y2={YB+R} stroke={C.border} strokeWidth="3"/>
+          <line x1={S2} y1={YT-R} x2={S2} y2={YB+R} stroke={C.border} strokeWidth="3"/>
+          {/* Shaft hubs */}
+          <circle cx={S1} cy={YT} r={4} fill={C.muted}/>
+          <circle cx={S1} cy={YB} r={4} fill={C.muted}/>
+          <circle cx={S2} cy={YT} r={4} fill={C.muted}/>
+          <circle cx={S2} cy={YB} r={4} fill={C.muted}/>
+          {/* Mesh lines */}
+          {hasZw
+            ?<><line x1={S1+R} y1={YB} x2={130-18} y2={YM} stroke={C.border} strokeWidth="1" strokeDasharray="3,3"/>
+               <line x1={130+18} y1={YM} x2={S2-R} y2={YB} stroke={C.border} strokeWidth="1" strokeDasharray="3,3"/></>
+            :<line x1={S1+R} y1={YB} x2={S2-R} y2={YB} stroke={C.border} strokeWidth="1" strokeDasharray="3,3"/>
+          }
+          {/* Shaft labels */}
+          <text x={S1} y={138} textAnchor="middle" fontSize="8" fill={C.muted} letterSpacing="0.5">WELLE 1</text>
+          <text x={S2} y={138} textAnchor="middle" fontSize="8" fill={C.muted} letterSpacing="0.5">WELLE 2</text>
+          {/* Gears */}
+          {gearCirc(S1,YT,ak.slice(-1).toUpperCase(),va)}
+          {gearCirc(S1,YB,bk.slice(-1).toUpperCase(),vb)}
+          {gearCirc(S2,YT,dk.slice(-1).toUpperCase(),vd)}
+          {gearCirc(S2,YB,ck.slice(-1).toUpperCase(),vc)}
+          {zwCirc}
+        </svg>
+      );
+    };
+    const gearSection=(title,totalKey,totalPh,ratioKey,gearKeys,hasZw)=>(
+      <div style={{borderBottom:`1px solid ${C.border}`}}>
+        {secHdr(title)}
+        <div style={{padding:"10px 14px 4px"}}>
+          {gearTrain(gearKeys,hasZw)}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {totalKey&&<div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
+            {ratioKey&&<div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
+          </div>
+        </div>
+      </div>
+    );
+    // Rotary switch selector: 3 positions, tap to select, selected highlights red
+    const switchDial=(k,label)=>{
+      const val=e[k]||"";
+      // Positions at 8-o-clock, 12-o-clock, 4-o-clock (in SVG coords: y increases down)
+      const cx=40,cy=40,r=28;
+      const angles=[-150,-90,-30]; // degrees from right-axis (SVG), so -90=top, -150=upper-left, -30=upper-right
+      const pos=angles.map((a,i)=>{
+        const rad=a*Math.PI/180;
+        return{n:i+1,x:cx+r*Math.cos(rad),y:cy+r*Math.sin(rad)};
+      });
+      const selected=parseInt(val);
+      const selPos=pos.find(p=>p.n===selected);
+      return(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+          <div style={{fontSize:9,color:C.amber,fontWeight:700,letterSpacing:.5}}>{label}</div>
+          <svg width="80" height="80" viewBox="0 0 80 80" style={{cursor:"pointer"}}>
+            {/* Dial ring */}
+            <circle cx={cx} cy={cy} r={r+8} fill="none" stroke={C.border} strokeWidth="1.5"/>
+            <circle cx={cx} cy={cy} r={4} fill={C.muted}/>
+            {/* Needle to selected position */}
+            {selPos&&<line x1={cx} y1={cy} x2={selPos.x} y2={selPos.y} stroke="#e53e3e" strokeWidth="3" strokeLinecap="round"/>}
+            {/* Position markers */}
+            {pos.map(p=>{
+              const sel=p.n===selected;
+              return(
+                <g key={p.n} onClick={()=>setE(k,sel?"":String(p.n))} style={{cursor:"pointer"}}>
+                  <circle cx={p.x} cy={p.y} r={10} fill={sel?"#e53e3e":C.raised} stroke={sel?"#e53e3e":C.border} strokeWidth="1.5"/>
+                  <text x={p.x} y={p.y+4} textAnchor="middle" fontSize="11" fontWeight="800" fill={sel?"#fff":C.muted}>{p.n}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      );
+    };
+    return(
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+        {/* Cutter parameters */}
+        {secHdr("Fräser / Cutter")}
+        <div style={{padding:"10px 14px"}}>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:8}}>
+            {[["mn","z"],["beta","dk"],["uo","df"]].map(([k1,k2])=>(
+              [k1,k2].map(k=>(
+                <div key={k}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{k==="z"?"Z":k==="beta"?"β":k}</div>
+                  <input style={{...inp(),...mono,width:"100%",textAlign:"right"}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder="—"/>
+                </div>
+              ))
+            ))}
+          </div>
+          <div style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{fontSize:9,color:C.muted,fontWeight:600,flexShrink:0}}>Fräser Ø</div>
+            <input style={{...inp(),...mono,flex:1}} value={e.fraeserDia||""} onChange={ev=>setE("fraeserDia",ev.target.value)} placeholder="e.g. 20 H55"/>
+          </div>
+        </div>
+        {/* Fräslagerstellung — real scanned image from form */}
+        {secHdr("Fräslagerstellung / Cutter Position")}
+        <div style={{padding:"10px 14px 4px"}}>
+          {/* The image is the landscape scan; display top 38% which shows the Fräslagerstellung section */}
+          <canvas style={{width:"100%",display:"block",borderRadius:6,border:`1px solid ${C.border}`,marginBottom:10,background:C.raised}} ref={el=>{
+            if(!el||el._drawn) return; el._drawn=true;
+            const IMG_W=1168,IMG_H=832,SHOW=0.40;
+            const dw=el.parentElement?.offsetWidth-28||300;
+            const scale=dw/IMG_H;
+            el.width=Math.round(dw); el.height=Math.round(IMG_W*scale*SHOW);
+            const img=new Image();
+            img.onload=()=>{
+              const ctx=el.getContext("2d");
+              ctx.translate(0,IMG_W*scale);
+              ctx.rotate(-Math.PI/2);
+              ctx.scale(scale,scale);
+              ctx.drawImage(img,0,0);
+            };
+            img.src="/eriks-fraeslager.jpg";
+          }}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Links / Left angle</div>{numInp("fraesLagerLinks","e.g. 8°57'")}</div>
+            <div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Rechts / Right angle</div>{numInp("fraesLagerRechts","e.g. 2°32'")}</div>
+          </div>
+        </div>
+        {/* Direction + differential */}
+        {secHdr("Laufrichtung / Direction")}
+        <div style={{padding:"10px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
+          {["Gegenlauf","Gleichlauf"].map(v=>{const a=e.richtung===v;return(<button key={v} type="button" style={{padding:"7px 18px",borderRadius:20,border:`1px solid ${a?C.amber:C.border}`,background:a?"rgba(240,165,0,.15)":C.raised,color:a?C.amber:C.muted,fontSize:12,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("richtung",v)}>{v}</button>);})}
+          <div style={{width:"100%",height:1,background:C.border,margin:"4px 0"}}/>
+          {["ausgerastet","eingerastet"].map(v=>{const a=e.differential===v;const lbl=v==="ausgerastet"?"Diff.-Indexbolzen ausgerastet":"Diff.-Indexbolzen eingerastet";return(<button key={v} type="button" style={{padding:"7px 14px",borderRadius:20,border:`1px solid ${a?C.blue:C.border}`,background:a?"rgba(59,130,246,.15)":C.raised,color:a?C.blue:C.muted,fontSize:11,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("differential",v)}>{lbl}</button>);})}
+        </div>
+        {/* Gear sections */}
+        {gearSection("Zahnzahl / Tooth Count","zahnzahl","80","zahnzahlRatio",["zahnA","zahnB","zahnC","zahnD","zahnZw"],true)}
+        {gearSection("Steigung / Pitch","steigung","","",["steigA","steigZw","steigB","steigC","steigD"],true)}
+        {gearSection("Fräserdrehzahl / Cutter RPM","fraesDrehzahl","1312","",["fraesA","fraesB","fraesC","fraesD",""],false)}
+        {gearSection("Längsvorschub / Longitudinal Feed","laengs","0,7","",["laengsA","laengsB","laengsC","laengsD","laengsZw"],true)}
+        {/* Switch positions */}
+        {secHdr("Schalterstellungen / Switch Positions — auf rot einstellen")}
+        <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          {[["schalterA2","a2"],["schalterA3","a3"],["schalterA4","a4"],["schalterA5","a5"]].map(([k,lbl])=>switchDial(k,lbl))}
+        </div>
+        {/* Tauchsteuerung + production */}
+        {secHdr("Tauchsteuerung / Plunge + Production")}
+        <div style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {[["tauchsteuerung","Tauchsteuerung"],["stckStd","Stck/Std"],["stckSpannung","Stck/Spannung"]].map(([k,lbl])=>(<div key={k}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{lbl}</div>{numInp(k,"")}</div>))}
+        </div>
+        {/* Eingang */}
+        {secHdr("Eingang / Input Drive")}
+        <div style={{padding:"10px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
+          {["m. Zwischenrad","ohne Zwischenrad"].map(v=>{const a=e.eingang===v;return(<button key={v} type="button" style={{padding:"7px 18px",borderRadius:20,border:`1px solid ${a?C.amber:C.border}`,background:a?"rgba(240,165,0,.15)":C.raised,color:a?C.amber:C.muted,fontSize:12,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("eingang",v)}>{v}</button>);})}</div>
+      </div>
+    );
+  };
+  const mzToolEditor=()=>{
+    const t=(form.tools||[])[0]||{position:1,description:"",label:"",toolId:null};
+    const setTool=(fld,val)=>setForm(p=>{const arr=[...(p.tools||[])];if(arr.length===0)arr.push({position:1,description:"",label:"",toolId:null});arr[0]={...arr[0],[fld]:val};return{...p,tools:arr};});
+    return(
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,overflow:"hidden",marginBottom:14}}>
+        <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
+          <div style={{fontSize:11,fontWeight:700,color:C.amber,flexShrink:0,minWidth:80}}>Modul</div>
+          <input style={{...inp(),flex:1,fontSize:16,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="e.g. 0,9"/>
+        </div>
+        <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
+          <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Tool description — optional"/>
+          <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool("toolId",e.target.value||null)}>
+            <option value="">— No cabinet tool —</option>
+            {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
+          </select>
+          <input style={{...inp(),fontSize:11}} value={t.label||""} onChange={e=>setTool("label",e.target.value)} placeholder="Notes — optional"/>
+        </div>
+      </div>
+    );
+  };
   const mzSetupEditor=()=>{
     const mz={...MZ_BLANK,...(form.mzSetup||{})};
     const setMz=(k,v)=>setF("mzSetup",{...(form.mzSetup||{}),[k]:v});
@@ -5522,6 +5868,95 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       </div>
     );
   };
+  const [mzOpenSec,setMzOpenSec]=useState({schnecke:false,werkstuck:false,entgraten:false});
+  const setMzAdv=(sec,k,v)=>setF("mzAdvanced",{...(form.mzAdvanced||{}),[sec]:{...((form.mzAdvanced||{})[sec]||{}),[k]:v}});
+  const getMzAdv=sec=>(form.mzAdvanced||{})[sec]||{};
+  const mzAdvancedEditor=()=>{
+    const accHdr=(key,labelDe,labelEn,icon)=>(
+      <button type="button" style={{width:"100%",display:"flex",alignItems:"center",gap:10,padding:"12px 14px",background:mzOpenSec[key]?"rgba(240,165,0,.1)":C.surface,border:"none",borderBottom:mzOpenSec[key]?`1px solid ${C.border}`:"none",cursor:"pointer",textAlign:"left"}} onClick={()=>setMzOpenSec(p=>({...p,[key]:!p[key]}))}>
+        <i className={`ti ${icon}`} style={{color:C.amber,fontSize:15,flexShrink:0}}/>
+        <div style={{flex:1}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.text}}>{labelDe}</div>
+          <div style={{fontSize:10,color:C.muted}}>{labelEn}</div>
+        </div>
+        <i className={`ti ti-chevron-${mzOpenSec[key]?"up":"down"}`} style={{color:C.muted,fontSize:13}}/>
+      </button>
+    );
+    const fld=(sec,k,de,en,unit)=>{const d=getMzAdv(sec);return(
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto 88px",gap:6,alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}>
+        <div><div style={{fontSize:11,fontWeight:600,color:C.text}}>{de}</div><div style={{fontSize:9,color:C.muted}}>{en}</div></div>
+        {unit?<div style={{fontSize:9,color:C.muted,whiteSpace:"nowrap",textAlign:"right"}}>{unit}</div>:<div/>}
+        <input style={{...inp(),fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:14,textAlign:"right"}} value={d[k]||""} onChange={e=>setMzAdv(sec,k,e.target.value)} placeholder="—"/>
+      </div>
+    );};
+    const subHdr=t=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
+    const entSec=(sec,de,en)=>(<div>{subHdr(`${de} / ${en}`)}
+      {fld(sec,"entgraten","Entgraten","Deburring","0=Nein 1=Ja")}
+      {fld(sec,"startpunktX","Startpunkt in X","Start Point X","[mm]")}
+      {fld(sec,"startdurchmesser","Startdurchmesser","Start Diameter","[mm]")}
+      {fld(sec,"kerndurchmesser","Kerndurchmesser","Core Diameter","[mm]")}
+      {fld(sec,"verdrehungZ","Verdrehung in Z","Rotation in Z","[Grad]")}
+      {fld(sec,"steigung","Steigung","Pitch","[mm]")}
+      {fld(sec,"versatz","Versatz","Offset","[mm]")}
+      {fld(sec,"entgratwinkel","Entgratwinkel","Deburring Angle","[Grad]")}
+      {fld(sec,"gangzahlFraeser","Gangzahl Fräser","Cutter Starts","[1, 2]")}
+    </div>);
+    return(<>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:10,overflow:"hidden"}}>
+        {accHdr("schnecke","Schnecke","Worm","ti-rotate-clockwise")}
+        {mzOpenSec.schnecke&&<div>
+          {subHdr("Parameter Schnecke / Worm Parameters")}
+          {fld("schnecke","gewindesteigung","Gewindesteigung","Thread Pitch","[mm]")}
+          {fld("schnecke","steigungswinkel","Steigungswinkel","Helix Angle","[Grad]")}
+          {fld("schnecke","vorlauf","Vorlauf","Pre-run","[mm]")}
+          {fld("schnecke","eintauchlaengeX","Eintauchlänge X","Plunge Length X","[mm]")}
+          {fld("schnecke","fraeslaenge","Fräslänge","Milling Length","[mm]")}
+          {fld("schnecke","austauchlaengeX","Austauchlänge X","Exit Length X","[mm]")}
+          {fld("schnecke","ausgangsstellungX","Ausgangsstellung X","Start Position X","[mm]")}
+          {fld("schnecke","konizitaet","Konizität","Conicity","[mm/Fräslänge]")}
+          {fld("schnecke","steigungskorrektur","Steigungskorrektur","Pitch Correction","[mm/Messlänge]")}
+          {fld("schnecke","messlaenge","Messlänge","Measuring Length","[mm]")}
+          {subHdr("Durchmesser / Diameters")}
+          {fld("schnecke","startdurchmesser","Startdurchmesser","Start Diameter","[mm]")}
+          {fld("schnecke","eintauchdurchmesser","Eintauchdurchmesser","Plunge Diameter","[mm]")}
+          {fld("schnecke","kerndurchmesser","Kerndurchmesser","Core Diameter","[mm]")}
+          {fld("schnecke","austauchdurchmesser","Austauchdurchmesser","Exit Diameter","[mm]")}
+          {fld("schnecke","enddurchmesser","Enddurchmesser","End Diameter","[mm]")}
+          {fld("schnecke","schlichtzustellung","Schlichtzustellung","Finishing Infeed","[mm]")}
+          {fld("schnecke","rechtsLinks","Rechts = 1, Links = 2","Right = 1, Left = 2","")}
+          {fld("schnecke","gleichlaufGegenlauf","Gleichlauf = 1, Gegenlauf = 2","Climb = 1, Conventional = 2","")}
+        </div>}
+      </div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:10,overflow:"hidden"}}>
+        {accHdr("werkstuck","Werkstückparameter","Workpiece Parameters","ti-settings")}
+        {mzOpenSec.werkstuck&&<div>
+          {fld("werkstuck","fraeserdurchmesser","Fräserdurchmesser","Cutter Diameter","[mm]")}
+          {fld("werkstuck","stueckzahl","Stückzahl","Quantity","")}
+          {fld("werkstuck","teilung","Teilung","Pitch","[1–99]")}
+          {fld("werkstuck","vorschubTauchen","Vorschub Tauchen","Feed Plunge","[mm/min]")}
+          {fld("werkstuck","vorschubFraesen","Vorschub Fräsen","Feed Milling","[mm/min]")}
+          {fld("werkstuck","phasenverschiebung","Phasenverschiebung","Phase Shift","[Grad]")}
+          {fld("werkstuck","ladestellungX","Ladestellung X-Achse","Load Position X","[mm]")}
+          {fld("werkstuck","ladestellungY","Ladestellung Y-Achse","Load Position Y","[mm]")}
+          {fld("werkstuck","drehrichtungFraeser","Drehrichtung Fräser","Cutter Rotation","[+1 / -1]")}
+          {subHdr("Nute / Groove")}
+          {fld("werkstuck","nuteEinstechen","Nute einstechen","Groove Plunge","[1=Ja, 0=Nein]")}
+          {fld("werkstuck","einstechposition","Einstechposition","Plunge Position","[mm]")}
+          {fld("werkstuck","kerndurchmesserNut","Kerndurchmesser Nut","Groove Core Diameter","[mm]")}
+          {fld("werkstuck","schwenkwinkel","Schwenkwinkel","Pivot Angle","[Grad]")}
+          {fld("werkstuck","lader","Lader","Loader","[1, 2, 3, 4]")}
+          {fld("werkstuck","zangeType","Zange=1, Tasseau=2, Spitze=3","Collet=1, Tasseau=2, Tip=3","")}
+        </div>}
+      </div>
+      <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,marginBottom:14,overflow:"hidden"}}>
+        {accHdr("entgraten","Entgratunsparameter","Deburring Parameters","ti-tool")}
+        {mzOpenSec.entgraten&&<div>
+          {entSec("entgratenVorne","Vorne","Front")}
+          {entSec("entgratenHinten","Hinten","Rear")}
+        </div>}
+      </div>
+    </>);
+  };
   const save=()=>{
     const e={};
     if(!form.partNumber.trim()) e.partNumber="Required";
@@ -5569,8 +6004,12 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         <div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:6,padding:"6px 10px"}}>Tool 8 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(8)}</span>&nbsp;·&nbsp;Tool 1 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(1)}</span></div>
       </div>
       </>}
-      {deptSubDepts.length>0&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Clamping Tools</div>}
-      {deptSubDepts.length>0&&fortandingToolEditor()}
+      {deptSubDepts.length>0&&form.subDepartment!=="MZ"&&form.subDepartment!=="150"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Clamping Tools</div>}
+      {deptSubDepts.length>0&&form.subDepartment!=="MZ"&&form.subDepartment!=="150"&&fortandingToolEditor()}
+      {form.subDepartment==="MZ"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool</div>}
+      {form.subDepartment==="MZ"&&mzToolEditor()}
+      {form.subDepartment==="150"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Fräser / Tool</div>}
+      {form.subDepartment==="150"&&eriksToolEditor()}
       {deptSubDepts.length===0&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool List — Main</div>}
       {deptSubDepts.length===0&&toolListEditor("tools",C.amber)}
       {deptSubDepts.length===0&&(showList2?(
@@ -5595,8 +6034,26 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       ):(
         <button style={{...btn("outline",true,true),borderColor:C.blue,color:C.blue,marginBottom:14}} onClick={()=>setShowList2(true)}><i className="ti ti-plus"/> Add Sub Tool List</button>
       ))}
+      {form.subDepartment==="150"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Einstellplan — 150</div>}
+      {form.subDepartment==="150"&&eriksSetupEditor()}
       {form.subDepartment==="MZ"&&<div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Setup Parameters</div>}
       {form.subDepartment==="MZ"&&mzSetupEditor()}
+      {form.subDepartment==="MZ"&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
+        {(form.params||[]).length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:11}}>No extra parameters added yet</div>}
+        {(form.params||[]).map((p,i)=>(
+          <div key={i} style={{display:"flex",gap:8,alignItems:"center",padding:"8px 12px",borderBottom:`1px solid ${C.border}`}}>
+            <div style={{fontSize:11,fontWeight:600,color:C.text,width:130,flexShrink:0}}>{p.key}</div>
+            <input style={{...inp(),flex:1,fontSize:14,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.green}} value={p.value||""} onChange={e=>setForm(pr=>({...pr,params:pr.params.map((x,j)=>j===i?{...x,value:e.target.value}:x)}))} placeholder="Value…"/>
+            <button style={{background:"none",border:"none",color:C.red,cursor:"pointer",fontSize:15,padding:"2px 4px",flexShrink:0}} onClick={()=>setForm(pr=>({...pr,params:pr.params.filter((_,j)=>j!==i)}))}><i className="ti ti-x"/></button>
+          </div>
+        ))}
+        <div style={{padding:"10px 12px",display:"flex",gap:8,alignItems:"center"}}>
+          <select style={{...sel(),flex:1}} defaultValue="" onChange={e=>{const v=e.target.value;if(!v)return;if((form.params||[]).find(p=>p.key===v))return;setForm(pr=>({...pr,params:[...(pr.params||[]),{key:v,value:""}]}));e.target.value="";}}>
+            <option value="">+ Add parameter…</option>
+            {(setupParamOptions||[]).filter(name=>!(form.params||[]).find(p=>p.key===name)).map(name=><option key={name} value={name}>{name}</option>)}
+          </select>
+        </div>
+      </div>}
       {form.subDepartment!=="MZ"&&<div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
         <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>Setup Parameters</div>
       </div>}
@@ -5661,6 +6118,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
           }}/>
         </label>
       </div>
+      {form.subDepartment==="MZ"&&mzAdvancedEditor()}
       <button style={btn("primary",true)} onClick={save}><i className="ti ti-check"/> Save Setup Sheet</button>
     </div>
   );

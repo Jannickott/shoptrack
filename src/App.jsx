@@ -5614,179 +5614,186 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     const e={...ERIKS_BLANK,...(form.eriksSetup||{})};
     const setE=(k,v)=>setF("eriksSetup",{...(form.eriksSetup||{}),[k]:v});
     const mono={fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:15};
-    const numInp=(k,ph,w="80px")=>(<input style={{...inp(),...mono,width:w,textAlign:"right"}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder={ph||"—"}/>);
-    const row=(label,content)=>(<div style={{display:"flex",alignItems:"center",gap:8,padding:"8px 14px",borderBottom:`1px solid ${C.border}`}}><div style={{fontSize:10,color:C.muted,fontWeight:600,minWidth:110,flexShrink:0}}>{label}</div>{content}</div>);
+    const numInp=(k,ph="—")=>(<input style={{...inp(),...mono,width:"100%",textAlign:"right",fontSize:16}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder={ph}/>);
     const secHdr=(t)=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
-    // Gear train SVG: shows 4 gears a,b,c,d with optional Zw
-    const gearSVG=(labels)=>{
-      const positions=labels; // e.g. [{key:"a",x:20,y:60,r:16},{key:"Zw",...},...]
+    // Two-shaft gear train: left shaft (a top, b bottom), optional Zw idler, right shaft (c bottom, d top)
+    const gearTrain=(valueKeys,hasZw)=>{
+      // valueKeys: {a,b,c,d,zw} key names into e
+      const [ak,bk,ck,dk,zwk]=valueKeys;
+      const va=e[ak]||"", vb=e[bk]||"", vc=e[ck]||"", vd=e[dk]||"", vzw=hasZw?(e[zwk]||""):"";
+      // SVG layout: viewBox 0 0 260 140
+      // shaft1 x=55, shaft2 x=205, gear radius 26, spacing 90
+      const R=26,S1=55,S2=205,YT=32,YB=108,YM=70;
+      const gearCirc=(cx,cy,label,val,col=C.amber)=>(
+        <g key={label}>
+          <circle cx={cx} cy={cy} r={R} fill={col+"18"} stroke={col} strokeWidth="2"/>
+          {/* Teeth marks around circle */}
+          {[0,30,60,90,120,150,180,210,240,270,300,330].map(a=>{
+            const rx=cx+R*Math.cos(a*Math.PI/180), ry=cy+R*Math.sin(a*Math.PI/180);
+            const ox=cx+(R+6)*Math.cos(a*Math.PI/180), oy=cy+(R+6)*Math.sin(a*Math.PI/180);
+            return <line key={a} x1={rx} y1={ry} x2={ox} y2={oy} stroke={col} strokeWidth="1.5" opacity="0.5"/>;
+          })}
+          <text x={cx} y={cy-6} textAnchor="middle" fontSize="13" fontWeight="800" fill={col}>{label}</text>
+          <text x={cx} y={cy+9} textAnchor="middle" fontSize="11" fontWeight="700" fill={val?C.green:C.muted} fontFamily="'Share Tech Mono',monospace">{val||"—"}</text>
+        </g>
+      );
+      const zwCirc=hasZw&&(
+        <g>
+          <circle cx={130} cy={YM} r={18} fill={C.muted+"18"} stroke={C.muted} strokeWidth="1.5" strokeDasharray="4,3"/>
+          {[0,45,90,135,180,225,270,315].map(a=>{
+            const rx=130+18*Math.cos(a*Math.PI/180), ry=YM+18*Math.sin(a*Math.PI/180);
+            const ox=130+22*Math.cos(a*Math.PI/180), oy=YM+22*Math.sin(a*Math.PI/180);
+            return <line key={a} x1={rx} y1={ry} x2={ox} y2={oy} stroke={C.muted} strokeWidth="1.5" opacity="0.5"/>;
+          })}
+          <text x={130} y={YM-5} textAnchor="middle" fontSize="10" fontWeight="700" fill={C.muted}>Zw</text>
+          <text x={130} y={YM+8} textAnchor="middle" fontSize="10" fontWeight="700" fill={vzw?C.green:C.muted} fontFamily="'Share Tech Mono',monospace">{vzw||"—"}</text>
+        </g>
+      );
       return(
-        <svg width="180" height="80" viewBox="0 0 180 80" style={{display:"block",flexShrink:0}}>
-          {positions.map((p,i)=>(
-            <g key={p.key}>
-              <circle cx={p.x} cy={p.y} r={p.r} fill="none" stroke={C.muted} strokeWidth="1.5"/>
-              <line x1={p.x-p.r*0.5} y1={p.y} x2={p.x+p.r*0.5} y2={p.y} stroke={C.muted} strokeWidth="1"/>
-              <line x1={p.x} y1={p.y-p.r*0.5} x2={p.x} y2={p.y+p.r*0.5} stroke={C.muted} strokeWidth="1"/>
-              <text x={p.x} y={p.y+p.r+10} textAnchor="middle" fontSize="9" fill={C.amber} fontWeight="700">{p.key}</text>
-            </g>
-          ))}
+        <svg viewBox="0 0 260 145" style={{width:"100%",display:"block",marginBottom:4}}>
+          {/* Shaft lines */}
+          <line x1={S1} y1={YT-R} x2={S1} y2={YB+R} stroke={C.border} strokeWidth="3"/>
+          <line x1={S2} y1={YT-R} x2={S2} y2={YB+R} stroke={C.border} strokeWidth="3"/>
+          {/* Shaft hubs */}
+          <circle cx={S1} cy={YT} r={4} fill={C.muted}/>
+          <circle cx={S1} cy={YB} r={4} fill={C.muted}/>
+          <circle cx={S2} cy={YT} r={4} fill={C.muted}/>
+          <circle cx={S2} cy={YB} r={4} fill={C.muted}/>
+          {/* Mesh lines */}
+          {hasZw
+            ?<><line x1={S1+R} y1={YB} x2={130-18} y2={YM} stroke={C.border} strokeWidth="1" strokeDasharray="3,3"/>
+               <line x1={130+18} y1={YM} x2={S2-R} y2={YB} stroke={C.border} strokeWidth="1" strokeDasharray="3,3"/></>
+            :<line x1={S1+R} y1={YB} x2={S2-R} y2={YB} stroke={C.border} strokeWidth="1" strokeDasharray="3,3"/>
+          }
+          {/* Shaft labels */}
+          <text x={S1} y={138} textAnchor="middle" fontSize="8" fill={C.muted} letterSpacing="0.5">WELLE 1</text>
+          <text x={S2} y={138} textAnchor="middle" fontSize="8" fill={C.muted} letterSpacing="0.5">WELLE 2</text>
+          {/* Gears */}
+          {gearCirc(S1,YT,ak.slice(-1).toUpperCase(),va)}
+          {gearCirc(S1,YB,bk.slice(-1).toUpperCase(),vb)}
+          {gearCirc(S2,YT,dk.slice(-1).toUpperCase(),vd)}
+          {gearCirc(S2,YB,ck.slice(-1).toUpperCase(),vc)}
+          {zwCirc}
         </svg>
       );
     };
-    const gearBlock=(title,gears,fields)=>(
+    const gearSection=(title,totalKey,totalPh,ratioKey,gearKeys,hasZw)=>(
       <div style={{borderBottom:`1px solid ${C.border}`}}>
         {secHdr(title)}
-        <div style={{padding:"10px 14px",display:"flex",gap:16,alignItems:"center"}}>
-          {gearSVG(gears)}
-          <div style={{flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px"}}>
-            {fields.map(([lbl,k])=>(<div key={k} style={{display:"flex",alignItems:"center",gap:6}}>
-              <div style={{fontSize:11,color:C.muted,fontWeight:600,minWidth:22}}>{lbl}=</div>
-              {numInp(k,"","")}
-            </div>))}
+        <div style={{padding:"10px 14px 4px"}}>
+          {gearTrain(gearKeys,hasZw)}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {totalKey&&<div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
+            {ratioKey&&<div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
           </div>
         </div>
       </div>
     );
-    // Fräslagerstellung SVG - cutter head at angle
-    const fraesImg=(side)=>(
-      <svg width="100" height="90" viewBox="0 0 100 90" style={{display:"block"}}>
-        {/* Base plate */}
-        <rect x="5" y="72" width="90" height="6" rx="1" fill="none" stroke={C.muted} strokeWidth="1.2"/>
-        {/* Spindle housing */}
-        <ellipse cx="50" cy="68" rx="14" ry="6" fill="none" stroke={C.muted} strokeWidth="1.2"/>
-        {/* Tilted spindle arm */}
-        <g transform={`rotate(${side==="L"?-28:28},50,68)`}>
-          <line x1="50" y1="68" x2="50" y2="18" stroke={C.muted} strokeWidth="2"/>
-          {/* Cutter wheel */}
-          <circle cx="50" cy="14" r="13" fill="none" stroke={C.amber} strokeWidth="1.5"/>
-          <circle cx="50" cy="14" r="3" fill={C.amber} opacity="0.6"/>
-          {/* Cutter teeth hints */}
-          {[0,30,60,90,120,150,180,210,240,270,300,330].map(a=>(
-            <line key={a} x1={50+13*Math.cos(a*Math.PI/180)} y1={14+13*Math.sin(a*Math.PI/180)}
-              x2={50+16*Math.cos(a*Math.PI/180)} y2={14+16*Math.sin(a*Math.PI/180)}
-              stroke={C.muted} strokeWidth="1"/>
-          ))}
-        </g>
-        {/* Angle arc */}
-        <path d={`M 50,62 A 10,10 0 0,${side==="L"?0:1} ${side==="L"?40:60},62`} fill="none" stroke={C.green} strokeWidth="1" strokeDasharray="3,2"/>
-        <text x="50" y="86" textAnchor="middle" fontSize="8" fill={C.muted}>{side==="L"?"Links / Left":"Rechts / Right"}</text>
-      </svg>
-    );
+    // Rotary switch selector: 3 positions, tap to select, selected highlights red
+    const switchDial=(k,label)=>{
+      const val=e[k]||"";
+      // Positions at 8-o-clock, 12-o-clock, 4-o-clock (in SVG coords: y increases down)
+      const cx=40,cy=40,r=28;
+      const angles=[-150,-90,-30]; // degrees from right-axis (SVG), so -90=top, -150=upper-left, -30=upper-right
+      const pos=angles.map((a,i)=>{
+        const rad=a*Math.PI/180;
+        return{n:i+1,x:cx+r*Math.cos(rad),y:cy+r*Math.sin(rad)};
+      });
+      const selected=parseInt(val);
+      const selPos=pos.find(p=>p.n===selected);
+      return(
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+          <div style={{fontSize:9,color:C.amber,fontWeight:700,letterSpacing:.5}}>{label}</div>
+          <svg width="80" height="80" viewBox="0 0 80 80" style={{cursor:"pointer"}}>
+            {/* Dial ring */}
+            <circle cx={cx} cy={cy} r={r+8} fill="none" stroke={C.border} strokeWidth="1.5"/>
+            <circle cx={cx} cy={cy} r={4} fill={C.muted}/>
+            {/* Needle to selected position */}
+            {selPos&&<line x1={cx} y1={cy} x2={selPos.x} y2={selPos.y} stroke="#e53e3e" strokeWidth="3" strokeLinecap="round"/>}
+            {/* Position markers */}
+            {pos.map(p=>{
+              const sel=p.n===selected;
+              return(
+                <g key={p.n} onClick={()=>setE(k,sel?"":String(p.n))} style={{cursor:"pointer"}}>
+                  <circle cx={p.x} cy={p.y} r={10} fill={sel?"#e53e3e":C.raised} stroke={sel?"#e53e3e":C.border} strokeWidth="1.5"/>
+                  <text x={p.x} y={p.y+4} textAnchor="middle" fontSize="11" fontWeight="800" fill={sel?"#fff":C.muted}>{p.n}</text>
+                </g>
+              );
+            })}
+          </svg>
+        </div>
+      );
+    };
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
         {/* Cutter parameters */}
         {secHdr("Fräser / Cutter")}
         <div style={{padding:"10px 14px"}}>
-          <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:8,marginBottom:8}}>
-            {[["mn",e.mn],["Z",e.z],["β",e.beta],["dk",e.dk],["uo",e.uo],["df",e.df]].map(([lbl,v])=>(
-              <div key={lbl}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{lbl}</div>
-                <input style={{...inp(),...mono,width:"100%",textAlign:"right"}} value={v||""} onChange={ev=>setE(lbl==="Z"?"z":lbl==="β"?"beta":lbl.toLowerCase(),ev.target.value)} placeholder="—"/>
-              </div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:8}}>
+            {[["mn","z"],["beta","dk"],["uo","df"]].map(([k1,k2])=>(
+              [k1,k2].map(k=>(
+                <div key={k}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{k==="z"?"Z":k==="beta"?"β":k}</div>
+                  <input style={{...inp(),...mono,width:"100%",textAlign:"right"}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder="—"/>
+                </div>
+              ))
             ))}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <div style={{fontSize:9,color:C.muted,fontWeight:600}}>Fräser Ø</div>
-            <input style={{...inp(),...mono,width:"100px"}} value={e.fraeserDia||""} onChange={ev=>setE("fraeserDia",ev.target.value)} placeholder="e.g. 20 H55"/>
+            <div style={{fontSize:9,color:C.muted,fontWeight:600,flexShrink:0}}>Fräser Ø</div>
+            <input style={{...inp(),...mono,flex:1}} value={e.fraeserDia||""} onChange={ev=>setE("fraeserDia",ev.target.value)} placeholder="e.g. 20 H55"/>
           </div>
         </div>
-        {/* Fräslagerstellung */}
+        {/* Fräslagerstellung — real scanned image from form */}
         {secHdr("Fräslagerstellung / Cutter Position")}
-        <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-            {fraesImg("L")}
-            <div style={{display:"flex",alignItems:"center",gap:6,width:"100%"}}>
-              <div style={{fontSize:10,color:C.muted,fontWeight:600,flexShrink:0}}>Winkel</div>
-              <input style={{...inp(),...mono,flex:1}} value={e.fraesLagerLinks||""} onChange={ev=>setE("fraesLagerLinks",ev.target.value)} placeholder="e.g. 8°57'"/>
-            </div>
-          </div>
-          <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:8}}>
-            {fraesImg("R")}
-            <div style={{display:"flex",alignItems:"center",gap:6,width:"100%"}}>
-              <div style={{fontSize:10,color:C.muted,fontWeight:600,flexShrink:0}}>Winkel</div>
-              <input style={{...inp(),...mono,flex:1}} value={e.fraesLagerRechts||""} onChange={ev=>setE("fraesLagerRechts",ev.target.value)} placeholder="e.g. 2°32'"/>
-            </div>
+        <div style={{padding:"10px 14px 4px"}}>
+          {/* The image is the landscape scan; display top 38% which shows the Fräslagerstellung section */}
+          <canvas style={{width:"100%",display:"block",borderRadius:6,border:`1px solid ${C.border}`,marginBottom:10,background:C.raised}} ref={el=>{
+            if(!el||el._drawn) return; el._drawn=true;
+            const IMG_W=1168,IMG_H=832,SHOW=0.40;
+            const dw=el.parentElement?.offsetWidth-28||300;
+            const scale=dw/IMG_H;
+            el.width=Math.round(dw); el.height=Math.round(IMG_W*scale*SHOW);
+            const img=new Image();
+            img.onload=()=>{
+              const ctx=el.getContext("2d");
+              ctx.translate(0,IMG_W*scale);
+              ctx.rotate(-Math.PI/2);
+              ctx.scale(scale,scale);
+              ctx.drawImage(img,0,0);
+            };
+            img.src="/eriks-fraeslager.jpg";
+          }}/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+            <div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Links / Left angle</div>{numInp("fraesLagerLinks","e.g. 8°57'")}</div>
+            <div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Rechts / Right angle</div>{numInp("fraesLagerRechts","e.g. 2°32'")}</div>
           </div>
         </div>
         {/* Direction + differential */}
         {secHdr("Laufrichtung / Direction")}
-        <div style={{padding:"10px 14px",display:"flex",gap:24,flexWrap:"wrap"}}>
-          <div style={{display:"flex",gap:6}}>
-            {["Gegenlauf","Gleichlauf"].map(v=>{const a=e.richtung===v;return(<button key={v} type="button" style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${a?C.amber:C.border}`,background:a?"rgba(240,165,0,.15)":C.raised,color:a?C.amber:C.muted,fontSize:12,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("richtung",v)}>{v}</button>);})}</div>
-          <div style={{display:"flex",gap:6}}>
-            {["ausgerastet","eingerastet"].map(v=>{const a=e.differential===v;const lbl=v==="ausgerastet"?"Diff. ausgerastet":"Diff. eingerastet";return(<button key={v} type="button" style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${a?C.blue:C.border}`,background:a?"rgba(59,130,246,.15)":C.raised,color:a?C.blue:C.muted,fontSize:12,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("differential",v)}>{lbl}</button>);})}</div>
+        <div style={{padding:"10px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
+          {["Gegenlauf","Gleichlauf"].map(v=>{const a=e.richtung===v;return(<button key={v} type="button" style={{padding:"7px 18px",borderRadius:20,border:`1px solid ${a?C.amber:C.border}`,background:a?"rgba(240,165,0,.15)":C.raised,color:a?C.amber:C.muted,fontSize:12,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("richtung",v)}>{v}</button>);})}
+          <div style={{width:"100%",height:1,background:C.border,margin:"4px 0"}}/>
+          {["ausgerastet","eingerastet"].map(v=>{const a=e.differential===v;const lbl=v==="ausgerastet"?"Diff.-Indexbolzen ausgerastet":"Diff.-Indexbolzen eingerastet";return(<button key={v} type="button" style={{padding:"7px 14px",borderRadius:20,border:`1px solid ${a?C.blue:C.border}`,background:a?"rgba(59,130,246,.15)":C.raised,color:a?C.blue:C.muted,fontSize:11,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("differential",v)}>{lbl}</button>);})}
         </div>
-        {/* Zahnzahl */}
-        {secHdr("Zahnzahl / Tooth Count")}
-        <div style={{padding:"10px 14px",display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
-          {gearSVG([{key:"d",x:22,y:30,r:20},{key:"Zw",x:60,y:55,r:12},{key:"c",x:90,y:30,r:14},{key:"b",x:130,y:50,r:18},{key:"a",x:160,y:25,r:14}])}
-          <div style={{flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{fontSize:11,color:C.muted,fontWeight:700,minWidth:80}}>Zahnzahl =</div>{numInp("zahnzahl","80")}</div>
-            <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{fontSize:11,color:C.muted,fontWeight:700,minWidth:40}}>i =</div>{numInp("zahnzahlRatio","2:45")}</div>
-            {[["d","zahnD"],["Zw","zahnZw"],["c","zahnC"],["b","zahnB"],["a","zahnA"]].map(([lbl,k])=>(<div key={k} style={{display:"flex",alignItems:"center",gap:6}}><div style={{fontSize:11,color:C.muted,fontWeight:600,minWidth:22}}>{lbl}=</div>{numInp(k,"")}</div>))}
-          </div>
+        {/* Gear sections */}
+        {gearSection("Zahnzahl / Tooth Count","zahnzahl","80","zahnzahlRatio",["zahnA","zahnB","zahnC","zahnD","zahnZw"],true)}
+        {gearSection("Steigung / Pitch","steigung","","",["steigA","steigZw","steigB","steigC","steigD"],true)}
+        {gearSection("Fräserdrehzahl / Cutter RPM","fraesDrehzahl","1312","",["fraesA","fraesB","fraesC","fraesD",""],false)}
+        {gearSection("Längsvorschub / Longitudinal Feed","laengs","0,7","",["laengsA","laengsB","laengsC","laengsD","laengsZw"],true)}
+        {/* Switch positions */}
+        {secHdr("Schalterstellungen / Switch Positions — auf rot einstellen")}
+        <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+          {[["schalterA2","a2"],["schalterA3","a3"],["schalterA4","a4"],["schalterA5","a5"]].map(([k,lbl])=>switchDial(k,lbl))}
         </div>
-        {/* Steigung */}
-        {secHdr("Steigung / Pitch")}
-        <div style={{padding:"10px 14px",display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
-          {gearSVG([{key:"a",x:20,y:55,r:12},{key:"Zw",x:55,y:30,r:18},{key:"b",x:90,y:55,r:14},{key:"C",x:125,y:28,r:20},{key:"d",x:160,y:52,r:16}])}
-          <div style={{flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,gridColumn:"1/-1"}}><div style={{fontSize:11,color:C.muted,fontWeight:700,minWidth:80}}>Steigung =</div>{numInp("steigung","")}</div>
-            {[["a","steigA"],["Zw","steigZw"],["b","steigB"],["C","steigC"],["d","steigD"]].map(([lbl,k])=>(<div key={k} style={{display:"flex",alignItems:"center",gap:6}}><div style={{fontSize:11,color:C.muted,fontWeight:600,minWidth:22}}>{lbl}=</div>{numInp(k,"")}</div>))}
-          </div>
-        </div>
-        {/* Fräserdrehzahl */}
-        {secHdr("Fräserdrehzahl / Cutter RPM")}
-        <div style={{padding:"10px 14px",display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
-          {gearSVG([{key:"a",x:20,y:40,r:16},{key:"b",x:66,y:40,r:20},{key:"c",x:112,y:40,r:14},{key:"d",x:156,y:40,r:18}])}
-          <div style={{flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,gridColumn:"1/-1"}}><div style={{fontSize:11,color:C.muted,fontWeight:700,minWidth:120}}>Fräserdrehzahl =</div>{numInp("fraesDrehzahl","1312")}</div>
-            {[["a","fraesA"],["b","fraesB"],["c","fraesC"],["d","fraesD"]].map(([lbl,k])=>(<div key={k} style={{display:"flex",alignItems:"center",gap:6}}><div style={{fontSize:11,color:C.muted,fontWeight:600,minWidth:22}}>{lbl}=</div>{numInp(k,"")}</div>))}
-          </div>
-        </div>
-        {/* Längsvorschub */}
-        {secHdr("Längsvorschub / Longitudinal Feed")}
-        <div style={{padding:"10px 14px",display:"flex",gap:16,alignItems:"flex-start",flexWrap:"wrap"}}>
-          {gearSVG([{key:"a",x:20,y:55,r:12},{key:"b",x:55,y:30,r:18},{key:"Zw",x:90,y:55,r:14},{key:"c",x:125,y:28,r:20},{key:"d",x:160,y:52,r:16}])}
-          <div style={{flex:1,display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px"}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,gridColumn:"1/-1"}}><div style={{fontSize:11,color:C.muted,fontWeight:700,minWidth:120}}>Längsvorschub =</div>{numInp("laengs","0,7")}</div>
-            {[["a","laengsA"],["b","laengsB"],["c","laengsC"],["Zw","laengsZw"],["d","laengsD"]].map(([lbl,k])=>(<div key={k} style={{display:"flex",alignItems:"center",gap:6}}><div style={{fontSize:11,color:C.muted,fontWeight:600,minWidth:22}}>{lbl}=</div>{numInp(k,"")}</div>))}
-          </div>
-        </div>
-        {/* Schalterstellungen */}
-        {secHdr("Schalterstellungen / Switch Positions (auf rot einstellen)")}
-        <div style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 16px"}}>
-          {[["a2","schalterA2"],["a3","schalterA3"],["a4","schalterA4"],["a5","schalterA5"]].map(([lbl,k])=>(
-            <div key={k} style={{display:"flex",alignItems:"center",gap:8}}>
-              <svg width="32" height="32" viewBox="0 0 32 32">
-                <circle cx="16" cy="16" r="14" fill="none" stroke={C.muted} strokeWidth="1.2"/>
-                <circle cx="16" cy="16" r="4" fill={C.muted}/>
-                <text x="16" y="38" textAnchor="middle" fontSize="8" fill={C.muted}>{lbl}</text>
-              </svg>
-              <div style={{fontSize:11,color:C.muted,fontWeight:600,minWidth:24}}>{lbl}=</div>
-              {numInp(k,"","")}
-            </div>
-          ))}
-        </div>
-        {/* Tauchsteuerung + Stck */}
+        {/* Tauchsteuerung + production */}
         {secHdr("Tauchsteuerung / Plunge + Production")}
-        <div style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:"8px 16px"}}>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <div style={{fontSize:10,color:C.muted,fontWeight:600,minWidth:90}}>Tauchsteuerung</div>
-            {numInp("tauchsteuerung","II","")}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <div style={{fontSize:10,color:C.muted,fontWeight:600,minWidth:90}}>Stck/Std</div>
-            {numInp("stckStd","","")}
-          </div>
-          <div style={{display:"flex",alignItems:"center",gap:8}}>
-            <div style={{fontSize:10,color:C.muted,fontWeight:600,minWidth:90}}>Stck/Spannung</div>
-            {numInp("stckSpannung","","")}
-          </div>
+        <div style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {[["tauchsteuerung","Tauchsteuerung"],["stckStd","Stck/Std"],["stckSpannung","Stck/Spannung"]].map(([k,lbl])=>(<div key={k}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{lbl}</div>{numInp(k,"")}</div>))}
         </div>
         {/* Eingang */}
         {secHdr("Eingang / Input Drive")}
-        <div style={{padding:"10px 14px",display:"flex",gap:8}}>
-          {["m. Zwischenrad","ohne Zwischenrad"].map(v=>{const a=e.eingang===v;return(<button key={v} type="button" style={{padding:"5px 14px",borderRadius:20,border:`1px solid ${a?C.amber:C.border}`,background:a?"rgba(240,165,0,.15)":C.raised,color:a?C.amber:C.muted,fontSize:12,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("eingang",v)}>{v}</button>);})}</div>
+        <div style={{padding:"10px 14px",display:"flex",gap:8,flexWrap:"wrap"}}>
+          {["m. Zwischenrad","ohne Zwischenrad"].map(v=>{const a=e.eingang===v;return(<button key={v} type="button" style={{padding:"7px 18px",borderRadius:20,border:`1px solid ${a?C.amber:C.border}`,background:a?"rgba(240,165,0,.15)":C.raised,color:a?C.amber:C.muted,fontSize:12,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("eingang",v)}>{v}</button>);})}</div>
       </div>
     );
   };
