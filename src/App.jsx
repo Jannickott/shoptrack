@@ -5493,7 +5493,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
   const MZ_BLANK={fraesForlaenger:"",fraesMn:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneUdhaeng:"",pinoldokUdhaeng:""};
-  const ERIKS_BLANK={mn:"",z:"",beta:"",dk:"",uo:"",df:"",fraeserDia:"",fraesLagerLinks:"",fraesLagerRechts:"",richtung:"Gegenlauf",differential:"ausgerastet",zahnzahl:"",zahnzahlRatio:"",zahnD:"",zahnZw:"",zahnC:"",zahnB:"",zahnA:"",steigung:"",steigA:"",steigZw:"",steigB:"",steigC:"",steigD:"",fraesDrehzahl:"",fraesA:"",fraesB:"",fraesC:"",fraesD:"",laengs:"",laengsA:"",laengsB:"",laengsC:"",laengsZw:"",laengsD:"",schalterA2:"",schalterA3:"",schalterA4:"",schalterA5:"",tauchsteuerung:"",eingang:"m. Zwischenrad",stckStd:"",stckSpannung:""};
+  const ERIKS_BLANK={mn:"",z:"",beta:"",dk:"",uo:"",df:"",fraeserDia:"",fraesLagerLinks:"",fraesLagerRechts:"",fraesLag3:"",fraesLag4:"",richtung:"Gegenlauf",differential:"ausgerastet",zahnzahl:"",zahnzahlRatio:"",zahnD:"",zahnZw:"",zahnC:"",zahnB:"",zahnA:"",steigung:"",steigA:"",steigZw:"",steigB:"",steigC:"",steigD:"",fraesDrehzahl:"",fraesA:"",fraesB:"",fraesC:"",fraesD:"",laengs:"",laengsA:"",laengsB:"",laengsC:"",laengsZw:"",laengsD:"",schalterA2:"",schalterA3:"",schalterA4:"",schalterA5:"",tauchsteuerung:"",eingang:"m. Zwischenrad",stckStd:"",stckSpannung:""};
   const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{},mzAdvanced:{schnecke:{},werkstuck:{},entgratenVorne:{},entgratenHinten:{}},eriksSetup:{}};
   const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}:blank);
   // Sub-depts available for current dept
@@ -5616,126 +5616,119 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     const mono={fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:15};
     const numInp=(k,ph="—")=>(<input style={{...inp(),...mono,width:"100%",textAlign:"right",fontSize:16}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder={ph}/>);
     const secHdr=(t)=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
-    // Two-shaft gear train: left shaft (a top, b bottom), optional Zw idler, right shaft (c bottom, d top)
-    const gearTrain=(valueKeys,hasZw)=>{
-      // valueKeys: {a,b,c,d,zw} key names into e
-      const [ak,bk,ck,dk,zwk]=valueKeys;
-      const va=e[ak]||"", vb=e[bk]||"", vc=e[ck]||"", vd=e[dk]||"", vzw=hasZw?(e[zwk]||""):"";
-      // SVG layout: viewBox 0 0 260 140
-      // shaft1 x=55, shaft2 x=205, gear radius 26, spacing 90
-      const R=26,S1=55,S2=205,YT=32,YB=108,YM=70;
-      const gearCirc=(cx,cy,label,val,col=C.amber)=>(
-        <g key={label}>
-          <circle cx={cx} cy={cy} r={R} fill={col+"18"} stroke={col} strokeWidth="2"/>
-          {/* Teeth marks around circle */}
-          {[0,30,60,90,120,150,180,210,240,270,300,330].map(a=>{
-            const rx=cx+R*Math.cos(a*Math.PI/180), ry=cy+R*Math.sin(a*Math.PI/180);
-            const ox=cx+(R+6)*Math.cos(a*Math.PI/180), oy=cy+(R+6)*Math.sin(a*Math.PI/180);
-            return <line key={a} x1={rx} y1={ry} x2={ox} y2={oy} stroke={col} strokeWidth="1.5" opacity="0.5"/>;
-          })}
-          <text x={cx} y={cy-6} textAnchor="middle" fontSize="13" fontWeight="800" fill={col}>{label}</text>
-          <text x={cx} y={cy+9} textAnchor="middle" fontSize="11" fontWeight="700" fill={val?C.green:C.muted} fontFamily="'Share Tech Mono',monospace">{val||"—"}</text>
-        </g>
-      );
-      const zwCirc=hasZw&&(
-        <g>
-          <circle cx={130} cy={YM} r={18} fill={C.muted+"18"} stroke={C.muted} strokeWidth="1.5" strokeDasharray="4,3"/>
-          {[0,45,90,135,180,225,270,315].map(a=>{
-            const rx=130+18*Math.cos(a*Math.PI/180), ry=YM+18*Math.sin(a*Math.PI/180);
-            const ox=130+22*Math.cos(a*Math.PI/180), oy=YM+22*Math.sin(a*Math.PI/180);
-            return <line key={a} x1={rx} y1={ry} x2={ox} y2={oy} stroke={C.muted} strokeWidth="1.5" opacity="0.5"/>;
-          })}
-          <text x={130} y={YM-5} textAnchor="middle" fontSize="10" fontWeight="700" fill={C.muted}>Zw</text>
-          <text x={130} y={YM+8} textAnchor="middle" fontSize="10" fontWeight="700" fill={vzw?C.green:C.muted} fontFamily="'Share Tech Mono',monospace">{vzw||"—"}</text>
-        </g>
-      );
+    // Gear diagram: left half = SVG circles matching physical machine layout, right half = labeled inputs
+    // gears: [{label, inputKey, cx, cy, r, double}] — positions in viewBox 0 0 90 H
+    // Rows top-to-bottom in gears array match input rows top-to-bottom
+    const ROW_H=32;
+    const gearDiagramSection=(title,totalKey,totalPh,ratioKey,gears)=>{
+      const H=gears.length*ROW_H+10;
+      const VW=90;
       return(
-        <svg viewBox="0 0 260 145" style={{width:"100%",display:"block",marginBottom:4}}>
-          {/* Shaft lines */}
-          <line x1={S1} y1={YT-R} x2={S1} y2={YB+R} stroke={C.border} strokeWidth="3"/>
-          <line x1={S2} y1={YT-R} x2={S2} y2={YB+R} stroke={C.border} strokeWidth="3"/>
-          {/* Shaft hubs */}
-          <circle cx={S1} cy={YT} r={4} fill={C.muted}/>
-          <circle cx={S1} cy={YB} r={4} fill={C.muted}/>
-          <circle cx={S2} cy={YT} r={4} fill={C.muted}/>
-          <circle cx={S2} cy={YB} r={4} fill={C.muted}/>
-          {/* Mesh lines */}
-          {hasZw
-            ?<><line x1={S1+R} y1={YB} x2={130-18} y2={YM} stroke={C.border} strokeWidth="1" strokeDasharray="3,3"/>
-               <line x1={130+18} y1={YM} x2={S2-R} y2={YB} stroke={C.border} strokeWidth="1" strokeDasharray="3,3"/></>
-            :<line x1={S1+R} y1={YB} x2={S2-R} y2={YB} stroke={C.border} strokeWidth="1" strokeDasharray="3,3"/>
-          }
-          {/* Shaft labels */}
-          <text x={S1} y={138} textAnchor="middle" fontSize="8" fill={C.muted} letterSpacing="0.5">WELLE 1</text>
-          <text x={S2} y={138} textAnchor="middle" fontSize="8" fill={C.muted} letterSpacing="0.5">WELLE 2</text>
-          {/* Gears */}
-          {gearCirc(S1,YT,ak.slice(-1).toUpperCase(),va)}
-          {gearCirc(S1,YB,bk.slice(-1).toUpperCase(),vb)}
-          {gearCirc(S2,YT,dk.slice(-1).toUpperCase(),vd)}
-          {gearCirc(S2,YB,ck.slice(-1).toUpperCase(),vc)}
-          {zwCirc}
-        </svg>
-      );
-    };
-    const gearSection=(title,totalKey,totalPh,ratioKey,gearKeys,hasZw)=>(
-      <div style={{borderBottom:`1px solid ${C.border}`}}>
-        {secHdr(title)}
-        <div style={{padding:"10px 14px 4px"}}>
-          {gearTrain(gearKeys,hasZw)}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-            {totalKey&&<div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
-            {ratioKey&&<div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
+        <div style={{borderBottom:`1px solid ${C.border}`}}>
+          {secHdr(title)}
+          <div style={{padding:"8px 14px 6px"}}>
+            {(totalKey||ratioKey)&&<div style={{display:"grid",gridTemplateColumns:totalKey&&ratioKey?"1fr 1fr":"1fr",gap:8,marginBottom:8}}>
+              {totalKey&&<div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
+              {ratioKey&&<div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
+            </div>}
+            <div style={{display:"flex",border:`1px solid ${C.border}`,borderRadius:6,overflow:"hidden"}}>
+              {/* Gear diagram SVG */}
+              <svg viewBox={`0 0 ${VW} ${H}`} style={{width:"42%",flexShrink:0,display:"block",borderRight:`1px solid ${C.border}`}}>
+                {gears.map((g,i)=>{
+                  const ry=i*ROW_H+ROW_H/2+5; // right-column row centre y (must match div rows below)
+                  const lx=Math.min(g.cx+g.r+1,VW-1), ly=g.cy;
+                  return(
+                    <g key={g.label}>
+                      {/* Double circle: second gear sits behind the first */}
+                      {g.double&&<circle cx={g.cx} cy={g.cy} r={g.r+5} fill="none" stroke={C.muted} strokeWidth="1" strokeDasharray="3,2" opacity="0.6"/>}
+                      <circle cx={g.cx} cy={g.cy} r={g.r} fill="none" stroke={C.amber} strokeWidth="1.5"/>
+                      {/* Crosshairs */}
+                      <line x1={g.cx-g.r*0.4} y1={g.cy} x2={g.cx+g.r*0.4} y2={g.cy} stroke={C.muted} strokeWidth="0.7"/>
+                      <line x1={g.cx} y1={g.cy-g.r*0.4} x2={g.cx} y2={g.cy+g.r*0.4} stroke={C.muted} strokeWidth="0.7"/>
+                      {/* Leader line to right edge at the row's y */}
+                      <line x1={lx} y1={ly} x2={VW-1} y2={ry} stroke={C.muted} strokeWidth="0.8" strokeDasharray="3,2"/>
+                    </g>
+                  );
+                })}
+              </svg>
+              {/* Input rows */}
+              <div style={{flex:1,display:"flex",flexDirection:"column"}}>
+                {gears.map((g,i)=>(
+                  <div key={g.label} style={{display:"flex",alignItems:"center",gap:4,height:ROW_H,padding:"0 8px",borderBottom:i<gears.length-1?`1px solid ${C.border}`:"none"}}>
+                    <span style={{fontSize:13,fontWeight:800,color:C.amber,fontFamily:"'Share Tech Mono',monospace",minWidth:24,flexShrink:0}}>{g.label}</span>
+                    <span style={{color:C.muted,fontSize:11,marginRight:2,flexShrink:0}}>=</span>
+                    {numInp(g.inputKey,"")}
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
-      </div>
-    );
-    // Rotary switch selector: 3 positions, tap to select, selected highlights red
+      );
+    };
+    // Rotary switch selector
     const switchDial=(k,label)=>{
       const val=e[k]||"";
-      // Positions at 8-o-clock, 12-o-clock, 4-o-clock (in SVG coords: y increases down)
-      const cx=40,cy=40,r=28;
-      const angles=[-150,-90,-30]; // degrees from right-axis (SVG), so -90=top, -150=upper-left, -30=upper-right
-      const pos=angles.map((a,i)=>{
-        const rad=a*Math.PI/180;
-        return{n:i+1,x:cx+r*Math.cos(rad),y:cy+r*Math.sin(rad)};
-      });
+      const cx=40,cy=40,r=26;
+      const angles=[-150,-90,-30];
+      const pos=angles.map((a,i)=>({n:i+1,x:cx+r*Math.cos(a*Math.PI/180),y:cy+r*Math.sin(a*Math.PI/180)}));
       const selected=parseInt(val);
       const selPos=pos.find(p=>p.n===selected);
       return(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:4}}>
+        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
           <div style={{fontSize:9,color:C.amber,fontWeight:700,letterSpacing:.5}}>{label}</div>
-          <svg width="80" height="80" viewBox="0 0 80 80" style={{cursor:"pointer"}}>
-            {/* Dial ring */}
-            <circle cx={cx} cy={cy} r={r+8} fill="none" stroke={C.border} strokeWidth="1.5"/>
+          <svg width="80" height="80" viewBox="0 0 80 80">
+            <circle cx={cx} cy={cy} r={r+10} fill="none" stroke={C.border} strokeWidth="1.5"/>
             <circle cx={cx} cy={cy} r={4} fill={C.muted}/>
-            {/* Needle to selected position */}
             {selPos&&<line x1={cx} y1={cy} x2={selPos.x} y2={selPos.y} stroke="#e53e3e" strokeWidth="3" strokeLinecap="round"/>}
-            {/* Position markers */}
-            {pos.map(p=>{
-              const sel=p.n===selected;
-              return(
-                <g key={p.n} onClick={()=>setE(k,sel?"":String(p.n))} style={{cursor:"pointer"}}>
-                  <circle cx={p.x} cy={p.y} r={10} fill={sel?"#e53e3e":C.raised} stroke={sel?"#e53e3e":C.border} strokeWidth="1.5"/>
-                  <text x={p.x} y={p.y+4} textAnchor="middle" fontSize="11" fontWeight="800" fill={sel?"#fff":C.muted}>{p.n}</text>
-                </g>
-              );
-            })}
+            {pos.map(p=>{const sel=p.n===selected;return(
+              <g key={p.n} onClick={()=>setE(k,sel?"":String(p.n))} style={{cursor:"pointer"}}>
+                <circle cx={p.x} cy={p.y} r={10} fill={sel?"#e53e3e":C.raised} stroke={sel?"#e53e3e":C.border} strokeWidth="1.5"/>
+                <text x={p.x} y={p.y+4} textAnchor="middle" fontSize="11" fontWeight="800" fill={sel?"#fff":C.muted}>{p.n}</text>
+              </g>
+            );})}
           </svg>
         </div>
       );
     };
+    // Gear layouts matching the paper (positions tuned to physical machine layout)
+    const zahnzahlGears=[
+      {label:"d", inputKey:"zahnD",  cx:68, cy:18,  r:18, double:false},
+      {label:"Zw",inputKey:"zahnZw", cx:40, cy:48,  r:10, double:false},
+      {label:"c", inputKey:"zahnC",  cx:66, cy:66,  r:14, double:false},
+      {label:"b", inputKey:"zahnB",  cx:30, cy:108, r:20, double:true},
+      {label:"a", inputKey:"zahnA",  cx:8,  cy:132, r:10, double:false},
+    ];
+    const steigungGears=[
+      {label:"a", inputKey:"steigA",  cx:10, cy:20,  r:10, double:false},
+      {label:"Zw",inputKey:"steigZw", cx:35, cy:45,  r:16, double:false},
+      {label:"b", inputKey:"steigB",  cx:67, cy:68,  r:14, double:false},
+      {label:"c", inputKey:"steigC",  cx:48, cy:102, r:22, double:false},
+      {label:"d", inputKey:"steigD",  cx:75, cy:115, r:12, double:false},
+    ];
+    const fraesDrehzahlGears=[
+      {label:"a", inputKey:"fraesA",  cx:10, cy:20,  r:10, double:false},
+      {label:"b", inputKey:"fraesB",  cx:58, cy:22,  r:20, double:true},
+      {label:"c", inputKey:"fraesC",  cx:70, cy:70,  r:14, double:false},
+      {label:"d", inputKey:"fraesD",  cx:40, cy:90,  r:15, double:false},
+    ];
+    const laengsGears=[
+      {label:"a", inputKey:"laengsA",  cx:10, cy:15,  r:10, double:false},
+      {label:"b", inputKey:"laengsB",  cx:35, cy:48,  r:22, double:false},
+      {label:"c", inputKey:"laengsC",  cx:68, cy:70,  r:15, double:false},
+      {label:"Zw",inputKey:"laengsZw", cx:50, cy:95,  r:10, double:false},
+      {label:"d", inputKey:"laengsD",  cx:72, cy:110, r:15, double:false},
+    ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
         {/* Cutter parameters */}
         {secHdr("Fräser / Cutter")}
         <div style={{padding:"10px 14px"}}>
           <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:8}}>
-            {[["mn","z"],["beta","dk"],["uo","df"]].map(([k1,k2])=>(
-              [k1,k2].map(k=>(
-                <div key={k}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{k==="z"?"Z":k==="beta"?"β":k}</div>
-                  <input style={{...inp(),...mono,width:"100%",textAlign:"right"}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder="—"/>
-                </div>
-              ))
+            {["mn","z","beta","dk","uo","df"].map(k=>(
+              <div key={k}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{k==="z"?"Z":k==="beta"?"β":k}</div>
+                <input style={{...inp(),...mono,width:"100%",textAlign:"right"}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder="—"/>
+              </div>
             ))}
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
@@ -5743,29 +5736,26 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             <input style={{...inp(),...mono,flex:1}} value={e.fraeserDia||""} onChange={ev=>setE("fraeserDia",ev.target.value)} placeholder="e.g. 20 H55"/>
           </div>
         </div>
-        {/* Fräslagerstellung — real scanned image from form */}
+        {/* Fräslagerstellung — scanned image, no background, 4 angle inputs */}
         {secHdr("Fräslagerstellung / Cutter Position")}
-        <div style={{padding:"10px 14px 4px"}}>
-          {/* The image is the landscape scan; display top 38% which shows the Fräslagerstellung section */}
-          <canvas style={{width:"100%",display:"block",borderRadius:6,border:`1px solid ${C.border}`,marginBottom:10,background:C.raised}} ref={el=>{
+        <div style={{padding:"10px 14px 8px"}}>
+          <canvas style={{width:"100%",display:"block",marginBottom:10,mixBlendMode:"multiply"}} ref={el=>{
             if(!el||el._drawn) return; el._drawn=true;
             const IMG_W=1168,IMG_H=832,SHOW=0.40;
             const dw=el.parentElement?.offsetWidth-28||300;
             const scale=dw/IMG_H;
             el.width=Math.round(dw); el.height=Math.round(IMG_W*scale*SHOW);
+            const dark=window.matchMedia("(prefers-color-scheme:dark)").matches||document.documentElement.dataset.theme==="dark";
+            if(dark){el.style.filter="invert(1)";el.style.mixBlendMode="screen";}
             const img=new Image();
-            img.onload=()=>{
-              const ctx=el.getContext("2d");
-              ctx.translate(0,IMG_W*scale);
-              ctx.rotate(-Math.PI/2);
-              ctx.scale(scale,scale);
-              ctx.drawImage(img,0,0);
-            };
+            img.onload=()=>{const ctx=el.getContext("2d");ctx.translate(0,IMG_W*scale);ctx.rotate(-Math.PI/2);ctx.scale(scale,scale);ctx.drawImage(img,0,0);};
             img.src="/eriks-fraeslager.jpg";
           }}/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-            <div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Links / Left angle</div>{numInp("fraesLagerLinks","e.g. 8°57'")}</div>
-            <div><div style={{fontSize:9,color:C.muted,marginBottom:3}}>Rechts / Right angle</div>{numInp("fraesLagerRechts","e.g. 2°32'")}</div>
+          {/* 4 angle inputs, one per figure (top-left, top-right, bottom-left, bottom-right) */}
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px"}}>
+            {[["fraesLagerLinks","Oben Links / Top Left"],["fraesLagerRechts","Oben Rechts / Top Right"],["fraesLag3","Unten Links / Bottom Left"],["fraesLag4","Unten Rechts / Bottom Right"]].map(([k,lbl])=>(
+              <div key={k}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{lbl}</div>{numInp(k,"°")}</div>
+            ))}
           </div>
         </div>
         {/* Direction + differential */}
@@ -5776,13 +5766,13 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
           {["ausgerastet","eingerastet"].map(v=>{const a=e.differential===v;const lbl=v==="ausgerastet"?"Diff.-Indexbolzen ausgerastet":"Diff.-Indexbolzen eingerastet";return(<button key={v} type="button" style={{padding:"7px 14px",borderRadius:20,border:`1px solid ${a?C.blue:C.border}`,background:a?"rgba(59,130,246,.15)":C.raised,color:a?C.blue:C.muted,fontSize:11,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("differential",v)}>{lbl}</button>);})}
         </div>
         {/* Gear sections */}
-        {gearSection("Zahnzahl / Tooth Count","zahnzahl","80","zahnzahlRatio",["zahnA","zahnB","zahnC","zahnD","zahnZw"],true)}
-        {gearSection("Steigung / Pitch","steigung","","",["steigA","steigZw","steigB","steigC","steigD"],true)}
-        {gearSection("Fräserdrehzahl / Cutter RPM","fraesDrehzahl","1312","",["fraesA","fraesB","fraesC","fraesD",""],false)}
-        {gearSection("Längsvorschub / Longitudinal Feed","laengs","0,7","",["laengsA","laengsB","laengsC","laengsD","laengsZw"],true)}
+        {gearDiagramSection("Zahnzahl / Tooth Count","zahnzahl","80","zahnzahlRatio",zahnzahlGears)}
+        {gearDiagramSection("Steigung / Pitch","steigung","","",steigungGears)}
+        {gearDiagramSection("Fräserdrehzahl / Cutter RPM","fraesDrehzahl","1312","",fraesDrehzahlGears)}
+        {gearDiagramSection("Längsvorschub / Longitudinal Feed","laengs","0,7","",laengsGears)}
         {/* Switch positions */}
         {secHdr("Schalterstellungen / Switch Positions — auf rot einstellen")}
-        <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:16}}>
+        <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           {[["schalterA2","a2"],["schalterA3","a3"],["schalterA4","a4"],["schalterA5","a5"]].map(([k,lbl])=>switchDial(k,lbl))}
         </div>
         {/* Tauchsteuerung + production */}
