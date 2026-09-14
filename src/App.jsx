@@ -198,7 +198,7 @@ export default function App(){
     "Turning":["Chuck Name","Chuck Overhang","Clamping Pressure","Zero Point","Workpiece Stop","Spindle Speed","Feed Rate","Coolant Pressure","Tool Offset","Bar Diameter","Chuck Jaw","RPM","Cutting Speed","DOC"],
     "Affolter":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
   };
-  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter","MZ","Eriks 150"]};
+  const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter","MZ","150"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
   const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{},hiddenMachines:[]});
@@ -249,7 +249,7 @@ export default function App(){
             Object.keys(sd).forEach(k=>{sd[k]=sd[k].map(v=>v==="Affolter 160"?"Affolter":v);});
             // Ensure MZ is always in Fortanding sub-depts
             if(sd["Fortanding"]&&!sd["Fortanding"].includes("MZ")) sd["Fortanding"].push("MZ");
-            if(sd["Fortanding"]&&!sd["Fortanding"].includes("Eriks 150")) sd["Fortanding"].push("Eriks 150");
+            if(sd["Fortanding"]&&!sd["Fortanding"].includes("150")) sd["Fortanding"].push("150");
             setSubDepartments(sd);
           }
           if(data.efficiencyGoals) setEfficiencyGoals(data.efficiencyGoals);
@@ -5356,7 +5356,7 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
           <button onClick={()=>setLightboxUrl(null)} style={{marginTop:16,background:"rgba(255,255,255,.12)",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,color:"#fff",fontSize:14,fontWeight:700,padding:"10px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}><i className="ti ti-x"/> Close</button>
         </div>
       )}
-      {sheet.subDepartment==="Eriks 150"&&(()=>{
+      {sheet.subDepartment==="150"&&(()=>{
         const e={...ERIKS_BLANK,...(sheet.eriksSetup||{})};
         const mono={fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:15};
         const kv=(lbl,val,unit)=>val?(<div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}><div style={{fontSize:10,color:C.muted,fontWeight:600,minWidth:130}}>{lbl}</div><div style={{...mono,flex:1}}>{val}</div>{unit&&<div style={{fontSize:9,color:C.muted}}>{unit}</div>}</div>):null;
@@ -5997,12 +5997,12 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         <div style={{fontSize:11,color:C.muted,background:C.raised,borderRadius:6,padding:"6px 10px"}}>Tool 8 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(8)}</span>&nbsp;·&nbsp;Tool 1 → <span style={{color:C.amber,fontFamily:"'Share Tech Mono',monospace"}}>{rc(1)}</span></div>
       </div>
       </>}
-      {deptSubDepts.length>0&&form.subDepartment!=="MZ"&&form.subDepartment!=="Eriks 150"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Clamping Tools</div>}
-      {deptSubDepts.length>0&&form.subDepartment!=="MZ"&&form.subDepartment!=="Eriks 150"&&fortandingToolEditor()}
+      {deptSubDepts.length>0&&form.subDepartment!=="MZ"&&form.subDepartment!=="150"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Clamping Tools</div>}
+      {deptSubDepts.length>0&&form.subDepartment!=="MZ"&&form.subDepartment!=="150"&&fortandingToolEditor()}
       {form.subDepartment==="MZ"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool</div>}
       {form.subDepartment==="MZ"&&mzToolEditor()}
-      {form.subDepartment==="Eriks 150"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Fräser / Tool</div>}
-      {form.subDepartment==="Eriks 150"&&eriksToolEditor()}
+      {form.subDepartment==="150"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Fräser / Tool</div>}
+      {form.subDepartment==="150"&&eriksToolEditor()}
       {deptSubDepts.length===0&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Tool List — Main</div>}
       {deptSubDepts.length===0&&toolListEditor("tools",C.amber)}
       {deptSubDepts.length===0&&(showList2?(
@@ -6027,8 +6027,8 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       ):(
         <button style={{...btn("outline",true,true),borderColor:C.blue,color:C.blue,marginBottom:14}} onClick={()=>setShowList2(true)}><i className="ti ti-plus"/> Add Sub Tool List</button>
       ))}
-      {form.subDepartment==="Eriks 150"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Einstellplan — Eriks 150</div>}
-      {form.subDepartment==="Eriks 150"&&eriksSetupEditor()}
+      {form.subDepartment==="150"&&<div style={{fontSize:8,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Einstellplan — 150</div>}
+      {form.subDepartment==="150"&&eriksSetupEditor()}
       {form.subDepartment==="MZ"&&<div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Setup Parameters</div>}
       {form.subDepartment==="MZ"&&mzSetupEditor()}
       {form.subDepartment==="MZ"&&<div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
