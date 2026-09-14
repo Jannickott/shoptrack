@@ -5616,45 +5616,50 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     const mono={fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:15};
     const numInp=(k,ph="—")=>(<input style={{...inp(),...mono,width:"100%",textAlign:"right",fontSize:16}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder={ph}/>);
     const secHdr=(t)=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:9,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
-    // Gear section: SVG circles on left with straight horizontal leader lines,
-    // inputs absolutely positioned on right aligned to each circle's y
+    // Gear section: two color groups (amber/blue) matching the paper.
+    // Circles OVERLAP where gears mesh. The "inner" gear of a compound pair
+    // (e.g. c inside b) shares the shaft — drawn as a smaller circle inside
+    // the larger one. Amber group drawn first so blue renders on top.
+    // Input column on right, color-coded to match, space-evenly distributed.
     const gearSvgSection=(title,totalKey,totalPh,ratioKey,gears)=>{
-      const VW=92;
-      const maxY=Math.max(...gears.map(g=>g.cy+g.r+6));
+      const VW=106;
+      const maxY=Math.max(...gears.map(g=>g.cy+g.r+8));
       return(
         <div style={{padding:"8px 10px 8px"}}>
-          <div style={{fontSize:9,color:C.amber,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:4,lineHeight:1.3}}>{title}</div>
-          {(totalKey||ratioKey)&&<div style={{display:"flex",gap:6,marginBottom:6}}>
+          <div style={{fontSize:9,color:C.amber,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:4}}>{title}</div>
+          {(totalKey||ratioKey)&&<div style={{display:"flex",gap:6,marginBottom:5}}>
             {totalKey&&<div style={{flex:1}}><div style={{fontSize:8,color:C.muted,marginBottom:2}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
             {ratioKey&&<div style={{flex:1}}><div style={{fontSize:8,color:C.muted,marginBottom:2}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
           </div>}
-          {/* position:relative wrapper: SVG sets height, inputs overlay right side */}
-          <div style={{position:"relative"}}>
-            <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"42%",display:"block"}}>
-              {gears.map(g=>(
-                <g key={g.label}>
-                  {/* Outer dashed circle = back gear sitting behind the front gear */}
-                  {g.double&&<circle cx={g.cx} cy={g.cy} r={g.r+7} fill="none" stroke={C.muted} strokeWidth="1.2" strokeDasharray="4,3" opacity="0.45"/>}
-                  {/* Front gear circle */}
-                  <circle cx={g.cx} cy={g.cy} r={g.r} fill="none" stroke={C.amber} strokeWidth="1.5"/>
-                  {/* Crosshairs */}
-                  <line x1={g.cx-g.r*0.38} y1={g.cy} x2={g.cx+g.r*0.38} y2={g.cy} stroke={C.muted} strokeWidth="0.7"/>
-                  <line x1={g.cx} y1={g.cy-g.r*0.38} x2={g.cx} y2={g.cy+g.r*0.38} stroke={C.muted} strokeWidth="0.7"/>
-                  {/* Straight horizontal leader line to right edge */}
-                  <line x1={g.cx+g.r} y1={g.cy} x2={VW} y2={g.cy} stroke={C.muted} strokeWidth="0.9"/>
-                </g>
-              ))}
+          <div style={{display:"flex",borderTop:`1px solid ${C.border}`,marginTop:2}}>
+            {/* Gear diagram: amber first so blue renders on top */}
+            <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"46%",flexShrink:0,display:"block",borderRight:`1px solid ${C.border}`}}>
+              {["amber","blue"].flatMap(col=>gears.filter(g=>g.color===col).map(g=>{
+                const stroke=col==="blue"?C.blue:C.amber;
+                return(
+                  <g key={g.label}>
+                    <circle cx={g.cx} cy={g.cy} r={g.r} fill={stroke+"18"} stroke={stroke} strokeWidth="1.5"/>
+                    <line x1={g.cx-g.r*0.38} y1={g.cy} x2={g.cx+g.r*0.38} y2={g.cy} stroke={stroke} strokeWidth="0.7"/>
+                    <line x1={g.cx} y1={g.cy-g.r*0.38} x2={g.cx} y2={g.cy+g.r*0.38} stroke={stroke} strokeWidth="0.7"/>
+                    {/* Horizontal leader line to right edge of SVG */}
+                    <line x1={g.cx+g.r} y1={g.cy} x2={VW} y2={g.cy} stroke={stroke} strokeWidth="0.9"/>
+                  </g>
+                );
+              }))}
             </svg>
-            {/* Inputs: absolutely positioned, top% matches the SVG circle's cy/maxY */}
-            <div style={{position:"absolute",top:0,left:"42%",right:0,height:"100%",pointerEvents:"all"}}>
-              {gears.map(g=>(
-                <div key={g.label} style={{position:"absolute",top:`${g.cy/maxY*100}%`,left:4,right:4,transform:"translateY(-50%)",display:"flex",alignItems:"center",gap:3}}>
-                  <span style={{fontSize:11,fontWeight:800,color:C.amber,fontFamily:"'Share Tech Mono',monospace",flexShrink:0,minWidth:22}}>{g.label}</span>
-                  <span style={{color:C.muted,fontSize:10,flexShrink:0}}>=</span>
-                  <input style={{flex:1,minWidth:0,height:20,background:C.raised,border:`1px solid ${C.border}`,borderRadius:3,color:C.green,fontSize:11,textAlign:"right",padding:"0 3px",fontFamily:"'Share Tech Mono',monospace",outline:"none"}}
-                    value={e[g.inputKey]||""} onChange={ev=>setE(g.inputKey,ev.target.value)}/>
-                </div>
-              ))}
+            {/* Input column — space-evenly to spread across SVG height */}
+            <div style={{flex:1,display:"flex",flexDirection:"column",justifyContent:"space-evenly",padding:"2px 0"}}>
+              {gears.map(g=>{
+                const col=g.color==="blue"?C.blue:C.amber;
+                return(
+                  <div key={g.label} style={{display:"flex",alignItems:"center",gap:3,padding:"1px 5px"}}>
+                    <span style={{fontSize:11,fontWeight:800,color:col,fontFamily:"'Share Tech Mono',monospace",flexShrink:0,minWidth:22}}>{g.label}</span>
+                    <span style={{color:C.muted,fontSize:10,flexShrink:0}}>=</span>
+                    <input style={{flex:1,minWidth:0,height:20,background:C.raised,border:`1px solid ${col}66`,borderRadius:3,color:C.green,fontSize:11,textAlign:"right",padding:"0 3px",fontFamily:"'Share Tech Mono',monospace",outline:"none"}}
+                      value={e[g.inputKey]||""} onChange={ev=>setE(g.inputKey,ev.target.value)}/>
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -5685,36 +5690,43 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         </div>
       );
     };
-    // Gear circle positions — match the paper layout for each section.
-    // Circles cascade upper-right→lower-left for Zahnzahl (d top, a bottom),
-    // and vary per section to reflect the physical gear train in the machine.
-    // double:true = second dashed outer ring (back gear partially hidden behind front gear)
-    const zahnzahlGears=[
-      {label:"d", inputKey:"zahnD",  cx:66, cy:18,  r:18, double:false},
-      {label:"Zw",inputKey:"zahnZw", cx:40, cy:54,  r:11, double:false},
-      {label:"c", inputKey:"zahnC",  cx:64, cy:90,  r:15, double:false},
-      {label:"b", inputKey:"zahnB",  cx:28, cy:126, r:21, double:true},
-      {label:"a", inputKey:"zahnA",  cx:8,  cy:162, r:11, double:false},
-    ];
+    // ── Gear circle positions for each section ────────────────────────────
+    // color:"amber" = orange group (one shaft side)
+    // color:"blue"  = blue group (other shaft side)
+    // Circles OVERLAP where gears mesh (touching circles = meshing gears).
+    // The "inner" blue gear (e.g. c) shares a shaft with the large amber gear
+    // (b) — drawn inside it to show the compound-gear pair.
+    //
+    // Steigung (confirmed by paper): amber a→Zw→b, blue c (inside b)→d
     const steigungGears=[
-      {label:"a", inputKey:"steigA",  cx:10, cy:18,  r:11, double:false},
-      {label:"Zw",inputKey:"steigZw", cx:36, cy:54,  r:18, double:false},
-      {label:"b", inputKey:"steigB",  cx:67, cy:90,  r:16, double:false},
-      {label:"c", inputKey:"steigC",  cx:48, cy:126, r:24, double:false},
-      {label:"d", inputKey:"steigD",  cx:73, cy:162, r:14, double:false},
+      {label:"a", inputKey:"steigA",  cx:13, cy:14,  r:12,  color:"amber"},
+      {label:"Zw",inputKey:"steigZw", cx:38, cy:34,  r:21,  color:"amber"},
+      {label:"b", inputKey:"steigB",  cx:44, cy:88,  r:32,  color:"amber"},
+      {label:"c", inputKey:"steigC",  cx:58, cy:80,  r:14,  color:"blue"},
+      {label:"d", inputKey:"steigD",  cx:78, cy:112, r:24,  color:"blue"},
     ];
+    // Zahnzahl: amber d→Zw→c (top chain), blue b (large, outer)→a (inner compound inside b)
+    const zahnzahlGears=[
+      {label:"d", inputKey:"zahnD",  cx:65, cy:14,  r:18,  color:"amber"},
+      {label:"Zw",inputKey:"zahnZw", cx:42, cy:48,  r:11,  color:"amber"},
+      {label:"c", inputKey:"zahnC",  cx:63, cy:70,  r:15,  color:"amber"},
+      {label:"b", inputKey:"zahnB",  cx:36, cy:108, r:26,  color:"blue"},
+      {label:"a", inputKey:"zahnA",  cx:44, cy:102, r:11,  color:"blue"},
+    ];
+    // Fräserdrehzahl: amber a→b (outer compound), blue c (inside b)→d
     const fraesDrehzahlGears=[
-      {label:"a", inputKey:"fraesA",  cx:10, cy:18,  r:11, double:false},
-      {label:"b", inputKey:"fraesB",  cx:56, cy:54,  r:24, double:true},
-      {label:"c", inputKey:"fraesC",  cx:68, cy:90,  r:16, double:false},
-      {label:"d", inputKey:"fraesD",  cx:40, cy:126, r:16, double:false},
+      {label:"a", inputKey:"fraesA",  cx:24, cy:36,  r:11,  color:"amber"},
+      {label:"b", inputKey:"fraesB",  cx:50, cy:60,  r:24,  color:"amber"},
+      {label:"c", inputKey:"fraesC",  cx:56, cy:55,  r:13,  color:"blue"},
+      {label:"d", inputKey:"fraesD",  cx:76, cy:84,  r:20,  color:"blue"},
     ];
+    // Längsvorschub: amber a→b (outer compound), blue c (inside b)→Zw→d
     const laengsGears=[
-      {label:"a", inputKey:"laengsA",  cx:10, cy:18,  r:11, double:false},
-      {label:"b", inputKey:"laengsB",  cx:36, cy:54,  r:24, double:false},
-      {label:"c", inputKey:"laengsC",  cx:68, cy:90,  r:16, double:false},
-      {label:"Zw",inputKey:"laengsZw", cx:52, cy:126, r:11, double:false},
-      {label:"d", inputKey:"laengsD",  cx:70, cy:162, r:16, double:false},
+      {label:"a", inputKey:"laengsA",  cx:12, cy:26,  r:11,  color:"amber"},
+      {label:"b", inputKey:"laengsB",  cx:40, cy:55,  r:28,  color:"amber"},
+      {label:"c", inputKey:"laengsC",  cx:53, cy:49,  r:13,  color:"blue"},
+      {label:"Zw",inputKey:"laengsZw", cx:72, cy:72,  r:12,  color:"blue"},
+      {label:"d", inputKey:"laengsD",  cx:76, cy:108, r:22,  color:"blue"},
     ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
