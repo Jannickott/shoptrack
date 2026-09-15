@@ -4360,6 +4360,7 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
             </div>
             {selectedTool.articleNumber&&<div style={{fontSize:11,color:C.muted,marginBottom:6}}>{selectedTool.articleNumber}</div>}
             {selectedTool.ordered&&<div style={{background:"rgba(59,130,246,.12)",border:"1px solid rgba(59,130,246,.4)",borderRadius:8,padding:"7px 10px",marginBottom:10,fontSize:11,color:"#3b82f6",display:"flex",alignItems:"center",gap:6}}><i className="ti ti-checks"/><span>On order — admin has already placed an order for this tool</span></div>}
+            {selectedTool.conditionOrdered&&<div style={{background:"rgba(59,130,246,.12)",border:"1px solid rgba(59,130,246,.4)",borderRadius:8,padding:"7px 10px",marginBottom:10,fontSize:11,color:"#3b82f6",display:"flex",alignItems:"center",gap:6}}><i className="ti ti-alert-triangle"/><span>Replacement on order — tool is in poor condition (1 star)</span></div>}
             {Array.isArray(selectedTool.material)&&selectedTool.material.length>0&&(
               <div style={{marginBottom:12}}>
                 <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:6}}>Material</div>
