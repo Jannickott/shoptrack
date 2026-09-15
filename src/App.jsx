@@ -564,7 +564,7 @@ export default function App(){
       {user.role==="admin"&&(
         <div style={{display:"flex",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
           {[["admin","layout-dashboard","Dashboard"],["alljobs","tool","All Jobs"],["machdata","cpu","Machines"],["admintools","package","Tools"],["setup","clipboard-list","Setup"],["reports","chart-bar","Reports"],["manage","settings","Manage"]].map(([t,ic,lb])=>{
-            const lowCnt=t==="admintools"?tools.filter(tl=>tl.active&&tl.quantity<=(tl.minQuantity||0)).length:0;
+            const lowCnt=t==="admintools"?tools.filter(tl=>tl.active&&((!tl.returnable&&tl.quantity<=(tl.minQuantity||0))||tl.broken||(tl.hasConditionRating&&(tl.conditionStars||5)<=2&&!tl.ordered))).length:0;
             return(
               <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
                 <i className={`ti ti-${ic}`}/> {lb}
@@ -4196,8 +4196,11 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
     setSelectedId(null);setTakeQty(1);saveNow();
   };
   const doReportBroken=()=>{
-    if(!selectedTool||!selectedTool.returnable) return;
-    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,broken:true}:t));
+    if(!selectedTool) return;
+    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{
+      ...t,broken:true,quantity:0,
+      checkedOutCount:0,checkedOutBy:[],damagedCount:0
+    }:t));
     saveNow();setSelectedId(null);setTakeQty(1);
   };
   const setConditionStars=(stars)=>{
@@ -4211,21 +4214,31 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
   const renderToolCard=(tool)=>{
     const checkedOut=tool.returnable?(tool.checkedOutCount||0):0;
     const damaged=tool.returnable?(tool.damagedCount||0):0;
-    const available=tool.returnable?tool.quantity-checkedOut-damaged:tool.quantity;
-    const isLow=!tool.returnable&&tool.quantity<=(tool.minQuantity||0);
+    const available=tool.broken?0:tool.returnable?tool.quantity-checkedOut-damaged:tool.quantity;
+    const isLow=!tool.returnable&&!tool.broken&&tool.quantity<=(tool.minQuantity||0);
     const isOut=available<=0;
-    const allInUse=tool.returnable&&isOut;
-    const qColor=isOut?C.red:isLow?C.amber:C.green;
+    const allInUse=tool.returnable&&isOut&&!tool.broken;
+    const qColor=tool.broken?C.red:isOut?C.red:isLow?C.amber:C.green;
+    const stars=tool.hasConditionRating?(tool.conditionStars||0):0;
+    const starColor=stars<=1?"#f87171":stars<=2?C.amber:"#facc15";
     return(
       <div key={tool.id} onClick={()=>{setSelectedId(tool.id);setTakeQty(1);}}
-        style={{background:C.surface,borderRadius:10,border:`1px solid ${allInUse?C.red:isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
+        style={{background:C.surface,borderRadius:10,border:`1px solid ${tool.broken?C.red:allInUse?C.red:isLow?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
         <div style={{position:"relative",width:"100%",aspectRatio:"3/2",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
           {tool.photoData?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>:<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
           <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{available}</div>
+          {/* Stars on photo — bottom-left */}
+          {stars>0&&!tool.broken&&!tool.ordered&&<div style={{position:"absolute",bottom:4,left:5,fontSize:13,lineHeight:1,letterSpacing:1,textShadow:"0 1px 3px rgba(0,0,0,.8)",color:starColor}}>{"★".repeat(stars)}{"☆".repeat(5-stars)}</div>}
           {isLow&&!tool.ordered&&!allInUse&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.88)",color:"#1a1a1a"}}>LOW STOCK</div>}
-          {tool.regrindable&&tool.needsRegrinding&&!allInUse&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.92)",color:"#1a1a1a"}}><i className="ti ti-tool"/> Needs Regrinding</div>}
-          {damaged>0&&!allInUse&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(231,76,60,.88)",color:"#fff"}}><i className="ti ti-alert-triangle"/> {damaged} Damaged</div>}
-          {(()=>{const byList=tool.returnable?(tool.checkedOutBy||[]):[];if(!byList.length||tool.ordered)return null;const bg=allInUse?"rgba(231,76,60,.88)":"rgba(0,0,0,.72)";return(<div style={{position:"absolute",inset:0,background:bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"6px 4px"}}>
+          {tool.regrindable&&tool.needsRegrinding&&!allInUse&&!tool.ordered&&!tool.broken&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.92)",color:"#1a1a1a"}}><i className="ti ti-tool"/> Needs Regrinding</div>}
+          {damaged>0&&!allInUse&&!tool.ordered&&!tool.broken&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(231,76,60,.88)",color:"#fff"}}><i className="ti ti-alert-triangle"/> {damaged} Damaged</div>}
+          {/* Broken — full red overlay */}
+          {tool.broken&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(231,76,60,.9)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}>
+            <i className="ti ti-tools" style={{fontSize:26,color:"#fff"}}/>
+            <div style={{fontSize:12,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>BROKEN</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,.8)",letterSpacing:.5}}>Contact admin</div>
+          </div>}
+          {(()=>{const byList=tool.returnable?(tool.checkedOutBy||[]):[];if(!byList.length||tool.ordered||tool.broken)return null;const bg=allInUse?"rgba(231,76,60,.88)":"rgba(0,0,0,.72)";return(<div style={{position:"absolute",inset:0,background:bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"6px 4px"}}>
             <i className="ti ti-clock" style={{fontSize:allInUse?22:16,color:"#fff",marginBottom:2}}/>
             {allInUse&&<div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff",marginBottom:2}}>ALL IN USE</div>}
             {byList.map((x,i)=><div key={i} style={{fontSize:10,color:"rgba(255,255,255,.9)",fontWeight:600,lineHeight:1.2,textAlign:"center",maxWidth:"90%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.operatorName}</div>)}
@@ -4237,12 +4250,6 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
           <div style={{fontSize:13,color:C.text,fontWeight:700,lineHeight:1.3,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
           <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
             {tool.returnable&&<span style={{fontSize:10,fontWeight:600,color:"#22d3ee",background:"rgba(34,211,238,.1)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>↩ Returnable</span>}
-            {tool.broken&&<span style={{fontSize:10,fontWeight:700,color:C.red,background:"rgba(231,76,60,.12)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>⚠ Broken</span>}
-            {tool.hasConditionRating&&(tool.conditionStars||0)>0&&(
-              <span style={{fontSize:10,color:(tool.conditionStars||0)<=1?"#f87171":(tool.conditionStars||0)<=2?C.amber:"#facc15",letterSpacing:1}}>
-                {"★".repeat(tool.conditionStars||0)}{"☆".repeat(5-(tool.conditionStars||0))}
-              </span>
-            )}
             {Array.isArray(tool.material)&&tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
           </div>
         </div>
