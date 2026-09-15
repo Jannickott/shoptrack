@@ -4195,6 +4195,16 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
     setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:1,action:"return-damaged",timestamp:now}]);
     setSelectedId(null);setTakeQty(1);saveNow();
   };
+  const doReportBroken=()=>{
+    if(!selectedTool||!selectedTool.returnable) return;
+    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,broken:true}:t));
+    saveNow();setSelectedId(null);setTakeQty(1);
+  };
+  const setConditionStars=(stars)=>{
+    if(!selectedTool) return;
+    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,conditionStars:stars}:t));
+    saveNow();
+  };
   const closeModal=()=>{setSelectedId(null);setTakeQty(1);};
 
   // Reusable tool card renderer
@@ -4225,8 +4235,14 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
         </div>
         <div style={{padding:"8px 8px 10px"}}>
           <div style={{fontSize:13,color:C.text,fontWeight:700,lineHeight:1.3,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
-          <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+          <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
             {tool.returnable&&<span style={{fontSize:10,fontWeight:600,color:"#22d3ee",background:"rgba(34,211,238,.1)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>↩ Returnable</span>}
+            {tool.broken&&<span style={{fontSize:10,fontWeight:700,color:C.red,background:"rgba(231,76,60,.12)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>⚠ Broken</span>}
+            {tool.hasConditionRating&&(tool.conditionStars||0)>0&&(
+              <span style={{fontSize:10,color:(tool.conditionStars||0)<=1?"#f87171":(tool.conditionStars||0)<=2?C.amber:"#facc15",letterSpacing:1}}>
+                {"★".repeat(tool.conditionStars||0)}{"☆".repeat(5-(tool.conditionStars||0))}
+              </span>
+            )}
             {Array.isArray(tool.material)&&tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
           </div>
         </div>
@@ -4410,6 +4426,24 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
                 </div>
               );
             })()}
+            {selectedTool.hasConditionRating&&(
+              <div style={{marginBottom:14,background:C.raised,borderRadius:10,padding:"12px 14px"}}>
+                <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Tool Condition</div>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  {[1,2,3,4,5].map(s=>(
+                    <button key={s} onClick={()=>setConditionStars(s)} style={{background:"none",border:"none",cursor:"pointer",padding:2,fontSize:22,color:(selectedTool.conditionStars||0)>=s?"#facc15":"rgba(255,255,255,.18)",lineHeight:1}}>★</button>
+                  ))}
+                  <span style={{fontSize:10,color:C.muted,marginLeft:4}}>
+                    {!selectedTool.conditionStars?"Not rated yet":selectedTool.conditionStars===1?"⚠ Poor — consider replacement":selectedTool.conditionStars===2?"Fair":selectedTool.conditionStars===3?"Good":selectedTool.conditionStars===4?"Very good":"New / like new"}
+                  </span>
+                </div>
+              </div>
+            )}
+            {selectedTool.broken&&(
+              <div style={{background:"rgba(231,76,60,.12)",border:`1px solid rgba(231,76,60,.4)`,borderRadius:8,padding:"8px 12px",marginBottom:8,fontSize:11,color:C.red,display:"flex",alignItems:"center",gap:6}}>
+                <i className="ti ti-alert-triangle"/><span>Reported as broken — admin has been notified</span>
+              </div>
+            )}
             {selectedTool.returnable?(
               <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
                 {(selectedTool.quantity-(selectedTool.checkedOutCount||0)-(selectedTool.damagedCount||0))>0
@@ -4429,6 +4463,7 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
                     <button style={{...btn("outline",true),borderColor:"rgba(231,76,60,.5)",color:C.red}} onClick={doReturnDamaged}><i className="ti ti-alert-triangle"/> Return as Damaged</button>
                   </>
                 )}
+                {!selectedTool.broken&&<button style={{...btn("outline",true),borderColor:"rgba(231,76,60,.35)",color:C.red,fontSize:11}} onClick={doReportBroken}><i className="ti ti-tools"/> Report Tool as Broken / Needs Reorder</button>}
               </div>
             ):selectedTool.quantity>0?(
               <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14}}>
@@ -4466,7 +4501,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
   }},[focusToolId]);
   const [toolFilter,setToolFilter]=useState("all");
   const [deleteConfirm,setDeleteConfirm]=useState(false);
-  const blank={name:"",toolType:"",returnable:false,regrindable:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
+  const blank={name:"",toolType:"",returnable:false,regrindable:false,hasConditionRating:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
   const photoRef=useRef();
@@ -4541,13 +4576,23 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
           </div>
         </button>
         <button type="button" onClick={()=>setForm(p=>({...p,regrindable:!p.regrindable}))}
-          style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:form.regrindable?"rgba(240,165,0,.1)":C.raised,border:`1px solid ${form.regrindable?C.amber:C.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",textAlign:"left"}}>
+          style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:form.regrindable?"rgba(240,165,0,.1)":C.raised,border:`1px solid ${form.regrindable?C.amber:C.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",textAlign:"left",marginBottom:8}}>
           <div style={{width:20,height:20,borderRadius:4,border:`2px solid ${form.regrindable?C.amber:C.border}`,background:form.regrindable?C.amber:"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
             {form.regrindable&&<i className="ti ti-check" style={{fontSize:12,color:"#1a1a1a"}}/>}
           </div>
           <div>
             <div style={{fontSize:12,color:form.regrindable?C.amber:C.text,fontWeight:600}}>Regrindable tool</div>
             <div style={{fontSize:10,color:C.muted,marginTop:1}}>When returned, operator selects: regrinded or needs regrinding</div>
+          </div>
+        </button>
+        <button type="button" onClick={()=>setForm(p=>({...p,hasConditionRating:!p.hasConditionRating}))}
+          style={{display:"flex",alignItems:"center",gap:10,width:"100%",background:form.hasConditionRating?"rgba(250,204,21,.1)":C.raised,border:`1px solid ${form.hasConditionRating?"#facc15":C.border}`,borderRadius:8,padding:"10px 12px",cursor:"pointer",textAlign:"left"}}>
+          <div style={{width:20,height:20,borderRadius:4,border:`2px solid ${form.hasConditionRating?"#facc15":C.border}`,background:form.hasConditionRating?"#facc15":"transparent",display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
+            {form.hasConditionRating&&<i className="ti ti-check" style={{fontSize:12,color:"#1a1a1a"}}/>}
+          </div>
+          <div>
+            <div style={{fontSize:12,color:form.hasConditionRating?"#facc15":C.text,fontWeight:600}}>Condition rating ★</div>
+            <div style={{fontSize:10,color:C.muted,marginTop:1}}>Operator and admin can rate tool condition 1–5 stars (1 = needs replacement)</div>
           </div>
         </button>
       </div>
@@ -4730,7 +4775,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
         {(cabinets||[]).map(cab=>{
           const cabTools=allFilteredTools.filter(t=>String(t.cabinetId)===String(cab.id));
           const hasLow=cabTools.some(t=>t.active&&t.quantity<=(t.minQuantity||0));
-          const hasAlert=cabTools.some(t=>(!t.returnable&&t.quantity<=(t.minQuantity||0))||(t.returnable&&t.quantity-(t.checkedOutCount||0)-(t.damagedCount||0)<=0)||t.needsRegrinding||(t.damagedCount||0)>0);
+          const hasAlert=cabTools.some(t=>(!t.returnable&&t.quantity<=(t.minQuantity||0))||(t.returnable&&t.quantity-(t.checkedOutCount||0)-(t.damagedCount||0)<=0)||t.needsRegrinding||(t.damagedCount||0)>0||t.broken||((t.conditionStars||0)===1&&t.hasConditionRating));
           return(
             <div key={cab.id} onClick={()=>setSelectedCabinet(String(cab.id))} style={{background:C.surface,borderRadius:12,border:`1px solid ${hasAlert?C.amber:C.border}`,overflow:"hidden",cursor:"pointer"}}>
               <div style={{position:"relative",width:"100%",aspectRatio:"4/3",background:C.raised,overflow:"hidden",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -4787,6 +4832,8 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
                 {tool.active&&isLow&&!tool.ordered&&!allInUse&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.88)",color:"#1a1a1a"}}>LOW STOCK</div>}
                 {tool.active&&tool.regrindable&&tool.needsRegrinding&&!allInUse&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.92)",color:"#1a1a1a"}}><i className="ti ti-tool"/> Needs Regrinding</div>}
                 {tool.active&&damaged>0&&!allInUse&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(231,76,60,.88)",color:"#fff"}}><i className="ti ti-alert-triangle"/> {damaged} Damaged</div>}
+                {tool.active&&tool.broken&&!tool.ordered&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(231,76,60,.95)",color:"#fff"}}><i className="ti ti-tools"/> Broken — Reorder</div>}
+                {tool.active&&tool.hasConditionRating&&(tool.conditionStars||0)===1&&!tool.broken&&!tool.ordered&&<div style={{position:"absolute",top:5,left:5,background:"rgba(248,113,113,.9)",borderRadius:4,padding:"1px 5px",fontSize:9,fontWeight:700,color:"#fff"}}>1★ Poor</div>}
                 {tool.active&&(()=>{const byList=tool.returnable?(tool.checkedOutBy||[]):[];if(!byList.length||tool.ordered)return null;const bg=allInUse?"rgba(231,76,60,.88)":"rgba(0,0,0,.72)";return(<div style={{position:"absolute",inset:0,background:bg,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:3,padding:"6px 4px"}}>
                   <i className="ti ti-clock" style={{fontSize:allInUse?22:16,color:"#fff",marginBottom:2}}/>
                   {allInUse&&<div style={{fontSize:11,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff",marginBottom:2}}>ALL IN USE</div>}
@@ -4797,9 +4844,15 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
               </div>
               <div style={{padding:"8px 8px 10px"}}>
                 <div style={{fontSize:13,color:C.text,fontWeight:700,lineHeight:1.3,marginBottom:5,overflow:"hidden",display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical"}}>{tool.name}</div>
-                <div style={{display:"flex",gap:4,flexWrap:"wrap"}}>
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
                   {tool.toolType&&<span style={{fontSize:10,fontWeight:600,color:"#94a3b8",background:"rgba(148,163,184,.15)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>{tool.toolType}</span>}
                   {tool.returnable&&<span style={{fontSize:10,fontWeight:600,color:"#22d3ee",background:"rgba(34,211,238,.1)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>↩ Returnable</span>}
+                  {tool.broken&&<span style={{fontSize:10,fontWeight:700,color:C.red,background:"rgba(231,76,60,.12)",padding:"2px 6px",borderRadius:4,letterSpacing:.3}}>⚠ Broken</span>}
+                  {tool.hasConditionRating&&(tool.conditionStars||0)>0&&(
+                    <span style={{fontSize:10,color:(tool.conditionStars||0)<=1?"#f87171":(tool.conditionStars||0)<=2?C.amber:"#facc15",letterSpacing:1}}>
+                      {"★".repeat(tool.conditionStars||0)}{"☆".repeat(5-(tool.conditionStars||0))}
+                    </span>
+                  )}
                   {Array.isArray(tool.material)&&tool.material.map(code=>{const m=ISO_MAT.find(x=>x.code===code);return m?<span key={code} style={{fontSize:10,fontWeight:700,color:m.color,background:m.bg,padding:"2px 5px",borderRadius:4,letterSpacing:.5}}>{code}</span>:null;})}
                 </div>
               </div>
@@ -4901,6 +4954,29 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
                 </div>
               );
             })()}
+            {selectedTool.hasConditionRating&&(
+              <div style={{marginBottom:14,background:C.raised,borderRadius:10,padding:"12px 14px"}}>
+                <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Tool Condition</div>
+                <div style={{display:"flex",gap:6,alignItems:"center"}}>
+                  {[1,2,3,4,5].map(s=>(
+                    <button key={s} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,conditionStars:s}:t));saveNow&&saveNow();}} style={{background:"none",border:"none",cursor:"pointer",padding:2,fontSize:22,color:(selectedTool.conditionStars||0)>=s?"#facc15":"rgba(255,255,255,.18)",lineHeight:1}}>★</button>
+                  ))}
+                  <span style={{fontSize:10,color:C.muted,marginLeft:4}}>
+                    {!selectedTool.conditionStars?"Not rated yet":selectedTool.conditionStars===1?"⚠ Poor — consider buying new":selectedTool.conditionStars===2?"Fair":selectedTool.conditionStars===3?"Good":selectedTool.conditionStars===4?"Very good":"New / like new"}
+                  </span>
+                </div>
+              </div>
+            )}
+            {selectedTool.broken&&(
+              <div style={{background:"rgba(231,76,60,.12)",border:`1px solid rgba(231,76,60,.5)`,borderRadius:8,padding:"10px 12px",marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+                <i className="ti ti-alert-triangle" style={{color:C.red,fontSize:16,flexShrink:0}}/>
+                <div style={{flex:1}}>
+                  <div style={{fontSize:12,fontWeight:700,color:C.red,marginBottom:2}}>Reported Broken — Needs Reorder</div>
+                  <div style={{fontSize:10,color:C.muted}}>An operator flagged this tool as broken.</div>
+                </div>
+                <button style={{...btn("outline",false,true),fontSize:10,padding:"4px 8px",borderColor:"rgba(231,76,60,.4)",color:C.red}} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,broken:false}:t));saveNow&&saveNow();}}>Clear</button>
+              </div>
+            )}
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
               {restockId===selectedTool.id?(
                 <div>
