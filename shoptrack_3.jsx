@@ -4228,7 +4228,7 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
           {tool.photoData?<img src={tool.photoData} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>:<i className="ti ti-tool" style={{fontSize:22,color:C.muted,opacity:0.3}}/>}
           <div style={{position:"absolute",top:5,right:5,background:"rgba(0,0,0,.78)",borderRadius:6,padding:"3px 8px",fontSize:17,fontWeight:700,color:qColor,fontFamily:"'Share Tech Mono',monospace",lineHeight:"1.3"}}>{available}</div>
           {/* Stars on photo — bottom-left */}
-          {stars>0&&!tool.broken&&!tool.ordered&&<div style={{position:"absolute",bottom:4,left:5,fontSize:13,lineHeight:1,letterSpacing:1,textShadow:"0 1px 3px rgba(0,0,0,.8)",color:starColor}}>{"★".repeat(stars)}{"☆".repeat(5-stars)}</div>}
+          {stars>0&&!tool.broken&&!tool.ordered&&!tool.conditionOrdered&&<div style={{position:"absolute",bottom:4,left:5,fontSize:39,lineHeight:1,letterSpacing:0,textShadow:"0 2px 6px rgba(0,0,0,.9)",color:starColor}}>{"★".repeat(stars)}{"☆".repeat(5-stars)}</div>}
           {isLow&&!tool.ordered&&!allInUse&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.88)",color:"#1a1a1a"}}>LOW STOCK</div>}
           {tool.regrindable&&tool.needsRegrinding&&!allInUse&&!tool.ordered&&!tool.broken&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(240,165,0,.92)",color:"#1a1a1a"}}><i className="ti ti-tool"/> Needs Regrinding</div>}
           {damaged>0&&!allInUse&&!tool.ordered&&!tool.broken&&<div style={{position:"absolute",bottom:0,left:0,right:0,padding:"5px 0",textAlign:"center",fontSize:11,letterSpacing:.8,textTransform:"uppercase",fontWeight:700,background:"rgba(231,76,60,.88)",color:"#fff"}}><i className="ti ti-alert-triangle"/> {damaged} Damaged</div>}
@@ -4244,6 +4244,11 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
             {byList.map((x,i)=><div key={i} style={{fontSize:10,color:"rgba(255,255,255,.9)",fontWeight:600,lineHeight:1.2,textAlign:"center",maxWidth:"90%",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{x.operatorName}</div>)}
             {tool.needsRegrinding&&<div style={{fontSize:8,color:"rgba(255,255,255,.7)",letterSpacing:.5,textTransform:"uppercase",marginTop:2}}>⚠ needs regrinding</div>}
           </div>);})()}
+          {tool.conditionOrdered&&!tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:5}}>
+            <i className="ti ti-alert-triangle" style={{fontSize:22,color:"#fff"}}/>
+            <div style={{fontSize:10,letterSpacing:1.2,textTransform:"uppercase",fontWeight:800,color:"#fff",textAlign:"center",padding:"0 8px",lineHeight:1.3}}>POOR CONDITION</div>
+            <div style={{fontSize:9,color:"rgba(255,255,255,.85)",letterSpacing:.5}}>New tool on order</div>
+          </div>}
           {tool.ordered&&<div style={{position:"absolute",inset:0,background:"rgba(59,130,246,.82)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:4}}><i className="ti ti-checks" style={{fontSize:26,color:"#fff"}}/><div style={{fontSize:13,letterSpacing:1.5,textTransform:"uppercase",fontWeight:800,color:"#fff"}}>ON ORDER</div></div>}
         </div>
         <div style={{padding:"8px 8px 10px"}}>
@@ -4542,7 +4547,9 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
   const doRestock=tool=>{
     const qty=parseInt(restockQty)||0;
     if(qty<1) return;
-    setTools(prev=>prev.map(t=>t.id===tool.id?{...t,quantity:t.quantity+qty,ordered:t.quantity+qty>(t.minQuantity||0)?false:t.ordered}:t));
+    const updates={quantity:tool.quantity+qty,ordered:tool.quantity+qty>(tool.minQuantity||0)?false:tool.ordered};
+    if(tool.conditionOrdered){updates.conditionOrdered=false;updates.conditionStars=5;}
+    setTools(prev=>prev.map(t=>t.id===tool.id?{...t,...updates}:t));
     setRestockId(null);setRestockQty("");
     saveNow&&saveNow();
   };
@@ -5008,6 +5015,11 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
               {selectedTool.quantity<=(selectedTool.minQuantity||0)&&(
                 <button style={btn(selectedTool.ordered?"blue":"outline",true)} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,ordered:!t.ordered}:t));saveNow&&saveNow();}}>
                   <i className={`ti ti-${selectedTool.ordered?"checks":"shopping-cart"}`}/> {selectedTool.ordered?"Ordered — click to unmark":"Mark as Ordered"}
+                </button>
+              )}
+              {selectedTool.hasConditionRating&&(selectedTool.conditionStars||0)===1&&(
+                <button style={btn(selectedTool.conditionOrdered?"blue":"outline",true)} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,conditionOrdered:!t.conditionOrdered}:t));saveNow&&saveNow();}}>
+                  <i className={`ti ti-${selectedTool.conditionOrdered?"checks":"alert-triangle"}`}/> {selectedTool.conditionOrdered?"Condition order placed — click to unmark":"Order replacement (poor condition)"}
                 </button>
               )}
               <button style={btn("outline",true)} onClick={()=>{closeModal();openEdit(selectedTool);}}><i className="ti ti-edit"/> Edit Tool</button>
