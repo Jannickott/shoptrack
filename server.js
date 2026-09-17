@@ -195,42 +195,59 @@ app.get("/api/data", (_req, res) => {
   catch { res.json(null); }
 });
 
-// ── POST /api/data — merge jobs, then atomic write ────────
-// Multi-device fix: instead of blindly overwriting, we merge the jobs list.
-// Each job has a lastModifiedAt timestamp — whichever device has the newer
-// version of a job wins. Jobs unknown to this device (created on another
-// device between its last poll) are always preserved.
-// Settings (users, machines, workHours etc.) come from the incoming request
-// as before — they are only changed by admin, so the last admin save wins.
+// ── POST /api/data — safe merge, then atomic write ────────
+// Multi-device safety rules:
+//   1. Jobs: merge by lastModifiedAt — newest version of each job wins,
+//      jobs created on other devices are preserved.
+//   2. Settings arrays (users, machines, tools, departments, cabinets,
+//      setupSheets, workShifts): only overwrite the server's copy when the
+//      incoming array is NON-EMPTY. An empty/missing array means the client
+//      didn't load that data yet — keep what the server has.
+//   3. Plain objects (workHours, machineIssues): same rule — only overwrite
+//      when the incoming object has keys.
+// This prevents an operator client with partial state from wiping admin data.
+const ARRAY_KEYS  = ["users","machines","tools","departments","cabinets","setupSheets","workShifts"];
+const OBJECT_KEYS = ["workHours","machineIssues"];
+
 app.post("/api/data", (req, res) => {
   try {
     const incoming = req.body;
 
-    // Read the current server state so we can merge jobs
-    let serverJobs = [];
+    // Read the current server state
+    let server = {};
     if (fs.existsSync(DATA_FILE)) {
-      try {
-        const current = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-        serverJobs = current.jobs || [];
-      } catch(e) { /* corrupt file — start fresh merge from incoming */ }
+      try { server = JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); }
+      catch(e) { /* corrupt — treat as empty */ }
     }
 
-    // Build a map of server jobs by ID
+    // Merge jobs: newest lastModifiedAt wins; server-only jobs are preserved
     const jobMap = new Map();
-    serverJobs.forEach(j => jobMap.set(j.id, j));
-
-    // Merge incoming jobs: newer lastModifiedAt wins; missing jobs are added
+    (server.jobs || []).forEach(j => jobMap.set(j.id, j));
     (incoming.jobs || []).forEach(j => {
-      const existing = jobMap.get(j.id);
-      if (!existing || (j.lastModifiedAt || 0) >= (existing.lastModifiedAt || 0)) {
-        jobMap.set(j.id, j);
+      const ex = jobMap.get(j.id);
+      if (!ex || (j.lastModifiedAt || 0) >= (ex.lastModifiedAt || 0)) jobMap.set(j.id, j);
+    });
+
+    // Start from incoming, then protect array/object settings from empty wipes
+    const merged = { ...incoming, jobs: Array.from(jobMap.values()) };
+
+    ARRAY_KEYS.forEach(k => {
+      const inc = incoming[k];
+      if (!Array.isArray(inc) || inc.length === 0) {
+        // Incoming is empty/missing — keep server's version
+        if (server[k] && server[k].length > 0) merged[k] = server[k];
       }
     });
 
-    const merged  = { ...incoming, jobs: Array.from(jobMap.values()) };
-    const json    = JSON.stringify(merged, null, 2);
+    OBJECT_KEYS.forEach(k => {
+      const inc = incoming[k];
+      if (!inc || typeof inc !== "object" || Object.keys(inc).length === 0) {
+        if (server[k] && Object.keys(server[k]).length > 0) merged[k] = server[k];
+      }
+    });
+
     const tmpFile = DATA_FILE + ".tmp";
-    fs.writeFileSync(tmpFile, json);
+    fs.writeFileSync(tmpFile, JSON.stringify(merged, null, 2));
     fs.renameSync(tmpFile, DATA_FILE);
     res.json({ ok: true });
   } catch (e) { res.status(500).json({ error: e.message }); }
