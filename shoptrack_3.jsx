@@ -280,15 +280,22 @@ export default function App(){
   const dataLoadedRef=useRef(false); // prevents saving before server data is loaded
   const settingsVersionRef=useRef(0);   // bumped whenever settings change locally
   const prevSettingsHashRef=useRef(''); // tracks last-saved settings hash
+  const lastSavedHashRef=useRef('');    // hash of what we last successfully sent — skip identical saves
+  const [serverOnline,setServerOnline]=useState(true);
   useEffect(()=>{
     stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals};
   },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals]);
 
-  // Save to server every 3 seconds — only after data has been loaded
+  // Save to server every 3 seconds — only when data has changed, with retry on failure
   useEffect(()=>{
     const t=setInterval(()=>{
       if(!dataLoadedRef.current) return;
-      fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(stateRef.current)}).catch(()=>{});
+      const state=stateRef.current;
+      const hash=JSON.stringify([state.jobs,state.settingsVersion]);
+      if(hash===lastSavedHashRef.current) return; // nothing changed — skip
+      fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...state,settingsVersion:settingsVersionRef.current})})
+        .then(r=>{if(r.ok){lastSavedHashRef.current=hash;setServerOnline(true);}else setServerOnline(false);})
+        .catch(()=>setServerOnline(false)); // will retry next tick
     },3000);
     return()=>clearInterval(t);
   },[]);
@@ -299,6 +306,7 @@ export default function App(){
   useEffect(()=>{
     const t=setInterval(()=>{
       fetch("/api/data").then(r=>r.json()).then(data=>{
+        setServerOnline(true);
         if(!data) return;
         const last=lastServerRef.current;
         // Jobs: always trust server for status/pause/completion — it's the source of truth.
@@ -360,7 +368,7 @@ export default function App(){
         if((data.settingsVersion||0)>settingsVersionRef.current) settingsVersionRef.current=data.settingsVersion;
         // Remember what the server last sent
         lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments};
-      }).catch(()=>{});
+      }).catch(()=>setServerOnline(false));
     },5000);
     return()=>clearInterval(t);
   },[]);
@@ -561,6 +569,8 @@ export default function App(){
       <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
       <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" rel="stylesheet"/>
 
+      {/* OFFLINE BANNER */}
+      {!serverOnline&&<div style={{background:"rgba(231,76,60,.92)",color:"#fff",textAlign:"center",padding:"6px 12px",fontSize:11,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase"}}><i className="ti ti-wifi-off"/> No connection to server — changes will be saved automatically when reconnected</div>}
       {/* HEADER */}
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{fontSize:13,letterSpacing:3,textTransform:"uppercase",color:C.amber,fontWeight:700,cursor:"pointer",userSelect:"none"}} onClick={()=>{setUser(null);setTab("new");}}>⚙ ShopTrack</div>

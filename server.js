@@ -204,6 +204,15 @@ app.use("/photos", express.static(PHOTOS_DIR));
 // ── Serve built React app ─────────────────────────────────
 app.use(express.static(path.join(__dirname, "dist")));
 
+// ── Write queue — serialises all /api/data POSTs ─────────
+// With 8+ devices saving every 3 s, concurrent saves race to read-merge-write.
+// A simple async queue ensures each save completes before the next starts.
+let writeQueue = Promise.resolve();
+const enqueueWrite = (fn) => { writeQueue = writeQueue.then(fn).catch(() => {}); return writeQueue; };
+
+// ── GET  /api/health ─────────────────────────────────────
+app.get("/api/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
+
 // ── GET  /api/data ────────────────────────────────────────
 app.get("/api/data", (_req, res) => {
   if (!fs.existsSync(DATA_FILE)) return res.json(null);
@@ -211,74 +220,62 @@ app.get("/api/data", (_req, res) => {
   catch { res.json(null); }
 });
 
-// ── POST /api/data — safe merge, then atomic write ────────
-// Multi-device safety rules:
-//   1. Jobs: merge by lastModifiedAt — newest version of each job wins,
-//      jobs created on other devices are preserved.
-//   2. Settings arrays (users, machines, tools, departments, cabinets,
-//      setupSheets, workShifts): only overwrite the server's copy when the
-//      incoming array is NON-EMPTY. An empty/missing array means the client
-//      didn't load that data yet — keep what the server has.
-//   3. Plain objects (workHours, machineIssues): same rule — only overwrite
-//      when the incoming object has keys.
-// This prevents an operator client with partial state from wiping admin data.
+// ── POST /api/data — queued safe merge, then atomic write ─
 const ARRAY_KEYS  = ["users","machines","tools","departments","cabinets","setupSheets","workShifts"];
 const OBJECT_KEYS = ["workHours","machineIssues"];
 
-app.post("/api/data", (req, res) => {
-  try {
-    const incoming = req.body;
+function mergeAndWrite(incoming) {
+  let server = {};
+  if (fs.existsSync(DATA_FILE)) {
+    try { server = JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); }
+    catch(e) { /* corrupt — treat as empty */ }
+  }
 
-    // Read the current server state
-    let server = {};
-    if (fs.existsSync(DATA_FILE)) {
-      try { server = JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); }
-      catch(e) { /* corrupt — treat as empty */ }
-    }
+  // Merge jobs: newest lastModifiedAt wins; server-only jobs preserved
+  const jobMap = new Map();
+  (server.jobs || []).forEach(j => jobMap.set(j.id, j));
+  (incoming.jobs || []).forEach(j => {
+    const ex = jobMap.get(j.id);
+    if (!ex || (j.lastModifiedAt || 0) >= (ex.lastModifiedAt || 0)) jobMap.set(j.id, j);
+  });
 
-    // Merge jobs: newest lastModifiedAt wins; server-only jobs are preserved
-    const jobMap = new Map();
-    (server.jobs || []).forEach(j => jobMap.set(j.id, j));
-    (incoming.jobs || []).forEach(j => {
-      const ex = jobMap.get(j.id);
-      if (!ex || (j.lastModifiedAt || 0) >= (ex.lastModifiedAt || 0)) jobMap.set(j.id, j);
+  const merged = { ...incoming, jobs: Array.from(jobMap.values()) };
+
+  const serverSV   = server.settingsVersion  || 0;
+  const incomingSV = incoming.settingsVersion || 0;
+
+  if (incomingSV < serverSV) {
+    console.log(`  ⚠ Rejected stale settings (client v${incomingSV} < server v${serverSV})`);
+    ARRAY_KEYS.forEach(k  => { if (server[k] !== undefined) merged[k] = server[k]; });
+    OBJECT_KEYS.forEach(k => { if (server[k] !== undefined) merged[k] = server[k]; });
+  } else {
+    ARRAY_KEYS.forEach(k => {
+      const inc = incoming[k];
+      if (!Array.isArray(inc) || inc.length === 0) {
+        if (server[k] && server[k].length > 0) merged[k] = server[k];
+      }
     });
+    OBJECT_KEYS.forEach(k => {
+      const inc = incoming[k];
+      if (!inc || typeof inc !== "object" || Object.keys(inc).length === 0) {
+        if (server[k] && Object.keys(server[k]).length > 0) merged[k] = server[k];
+      }
+    });
+  }
 
-    // Start from incoming, then protect settings from stale clients
-    const merged = { ...incoming, jobs: Array.from(jobMap.values()) };
+  merged.settingsVersion = Math.max(serverSV, incomingSV);
 
-    const serverSV  = server.settingsVersion  || 0;
-    const incomingSV = incoming.settingsVersion || 0;
+  const tmpFile = DATA_FILE + ".tmp";
+  fs.writeFileSync(tmpFile, JSON.stringify(merged, null, 2));
+  fs.renameSync(tmpFile, DATA_FILE);
+}
 
-    if (incomingSV < serverSV) {
-      // Client has stale settings — preserve server's authoritative copy
-      console.log(`  ⚠ Rejected stale settings (client v${incomingSV} < server v${serverSV})`);
-      ARRAY_KEYS.forEach(k  => { if (server[k]  !== undefined) merged[k]  = server[k];  });
-      OBJECT_KEYS.forEach(k => { if (server[k]  !== undefined) merged[k]  = server[k];  });
-    } else {
-      // Client has current or newer settings — accept, but still protect empty wipes
-      ARRAY_KEYS.forEach(k => {
-        const inc = incoming[k];
-        if (!Array.isArray(inc) || inc.length === 0) {
-          if (server[k] && server[k].length > 0) merged[k] = server[k];
-        }
-      });
-      OBJECT_KEYS.forEach(k => {
-        const inc = incoming[k];
-        if (!inc || typeof inc !== "object" || Object.keys(inc).length === 0) {
-          if (server[k] && Object.keys(server[k]).length > 0) merged[k] = server[k];
-        }
-      });
-    }
-
-    // Always store the highest settingsVersion seen
-    merged.settingsVersion = Math.max(serverSV, incomingSV);
-
-    const tmpFile = DATA_FILE + ".tmp";
-    fs.writeFileSync(tmpFile, JSON.stringify(merged, null, 2));
-    fs.renameSync(tmpFile, DATA_FILE);
-    res.json({ ok: true });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+app.post("/api/data", (req, res) => {
+  const incoming = req.body;
+  enqueueWrite(() => {
+    try { mergeAndWrite(incoming); res.json({ ok: true }); }
+    catch(e) { res.status(500).json({ error: e.message }); }
+  });
 });
 
 // ── Serve setup sheet PDFs ────────────────────────────────
