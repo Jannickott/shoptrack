@@ -19,20 +19,24 @@ if (!fs.existsSync(PHOTOS_DIR))      fs.mkdirSync(PHOTOS_DIR);
 if (!fs.existsSync(BACKUPS_DIR))     fs.mkdirSync(BACKUPS_DIR);
 if (!fs.existsSync(SETUPSHEETS_DIR)) fs.mkdirSync(SETUPSHEETS_DIR);
 
-// ── Daily backup ──────────────────────────────────────────
-function runBackup() {
+// ── Backups: morning (06:00) and evening (16:00) every day ───────────────────
+// Filenames include the slot so both are kept: shoptrack-data-2026-09-17-morning.json
+const BACKUP_SLOTS = [
+  { hh: 6,  label: "morning" },
+  { hh: 16, label: "evening" },
+];
+
+function runBackup(label) {
   if (!fs.existsSync(DATA_FILE)) return;
   const d     = new Date();
   const stamp = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
-  const dest  = path.join(BACKUPS_DIR, `shoptrack-data-${stamp}.json`);
+  const dest  = path.join(BACKUPS_DIR, `shoptrack-data-${stamp}-${label}.json`);
 
-  // ✦ Never overwrite an existing backup for the same day
   if (fs.existsSync(dest)) {
-    console.log(`  ℹ Backup already exists for today — skipping.`);
+    console.log(`  ℹ ${label} backup already exists for today — skipping.`);
     return;
   }
 
-  // ✦ Only back up if the file has real data (jobs or users beyond default)
   try {
     const raw  = fs.readFileSync(DATA_FILE, "utf8");
     const data = JSON.parse(raw);
@@ -40,14 +44,14 @@ function runBackup() {
                     (data.users && data.users.length > 1) ||
                     (data.machines && data.machines.length > 0);
     if (!hasData) {
-      console.log(`  ℹ Data file looks empty — skipping backup to protect previous backup.`);
+      console.log(`  ℹ Data looks empty — skipping ${label} backup to protect previous backup.`);
       return;
     }
     fs.copyFileSync(DATA_FILE, dest);
-    console.log(`  ✓ Backup saved: backups/shoptrack-data-${stamp}.json`);
+    console.log(`  ✓ ${label.charAt(0).toUpperCase()+label.slice(1)} backup saved: shoptrack-data-${stamp}-${label}.json`);
     pruneBackups();
   } catch(e) {
-    console.error("  ✗ Backup failed:", e.message);
+    console.error(`  ✗ ${label} backup failed:`, e.message);
   }
 }
 
@@ -55,20 +59,32 @@ function pruneBackups() {
   const files = fs.readdirSync(BACKUPS_DIR)
     .filter(f => f.startsWith("shoptrack-data-") && f.endsWith(".json"))
     .sort();
-  if (files.length > 30) {
-    files.slice(0, files.length - 30).forEach(f => {
+  // Keep the last 60 files (≈ 30 days × 2 slots)
+  if (files.length > 60) {
+    files.slice(0, files.length - 60).forEach(f => {
       fs.unlinkSync(path.join(BACKUPS_DIR, f));
     });
   }
 }
 
-function scheduleBackup() {
-  runBackup();
-  const MS_PER_DAY = 24 * 60 * 60 * 1000;
-  setInterval(runBackup, MS_PER_DAY);
+// Check every minute whether a backup slot is due
+let lastBackupSlot = "";
+function checkBackupSchedule() {
+  const now  = new Date();
+  const hh   = now.getHours();
+  const mm   = now.getMinutes();
+  if (mm !== 0) return; // only fire on the hour
+  const slot = BACKUP_SLOTS.find(s => s.hh === hh);
+  if (!slot) return;
+  const key = `${now.toDateString()}-${slot.label}`;
+  if (key === lastBackupSlot) return; // already ran this slot today
+  lastBackupSlot = key;
+  runBackup(slot.label);
 }
 
-scheduleBackup();
+// Run a startup backup (labelled "startup") so there's always one on server restart
+runBackup("startup");
+setInterval(checkBackupSchedule, 60 * 1000);
 
 // ── Server-side auto-pause ────────────────────────────────
 // Runs every 30 seconds. If any user has an autoPauseTime matching the
