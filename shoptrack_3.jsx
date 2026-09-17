@@ -307,6 +307,8 @@ export default function App(){
           const merged=data.jobs.map(sj=>{
             const lj=local.find(j=>j.id===sj.id);
             if(!lj) return sj;
+            // Local is newer (unsaved change in flight) — keep it to avoid flicker
+            if((lj.lastModifiedAt||0)>(sj.lastModifiedAt||0)) return lj;
             return sj;
           });
           return [...localOnly,...merged];
