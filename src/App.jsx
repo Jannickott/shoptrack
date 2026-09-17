@@ -338,7 +338,19 @@ export default function App(){
         if(data.toolLog    &&s(data.toolLog)    !==s(last.toolLog))    setToolLog(data.toolLog);
         if(data.cabinets   &&s(data.cabinets)   !==s(last.cabinets))   setCabinets(data.cabinets);
         if(data.departments&&s(data.departments)!==s(last.departments)) setDepartments(data.departments);
-        if(data.setupSheets&&s(data.setupSheets)!==s(last.setupSheets)) setSetupSheets(data.setupSheets);
+        if(data.setupSheets&&s(data.setupSheets)!==s(last.setupSheets)){
+          setSetupSheets(local=>{
+            const serverMap=new Map((data.setupSheets||[]).map(sh=>[sh.id,sh]));
+            const localOnly=local.filter(sh=>!serverMap.has(sh.id)); // unsaved new sheets
+            const merged=(data.setupSheets||[]).map(ssh=>{
+              const lsh=local.find(sh=>sh.id===ssh.id);
+              if(!lsh) return ssh;
+              if((lsh.updatedAt||0)>(ssh.updatedAt||0)) return lsh; // local edit is newer
+              return ssh;
+            });
+            return [...localOnly,...merged];
+          });
+        }
         if(data.setupDeptParams&&s(data.setupDeptParams)!==s(last.setupDeptParams)) setSetupDeptParams(data.setupDeptParams);
         if(data.subDepartments&&s(data.subDepartments)!==s(last.subDepartments)) setSubDepartments(data.subDepartments);
         // Remember what the server last sent
