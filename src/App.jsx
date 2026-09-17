@@ -253,6 +253,7 @@ export default function App(){
             setSubDepartments(sd);
           }
           if(data.efficiencyGoals) setEfficiencyGoals(data.efficiencyGoals);
+          if(data.settingsVersion) settingsVersionRef.current=data.settingsVersion;
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
             workHours:data.workHours,
@@ -277,6 +278,8 @@ export default function App(){
   const stateRef=useRef({});
   const lastServerRef=useRef({});
   const dataLoadedRef=useRef(false); // prevents saving before server data is loaded
+  const settingsVersionRef=useRef(0);   // bumped whenever settings change locally
+  const prevSettingsHashRef=useRef(''); // tracks last-saved settings hash
   useEffect(()=>{
     stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals};
   },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals]);
@@ -353,6 +356,8 @@ export default function App(){
         }
         if(data.setupDeptParams&&s(data.setupDeptParams)!==s(last.setupDeptParams)) setSetupDeptParams(data.setupDeptParams);
         if(data.subDepartments&&s(data.subDepartments)!==s(last.subDepartments)) setSubDepartments(data.subDepartments);
+        // Keep settingsVersion in sync with server (take the max — never go backwards)
+        if((data.settingsVersion||0)>settingsVersionRef.current) settingsVersionRef.current=data.settingsVersion;
         // Remember what the server last sent
         lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments};
       }).catch(()=>{});
@@ -360,7 +365,13 @@ export default function App(){
     return()=>clearInterval(t);
   },[]);
 
-  const saveNow=()=>fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(stateRef.current)}).catch(()=>{});
+  const saveNow=()=>{
+    const state=stateRef.current;
+    // Detect settings changes — bump version so server knows this save has authoritative settings
+    const hash=JSON.stringify([state.users,state.machines,state.tools,state.departments,state.cabinets,state.workHours,state.setupDeptParams,state.subDepartments]);
+    if(hash!==prevSettingsHashRef.current){prevSettingsHashRef.current=hash;settingsVersionRef.current=Date.now();}
+    return fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...state,settingsVersion:settingsVersionRef.current})}).catch(()=>{});
+  };
 
   // ── Refresh immediately when tab becomes visible again ────
   useEffect(()=>{

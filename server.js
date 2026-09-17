@@ -228,23 +228,35 @@ app.post("/api/data", (req, res) => {
       if (!ex || (j.lastModifiedAt || 0) >= (ex.lastModifiedAt || 0)) jobMap.set(j.id, j);
     });
 
-    // Start from incoming, then protect array/object settings from empty wipes
+    // Start from incoming, then protect settings from stale clients
     const merged = { ...incoming, jobs: Array.from(jobMap.values()) };
 
-    ARRAY_KEYS.forEach(k => {
-      const inc = incoming[k];
-      if (!Array.isArray(inc) || inc.length === 0) {
-        // Incoming is empty/missing — keep server's version
-        if (server[k] && server[k].length > 0) merged[k] = server[k];
-      }
-    });
+    const serverSV  = server.settingsVersion  || 0;
+    const incomingSV = incoming.settingsVersion || 0;
 
-    OBJECT_KEYS.forEach(k => {
-      const inc = incoming[k];
-      if (!inc || typeof inc !== "object" || Object.keys(inc).length === 0) {
-        if (server[k] && Object.keys(server[k]).length > 0) merged[k] = server[k];
-      }
-    });
+    if (incomingSV < serverSV) {
+      // Client has stale settings — preserve server's authoritative copy
+      console.log(`  ⚠ Rejected stale settings (client v${incomingSV} < server v${serverSV})`);
+      ARRAY_KEYS.forEach(k  => { if (server[k]  !== undefined) merged[k]  = server[k];  });
+      OBJECT_KEYS.forEach(k => { if (server[k]  !== undefined) merged[k]  = server[k];  });
+    } else {
+      // Client has current or newer settings — accept, but still protect empty wipes
+      ARRAY_KEYS.forEach(k => {
+        const inc = incoming[k];
+        if (!Array.isArray(inc) || inc.length === 0) {
+          if (server[k] && server[k].length > 0) merged[k] = server[k];
+        }
+      });
+      OBJECT_KEYS.forEach(k => {
+        const inc = incoming[k];
+        if (!inc || typeof inc !== "object" || Object.keys(inc).length === 0) {
+          if (server[k] && Object.keys(server[k]).length > 0) merged[k] = server[k];
+        }
+      });
+    }
+
+    // Always store the highest settingsVersion seen
+    merged.settingsVersion = Math.max(serverSV, incomingSV);
 
     const tmpFile = DATA_FILE + ".tmp";
     fs.writeFileSync(tmpFile, JSON.stringify(merged, null, 2));
