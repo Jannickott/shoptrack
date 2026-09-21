@@ -619,7 +619,7 @@ export default function App(){
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
-      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals}/>}
+      {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
     </div>
@@ -3311,7 +3311,7 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
 // ═══════════════════════════════════════════════════════
 // MANAGE TAB
 // ═══════════════════════════════════════════════════════
-function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,departments,setDepartments,saveNow,efficiencyGoals,setEfficiencyGoals}){
+function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,departments,setDepartments,saveNow,efficiencyGoals,setEfficiencyGoals,jobs,setJobs}){
   const [view,setView]=useState("operators");
   return(
     <div style={{padding:"14px 16px"}}>
