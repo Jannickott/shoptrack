@@ -221,10 +221,28 @@ const enqueueWrite = (fn) => { writeQueue = writeQueue.then(fn).catch(() => {});
 app.get("/api/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
 
 // ── GET  /api/data ────────────────────────────────────────
+// PINs are kept on disk but stripped from the response so no client can read them.
 app.get("/api/data", (_req, res) => {
   if (!fs.existsSync(DATA_FILE)) return res.json(null);
-  try { res.json(JSON.parse(fs.readFileSync(DATA_FILE, "utf8"))); }
-  catch { res.json(null); }
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    if (Array.isArray(data.users)) {
+      data.users = data.users.map(({ pin: _pin, ...rest }) => rest);
+    }
+    res.json(data);
+  } catch { res.json(null); }
+});
+
+// ── POST /api/verify-pin ──────────────────────────────────
+app.post("/api/verify-pin", (req, res) => {
+  try {
+    const { userId, pin } = req.body;
+    if (!userId || !pin) return res.status(400).json({ ok: false });
+    if (!fs.existsSync(DATA_FILE)) return res.json({ ok: false });
+    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    const user = (data.users || []).find(u => u.id === userId);
+    res.json({ ok: !!(user && user.pin === pin) });
+  } catch { res.status(500).json({ ok: false }); }
 });
 
 // ── POST /api/data — queued safe merge, then atomic write ─
@@ -232,6 +250,11 @@ const ARRAY_KEYS  = ["users","machines","tools","departments","cabinets","setupS
 const OBJECT_KEYS = ["workHours","machineIssues"];
 
 function mergeAndWrite(incoming) {
+  if (!incoming || typeof incoming !== "object" ||
+      (incoming.jobs !== undefined && !Array.isArray(incoming.jobs))) {
+    throw new Error("Invalid payload");
+  }
+
   let server = {};
   if (fs.existsSync(DATA_FILE)) {
     try { server = JSON.parse(fs.readFileSync(DATA_FILE, "utf8")); }
@@ -271,6 +294,14 @@ function mergeAndWrite(incoming) {
   }
 
   merged.settingsVersion = Math.max(serverSV, incomingSV);
+
+  // Clients never receive PINs (stripped in GET), so restore them from server copy
+  if (Array.isArray(merged.users) && Array.isArray(server.users)) {
+    const serverPins = new Map(server.users.map(u => [u.id, u.pin]));
+    merged.users = merged.users.map(u =>
+      (!u.pin && serverPins.has(u.id)) ? { ...u, pin: serverPins.get(u.id) } : u
+    );
+  }
 
   const tmpFile = DATA_FILE + ".tmp";
   fs.writeFileSync(tmpFile, JSON.stringify(merged, null, 2));

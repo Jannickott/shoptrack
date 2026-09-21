@@ -449,8 +449,8 @@ export default function App(){
         Object.keys(updated).forEach(k=>{
           const issue=updated[k];
           const shouldCount=inWork;
+          // downtimeSec is authoritative on the server (30s tick) — clients only update the counting flag
           if(issue.counting!==shouldCount){updated[k]={...issue,counting:shouldCount};changed=true;}
-          else if(issue.counting){updated[k]={...issue,downtimeSec:(issue.downtimeSec||0)+1};changed=true;}
         });
         return changed?updated:prev;
       });
@@ -551,7 +551,6 @@ export default function App(){
 
   if(!loaded) return(
     <div style={{fontFamily:"'Share Tech Mono',monospace",background:C.bg,minHeight:"100vh",color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:16}}>
-      <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
       <div style={{fontSize:22,color:C.amber,letterSpacing:4,textTransform:"uppercase",fontWeight:700}}>⚙ ShopTrack</div>
       <div style={{fontSize:11,color:C.muted,letterSpacing:2}}>Connecting to server…</div>
       <div style={{width:40,height:40,border:`3px solid ${C.raised}`,borderTop:`3px solid ${C.amber}`,borderRadius:"50%",animation:"spin 1s linear infinite"}}/>
@@ -566,9 +565,6 @@ export default function App(){
 
   return(
     <div style={{fontFamily:"'Share Tech Mono',monospace",background:C.bg,minHeight:"100vh",color:C.text}}>
-      <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
-      <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" rel="stylesheet"/>
-
       {/* OFFLINE BANNER */}
       {!serverOnline&&<div style={{background:"rgba(231,76,60,.92)",color:"#fff",textAlign:"center",padding:"6px 12px",fontSize:11,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase"}}><i className="ti ti-wifi-off"/> No connection to server — changes will be saved automatically when reconnected</div>}
       {/* HEADER */}
@@ -643,15 +639,15 @@ function LoginScreen({users,onLogin}){
     if(pin.length>=4) return;
     const np=pin+k; setPin(np);
     if(np.length===4&&sel){
-      if(sel.pin===np){onLogin(sel);setPin("");setSel(null);}
-      else{setErr("Wrong PIN");setPin("");setTimeout(()=>setErr(""),1500);}
+      fetch("/api/verify-pin",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:sel.id,pin:np})})
+        .then(r=>r.json())
+        .then(d=>{if(d.ok){onLogin(sel);setPin("");setSel(null);}else{setErr("Wrong PIN");setPin("");setTimeout(()=>setErr(""),1500);}})
+        .catch(()=>{setErr("Server error — try again");setPin("");setTimeout(()=>setErr(""),2000);});
     }
   };
 
   return(
     <div style={{fontFamily:"'Share Tech Mono',monospace",background:C.bg,minHeight:"100vh",color:C.text,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
-      <link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
-      <link href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css" rel="stylesheet"/>
       <div style={{fontSize:22,color:C.amber,letterSpacing:4,textTransform:"uppercase",marginBottom:4,fontWeight:700}}>⚙ ShopTrack</div>
       <div style={{fontSize:11,color:C.muted,letterSpacing:2,marginBottom:28}}>Machine Shop Job Tracker</div>
       <div style={{width:"100%",maxWidth:360}}>
@@ -3326,7 +3322,7 @@ function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,d
         <button style={tag(view==="goals")}       onClick={()=>setView("goals")}      ><i className="ti ti-target"/> Goals</button>
         <button style={tag(view==="settings")}    onClick={()=>setView("settings")}   ><i className="ti ti-adjustments"/> Settings</button>
       </div>
-      {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments}/>}
+      {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments} jobs={jobs} setJobs={setJobs}/>}
       {view==="machines"   &&<ManageMachines    machines={machines} setMachines={setMachines} departments={departments} jobs={jobs} saveNow={saveNow}/>}
       {view==="departments"&&<ManageDepartments departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
       {view==="goals"      &&<ManageEfficiencyGoals efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} machines={machines} departments={departments} saveNow={saveNow}/>}
@@ -3361,6 +3357,7 @@ function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
   const [editDrawer,setEditDrawer]=useState(null); // {cabinetId, drawerId|null}
   const [drawerForm,setDrawerForm]=useState({number:"",label:"",rows:6,cols:7});
   const [errs,setErrs]=useState({});
+  const [confirmDeleteCabId,setConfirmDeleteCabId]=useState(null);
 
   const openAddCabinet=()=>{setCabForm({name:"",departments:[]});setEditCabId(null);setErrs({});setView("cabinet");};
   const openEditCabinet=c=>{setCabForm({name:c.name,departments:c.departments||[],photoData:c.photoData||null});setEditCabId(c.id);setErrs({});setView("cabinet");};
@@ -3374,9 +3371,10 @@ function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
     }
     setView("list");saveNow&&saveNow();
   };
-  const deleteCabinet=id=>{
-    if(!window.confirm("Delete this cabinet and all its drawers?")) return;
+  const deleteCabinet=id=>setConfirmDeleteCabId(id);
+  const confirmDeleteCabinet=id=>{
     setCabinets(prev=>prev.filter(c=>c.id!==id));
+    setConfirmDeleteCabId(null);
     saveNow&&saveNow();
   };
 
@@ -3541,6 +3539,16 @@ function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
             })}
             <button style={{...btn("outline",false,true),marginTop:4,fontSize:11}} onClick={()=>openAddDrawer(cab.id)}><i className="ti ti-plus"/> Add Drawer</button>
           </div>
+          {confirmDeleteCabId===cab.id&&(
+            <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.red}`,background:"rgba(231,76,60,.07)",borderRadius:8,padding:12}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.red,marginBottom:6}}><i className="ti ti-alert-triangle"/> Delete "{cab.name}" and all its drawers?</div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:10}}>All drawer layouts and tool positions in this cabinet will be permanently removed.</div>
+              <div style={{display:"flex",gap:8}}>
+                <button style={btn("outline",false,false)} onClick={()=>setConfirmDeleteCabId(null)}>Cancel</button>
+                <button style={btn("danger",false,false)} onClick={()=>confirmDeleteCabinet(cab.id)}><i className="ti ti-trash"/> Delete</button>
+              </div>
+            </div>
+          )}
         </div>
       ))}
     </div>
@@ -3822,7 +3830,7 @@ function ManageDepartments({departments,setDepartments,saveNow}){
   );
 }
 
-function ManageOperators({users,setUsers,machines,departments}){
+function ManageOperators({users,setUsers,machines,departments,jobs,setJobs}){
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [pin,setPin]=useState(""); const [errs,setErrs]=useState({});
   const [editId,setEditId]=useState(null); const [editPin,setEditPin]=useState(""); const [editErr,setEditErr]=useState("");
   const [editDeptId,setEditDeptId]=useState(null);
@@ -3863,6 +3871,7 @@ function ManageOperators({users,setUsers,machines,departments}){
     const nv=editNameVal.trim();
     if(!nv){setEditNameErr("Name required");return;}
     setUsers(prev=>prev.map(u=>u.id===id?{...u,name:nv}:u));
+    setJobs(prev=>prev.map(j=>j.operatorId===id?{...j,operatorName:nv}:j));
     setEditNameId(null);setEditNameErr("");
   };
   return(
@@ -5234,9 +5243,11 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
           {/* Add sub-dept support to a plain dept */}
           {editingAdminDeptSubDepts.length===0&&(
             <div style={{marginBottom:10}}>
-              <button style={{fontSize:10,color:C.muted,background:"none",border:`1px dashed ${C.border}`,borderRadius:8,padding:"4px 12px",cursor:"pointer"}} onClick={()=>{const v=prompt("Sub-department name (e.g. Affolter 160):");if(v&&v.trim())addSubDept()||saveSubDepts({...(subDepartments||{}),[editingAdminDept]:[v.trim()]});}}>
-                + Add sub-departments to {editingAdminDept}
-              </button>
+              <div style={{fontSize:10,color:C.muted,marginBottom:6}}>Add sub-departments to <strong>{editingAdminDept}</strong></div>
+              <div style={{display:"flex",gap:6}}>
+                <input style={{...inp(),flex:1,fontSize:11}} value={newSubDeptName} onChange={e=>setNewSubDeptName(e.target.value)} onKeyDown={e=>e.key==="Enter"&&addSubDept()} placeholder="Sub-department name (e.g. Affolter 160)"/>
+                <button style={btn("primary",false,true)} onClick={addSubDept}><i className="ti ti-plus"/></button>
+              </div>
             </div>
           )}
           {/* Param list for the editing key */}
