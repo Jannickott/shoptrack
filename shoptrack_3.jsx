@@ -291,7 +291,7 @@ export default function App(){
     const t=setInterval(()=>{
       if(!dataLoadedRef.current) return;
       const state=stateRef.current;
-      const hash=JSON.stringify([state.jobs,state.settingsVersion]);
+      const hash=JSON.stringify([state.jobs,settingsVersionRef.current]);
       if(hash===lastSavedHashRef.current) return; // nothing changed — skip
       fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...state,settingsVersion:settingsVersionRef.current})})
         .then(r=>{if(r.ok){lastSavedHashRef.current=hash;setServerOnline(true);}else setServerOnline(false);})
@@ -403,7 +403,7 @@ export default function App(){
         if(data.users      &&s(data.users)      !==s(last.users))     setUsers(data.users);
         if(data.machines   &&s(data.machines)   !==s(last.machines))  setMachines(data.machines);
         if(data.downtimeLog&&s(data.downtimeLog)!==s(last.downtimeLog))setDowntimeLog(data.downtimeLog);
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments};
       }).catch(()=>{});
     };
     document.addEventListener("visibilitychange",onVisible);
@@ -3327,7 +3327,7 @@ function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,d
         <button style={tag(view==="settings")}    onClick={()=>setView("settings")}   ><i className="ti ti-adjustments"/> Settings</button>
       </div>
       {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments}/>}
-      {view==="machines"   &&<ManageMachines    machines={machines} setMachines={setMachines} departments={departments}/>}
+      {view==="machines"   &&<ManageMachines    machines={machines} setMachines={setMachines} departments={departments} jobs={jobs} saveNow={saveNow}/>}
       {view==="departments"&&<ManageDepartments departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
       {view==="goals"      &&<ManageEfficiencyGoals efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} machines={machines} departments={departments} saveNow={saveNow}/>}
       {view==="settings"   &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours}/>}
@@ -4008,11 +4008,12 @@ function ManageOperators({users,setUsers,machines,departments}){
   );
 }
 
-function ManageMachines({machines,setMachines,departments}){
+function ManageMachines({machines,setMachines,departments,jobs,saveNow}){
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [dept,setDept]=useState(""); const [err,setErr]=useState("");
   const [editTargetId,setEditTargetId]=useState(null); const [editTargetHours,setEditTargetHours]=useState("");
   const [editDeptId,setEditDeptId]=useState(null); const [editDeptVal,setEditDeptVal]=useState("");
   const [editNameId,setEditNameId]=useState(null); const [editNameVal,setEditNameVal]=useState(""); const [editNameErr,setEditNameErr]=useState("");
+  const [confirmRemoveId,setConfirmRemoveId]=useState(null);
   const allDepts=(departments||[]).length>0?(departments||[]):[...new Set(machines.map(m=>m.department||"").filter(Boolean))].sort();
   const save=()=>{
     if(!name.trim()){setErr("Name required");return;}
@@ -4025,7 +4026,15 @@ function ManageMachines({machines,setMachines,departments}){
     setEditDeptId(null);
   };
   const toggle=id=>setMachines(prev=>prev.map(m=>m.id===id?{...m,active:!m.active}:m));
-  const del=id=>{ if(window.confirm("Remove this machine?")) setMachines(prev=>prev.filter(m=>m.id!==id)); };
+  const del=id=>{
+    setConfirmRemoveId(id);
+    setEditNameId(null);setEditDeptId(null);setEditTargetId(null);
+  };
+  const confirmRemove=id=>{
+    setMachines(prev=>prev.map(m=>m.id===id?{...m,active:false,removed:true}:m));
+    setConfirmRemoveId(null);
+    if(saveNow) saveNow();
+  };
   const openTarget=m=>{setEditTargetId(m.id);setEditTargetHours(m.weeklyTargetHours?String(m.weeklyTargetHours):"");};
   const saveMachineName=id=>{
     const nv=editNameVal.trim();
@@ -4060,7 +4069,7 @@ function ManageMachines({machines,setMachines,departments}){
           <button style={btn("success",true)} onClick={save}><i className="ti ti-plus"/> Add Machine</button>
         </div>
       )}
-      {machines.map(m=>(
+      {machines.filter(m=>!m.removed).map(m=>(
         <div key={m.id} style={{...card(),opacity:m.active?1:0.5}}>
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={{width:38,height:38,borderRadius:8,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
@@ -4118,6 +4127,21 @@ function ManageMachines({machines,setMachines,departments}){
                 <div style={{fontSize:12,color:C.muted}}>hours</div>
                 <button style={btn("primary",false,false)} onClick={()=>saveTarget(m.id)}>Save</button>
                 {m.weeklyTargetHours>0&&<button style={btn("danger",false,true)} onClick={()=>{setMachines(prev=>prev.map(x=>x.id===m.id?{...x,weeklyTargetHours:0}:x));setEditTargetId(null);}}>Clear</button>}
+              </div>
+            </div>
+          )}
+          {confirmRemoveId===m.id&&(
+            <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.red}`,background:"rgba(231,76,60,.07)",borderRadius:8,padding:12}}>
+              <div style={{fontSize:13,fontWeight:700,color:C.red,marginBottom:6}}><i className="ti ti-alert-triangle"/> Remove {m.name}?</div>
+              <div style={{fontSize:11,color:C.muted,marginBottom:10}}>
+                This machine will be hidden from operators. Historical job records are preserved.
+                {jobs&&(jobs.filter(j=>j.machine===m.name).length>0)&&(
+                  <span style={{color:C.amber,fontWeight:600}}> {jobs.filter(j=>j.machine===m.name).length} job{jobs.filter(j=>j.machine===m.name).length!==1?"s":""} reference this machine.</span>
+                )}
+              </div>
+              <div style={{display:"flex",gap:8}}>
+                <button style={btn("outline",false,false)} onClick={()=>setConfirmRemoveId(null)}>Cancel</button>
+                <button style={btn("danger",false,false)} onClick={()=>confirmRemove(m.id)}><i className="ti ti-trash"/> Remove</button>
               </div>
             </div>
           )}

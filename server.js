@@ -90,58 +90,61 @@ setInterval(checkBackupSchedule, 60 * 1000);
 // Runs every 30 seconds. If any user has an autoPauseTime matching the
 // current HH:MM, their active jobs are paused and forcedLogoutAt is set.
 // This works even when no browser tab is open.
+// Goes through enqueueWrite so it never races with concurrent POST /api/data saves.
 function runAutoPause() {
   if (!fs.existsSync(DATA_FILE)) return;
-  try {
-    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    const now  = new Date();
-    const hhmm = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+  enqueueWrite(() => {
+    try {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+      const now  = new Date();
+      const hhmm = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
 
-    let changed = false;
+      let changed = false;
 
-    (data.users || []).forEach(u => {
-      if (!u.autoPauseTime || u.autoPauseTime !== hhmm) return;
-      // Avoid firing twice in the same minute
-      if (u.lastAutoPausedAt) {
-        const last = new Date(u.lastAutoPausedAt);
-        const lastHhmm = `${String(last.getHours()).padStart(2,"0")}:${String(last.getMinutes()).padStart(2,"0")}`;
-        if (lastHhmm === hhmm && last.toDateString() === now.toDateString()) return;
-      }
+      (data.users || []).forEach(u => {
+        if (!u.autoPauseTime || u.autoPauseTime !== hhmm) return;
+        // Avoid firing twice in the same minute
+        if (u.lastAutoPausedAt) {
+          const last = new Date(u.lastAutoPausedAt);
+          const lastHhmm = `${String(last.getHours()).padStart(2,"0")}:${String(last.getMinutes()).padStart(2,"0")}`;
+          if (lastHhmm === hhmm && last.toDateString() === now.toDateString()) return;
+        }
 
-      const nowMs = Date.now();
-      console.log(`  ⏱  Auto-pause: pausing jobs for ${u.name} at ${hhmm}`);
+        const nowMs = Date.now();
+        console.log(`  ⏱  Auto-pause: pausing jobs for ${u.name} at ${hhmm}`);
 
-      // Pause all active jobs belonging to this operator
-      data.jobs = (data.jobs || []).map(j => {
-        if (j.operatorId !== u.id || j.status === "done" || j.logoutPaused) return j;
-        // Activate night mode countdown if armed
-        if (j.nightMode && j.nightModeDuration && !j.nightModeEndsAt)
-          return { ...j, nightModeEndsAt: nowMs + j.nightModeDuration * 1000, lastModifiedAt: nowMs };
-        // Freeze the timer
-        const setupSec  = (j.setupSec  || 0) + (j.status === "setup"       && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
-        const runSec    = (j.runSec    || 0) + (j.status === "run"          && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
-        const setupSec2 = (j.setupSec2 || 0) + (j.status === "side2_setup" && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
-        const runSec2   = (j.runSec2   || 0) + (j.status === "side2_run"   && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
-        return { ...j, logoutPaused: true, setupSec, runSec, setupSec2, runSec2, phaseStartedAt: null, lastModifiedAt: nowMs };
+        // Pause all active jobs belonging to this operator
+        data.jobs = (data.jobs || []).map(j => {
+          if (j.operatorId !== u.id || j.status === "done" || j.logoutPaused) return j;
+          // Activate night mode countdown if armed
+          if (j.nightMode && j.nightModeDuration && !j.nightModeEndsAt)
+            return { ...j, nightModeEndsAt: nowMs + j.nightModeDuration * 1000, lastModifiedAt: nowMs };
+          // Freeze the timer
+          const setupSec  = (j.setupSec  || 0) + (j.status === "setup"       && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
+          const runSec    = (j.runSec    || 0) + (j.status === "run"          && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
+          const setupSec2 = (j.setupSec2 || 0) + (j.status === "side2_setup" && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
+          const runSec2   = (j.runSec2   || 0) + (j.status === "side2_run"   && j.phaseStartedAt ? Math.floor((nowMs - j.phaseStartedAt) / 1000) : 0);
+          return { ...j, logoutPaused: true, setupSec, runSec, setupSec2, runSec2, phaseStartedAt: null, lastModifiedAt: nowMs };
+        });
+
+        // Mark user as force-logged-out so browsers detect it on next poll
+        data.users = data.users.map(x =>
+          x.id === u.id ? { ...x, forcedLogoutAt: nowMs, lastAutoPausedAt: nowMs } : x
+        );
+
+        changed = true;
       });
 
-      // Mark user as force-logged-out so browsers detect it on next poll
-      data.users = data.users.map(x =>
-        x.id === u.id ? { ...x, forcedLogoutAt: nowMs, lastAutoPausedAt: nowMs } : x
-      );
-
-      changed = true;
-    });
-
-    if (changed) {
-      const tmp = DATA_FILE + ".tmp";
-      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-      fs.renameSync(tmp, DATA_FILE);
-      console.log(`  ✓ Auto-pause complete — data saved.`);
+      if (changed) {
+        const tmp = DATA_FILE + ".tmp";
+        fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+        fs.renameSync(tmp, DATA_FILE);
+        console.log(`  ✓ Auto-pause complete — data saved.`);
+      }
+    } catch (e) {
+      console.error("  ✗ Auto-pause error:", e.message);
     }
-  } catch (e) {
-    console.error("  ✗ Auto-pause error:", e.message);
-  }
+  });
 }
 
 // Run every 30 seconds so we never miss a minute
@@ -150,47 +153,51 @@ setInterval(runAutoPause, 30 * 1000);
 // ── Server-side machine downtime counter ──────────────────
 // Runs every 30 seconds. Increments downtimeSec on active machine issues
 // only during work hours — keeps running even when all browsers are closed.
+// Goes through enqueueWrite so it never races with concurrent POST /api/data saves.
 let lastDowntimeTickAt = Date.now();
 function runDowntimeTick() {
   if (!fs.existsSync(DATA_FILE)) return;
-  try {
-    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-    if (!data.machineIssues || Object.keys(data.machineIssues).length === 0) {
-      lastDowntimeTickAt = Date.now();
-      return;
+  const tickStart = Date.now();
+  enqueueWrite(() => {
+    try {
+      const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+      if (!data.machineIssues || Object.keys(data.machineIssues).length === 0) {
+        lastDowntimeTickAt = tickStart;
+        return;
+      }
+
+      const now    = new Date();
+      const hhmm   = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
+      const wh     = data.workHours || {};
+      const DAYS   = ["sun","mon","tue","wed","thu","fri","sat"];
+      const dayKey = DAYS[now.getDay()];
+      const dh     = wh[dayKey] || null;
+      const inWork = !!(dh && dh.enabled && hhmm >= dh.start && hhmm < dh.end);
+
+      const elapsedSec = Math.round((tickStart - lastDowntimeTickAt) / 1000);
+      lastDowntimeTickAt = tickStart;
+
+      if (!inWork) return; // outside work hours — don't count
+
+      let changed = false;
+      Object.keys(data.machineIssues).forEach(k => {
+        data.machineIssues[k] = {
+          ...data.machineIssues[k],
+          downtimeSec: (data.machineIssues[k].downtimeSec || 0) + elapsedSec,
+          counting: true,
+        };
+        changed = true;
+      });
+
+      if (changed) {
+        const tmp = DATA_FILE + ".tmp";
+        fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+        fs.renameSync(tmp, DATA_FILE);
+      }
+    } catch (e) {
+      console.error("  ✗ Downtime tick error:", e.message);
     }
-
-    const now    = new Date();
-    const hhmm   = `${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
-    const wh     = data.workHours || {};
-    const DAYS   = ["sun","mon","tue","wed","thu","fri","sat"];
-    const dayKey = DAYS[now.getDay()];
-    const dh     = wh[dayKey] || null;
-    const inWork = !!(dh && dh.enabled && hhmm >= dh.start && hhmm < dh.end);
-
-    const elapsedSec = Math.round((Date.now() - lastDowntimeTickAt) / 1000);
-    lastDowntimeTickAt = Date.now();
-
-    if (!inWork) return; // outside work hours — don't count
-
-    let changed = false;
-    Object.keys(data.machineIssues).forEach(k => {
-      data.machineIssues[k] = {
-        ...data.machineIssues[k],
-        downtimeSec: (data.machineIssues[k].downtimeSec || 0) + elapsedSec,
-        counting: true,
-      };
-      changed = true;
-    });
-
-    if (changed) {
-      const tmp = DATA_FILE + ".tmp";
-      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-      fs.renameSync(tmp, DATA_FILE);
-    }
-  } catch (e) {
-    console.error("  ✗ Downtime tick error:", e.message);
-  }
+  });
 }
 
 setInterval(runDowntimeTick, 30 * 1000);
@@ -466,8 +473,12 @@ app.post("/api/setupsheet-pdf", (req, res) => {
 app.post("/api/photo", (req, res) => {
   try {
     const { filename, data } = req.body;
-    const base64 = data.replace(/^data:image\/\w+;base64,/, "");
     const filePath = path.join(PHOTOS_DIR, filename);
+    // Prevent path traversal — resolved path must stay inside PHOTOS_DIR
+    if (!path.resolve(filePath).startsWith(path.resolve(PHOTOS_DIR) + path.sep)) {
+      return res.status(400).json({ error: "Invalid filename" });
+    }
+    const base64 = data.replace(/^data:image\/\w+;base64,/, "");
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
     res.json({ url: `/photos/${filename}` });
