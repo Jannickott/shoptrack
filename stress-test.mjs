@@ -27,10 +27,10 @@ const now   = () => Date.now();
 
 let passed = 0, failed = 0, warnings = 0;
 const results = [];
-function record(label, ok, detail="") {
-  results.push({ label, ok, detail });
-  if (ok) passed++; else failed++;
-  console.log(ok ? ok(label) : fail(`${label}${detail ? " — "+detail : ""}`));
+function record(label, isOk, detail="") {
+  results.push({ label, ok: isOk, detail });
+  if (isOk) passed++; else failed++;
+  console.log(isOk ? ok(label) : fail(`${label}${detail ? " — "+detail : ""}`));
 }
 function recordWarn(label, detail="") {
   warnings++;
