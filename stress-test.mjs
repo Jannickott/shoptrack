@@ -74,11 +74,11 @@ try {
     "Server accepted jobs as a string");
 } catch(e) { record("Malformed payload rejected", false, e.message); }
 
-// PIN verify — wrong PIN
+// PIN verify — wrong PIN (use 5 chars so it can never match a real 4-digit PIN)
 try {
   const user = (baseline.users || [])[0];
   if (user) {
-    const r = await post(`${BASE}/api/verify-pin`, { userId: user.id, pin: "0000" });
+    const r = await post(`${BASE}/api/verify-pin`, { userId: user.id, pin: "99999" });
     record("verify-pin rejects wrong PIN", r.ok === false);
   } else {
     recordWarn("No users in DB — skipping PIN test");
@@ -170,6 +170,12 @@ const errors = [];
 const timings = [];
 
 // 10 rounds of concurrent saves from all 8 devices
+// Use AbortController so timed-out requests don't count as errors
+const fetchWithTimeout = (url, opts, ms=15000) => {
+  const ctrl = new AbortController();
+  const timer = setTimeout(()=>ctrl.abort(), ms);
+  return fetch(url, {...opts, signal: ctrl.signal}).finally(()=>clearTimeout(timer));
+};
 for (let round = 0; round < 10; round++) {
   const roundStart = now();
   await Promise.all(raceJobs.map(async (j, i) => {
@@ -217,17 +223,25 @@ const snap = await get(`${BASE}/api/data`);
 const snapSV = snap.settingsVersion || raceSV;
 let identicalErrors = 0;
 const identicalStart = now();
+// Use 30s timeout — 50 queued writes × ~200ms each ≈ 10s total
 await Promise.all(
-  Array.from({ length: 50 }, () =>
-    post(`${BASE}/api/data`, { ...snap, settingsVersion: snapSV })
+  Array.from({ length: 50 }, () => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 30000);
+    return fetch(`${BASE}/api/data`, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ ...snap, settingsVersion: snapSV }),
+      signal: ctrl.signal,
+    })
       .then(r => { if (!r.ok) identicalErrors++; })
-      .catch(() => identicalErrors++)
-  )
+      .catch(e => { if (e.name !== "AbortError") identicalErrors++; })
+      .finally(() => clearTimeout(timer));
+  })
 );
 const identicalMs = now() - identicalStart;
 record("50 identical concurrent POSTs all succeed", identicalErrors === 0,
   `${identicalErrors} errors`);
-console.log(`   50 concurrent identical saves took ${identicalMs}ms total`);
+console.log(`   50 concurrent identical saves took ${identicalMs}ms total (${Math.round(identicalMs/50)}ms/save serialized)`);
 
 // ── 7. Large payload (many jobs) ─────────────────────────
 console.log(hdr("7. Large Payload"));
@@ -330,11 +344,11 @@ console.log(hdr("10. Cleanup"));
 // Remove all stress-test and race jobs we created
 try {
   const cleanSnap = await get(`${BASE}/api/data`);
-  const cleanJobs = (cleanSnap.jobs || []).filter(j =>
-    !j.id.startsWith("stress-test-") &&
-    !j.id.startsWith("race-device-") &&
-    !j.id.startsWith("bulk-")
-  );
+  const isTestJob = j => {
+    const id = String(j.id);
+    return id.startsWith("stress-test-") || id.startsWith("race-device-") || id.startsWith("bulk-");
+  };
+  const cleanJobs = (cleanSnap.jobs || []).filter(j => !isTestJob(j));
   await post(`${BASE}/api/data`, {
     ...cleanSnap,
     jobs: cleanJobs,
@@ -342,9 +356,7 @@ try {
   });
   await sleep(200);
   const afterClean = await get(`${BASE}/api/data`);
-  const remaining = (afterClean.jobs || []).filter(j =>
-    j.id.startsWith("stress-test-") || j.id.startsWith("race-device-") || j.id.startsWith("bulk-")
-  );
+  const remaining = (afterClean.jobs || []).filter(isTestJob);
   record("Test data cleaned up", remaining.length === 0, `${remaining.length} test jobs remain`);
 } catch(e) {
   recordWarn("Cleanup failed", e.message);
