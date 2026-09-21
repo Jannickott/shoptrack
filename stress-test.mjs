@@ -341,23 +341,29 @@ try {
 
 // ── 10. Cleanup ───────────────────────────────────────────
 console.log(hdr("10. Cleanup"));
-// Remove all stress-test and race jobs we created
+// The server's job merge preserves server-only jobs, so omitting test jobs from the
+// payload doesn't remove them. Use _deleteJobIds to explicitly remove them.
 try {
   const cleanSnap = await get(`${BASE}/api/data`);
   const isTestJob = j => {
     const id = String(j.id);
     return id.startsWith("stress-test-") || id.startsWith("race-device-") || id.startsWith("bulk-");
   };
-  const cleanJobs = (cleanSnap.jobs || []).filter(j => !isTestJob(j));
-  await post(`${BASE}/api/data`, {
-    ...cleanSnap,
-    jobs: cleanJobs,
-    settingsVersion: now() + 4_000_000,
-  });
-  await sleep(200);
-  const afterClean = await get(`${BASE}/api/data`);
-  const remaining = (afterClean.jobs || []).filter(isTestJob);
-  record("Test data cleaned up", remaining.length === 0, `${remaining.length} test jobs remain`);
+  const testJobIds = (cleanSnap.jobs || []).filter(isTestJob).map(j => j.id);
+  if (testJobIds.length === 0) {
+    record("Test data cleaned up", true, "no test jobs found");
+  } else {
+    await post(`${BASE}/api/data`, {
+      ...cleanSnap,
+      _deleteJobIds: testJobIds,
+      settingsVersion: now() + 4_000_000,
+    });
+    await sleep(300);
+    const afterClean = await get(`${BASE}/api/data`);
+    const remaining = (afterClean.jobs || []).filter(isTestJob);
+    record("Test data cleaned up", remaining.length === 0,
+      `${remaining.length} of ${testJobIds.length} test jobs remain`);
+  }
 } catch(e) {
   recordWarn("Cleanup failed", e.message);
 }

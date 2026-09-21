@@ -269,7 +269,13 @@ function mergeAndWrite(incoming) {
     if (!ex || (j.lastModifiedAt || 0) >= (ex.lastModifiedAt || 0)) jobMap.set(j.id, j);
   });
 
+  // _deleteJobIds: explicit list of job IDs to remove (used by admin archival / cleanup)
+  if (Array.isArray(incoming._deleteJobIds)) {
+    incoming._deleteJobIds.forEach(id => jobMap.delete(id));
+  }
+
   const merged = { ...incoming, jobs: Array.from(jobMap.values()) };
+  delete merged._deleteJobIds; // never persist this field
 
   const serverSV   = server.settingsVersion  || 0;
   const incomingSV = incoming.settingsVersion || 0;
