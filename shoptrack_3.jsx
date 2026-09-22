@@ -2428,6 +2428,8 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
   const [statusFilt,setStatusFilt]=useState("all");
   const [machineFilt,setMachineFilt]=useState("all");
   const [search,setSearch]=useState("");
+  const [selectedIds,setSelectedIds]=useState(new Set());
+  const [confirmBulkDelete,setConfirmBulkDelete]=useState(false);
   const allMachines=[...new Set(jobs.map(j=>j.machine))].sort();
   const showIssues=statusFilt==="all"||statusFilt==="issues";
   const showJobs=statusFilt!=="issues";
@@ -2445,6 +2447,24 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
     (j.operatorName||"").toLowerCase().includes(q)||
     (j.op||"").toLowerCase().includes(q)
   );
+  const allVisibleSelected=done.length>0&&done.every(j=>selectedIds.has(j.id));
+  const toggleSelectAll=()=>{
+    if(allVisibleSelected){setSelectedIds(new Set());}
+    else{setSelectedIds(new Set(done.map(j=>j.id)));}
+  };
+  const toggleOne=id=>setSelectedIds(prev=>{const n=new Set(prev);n.has(id)?n.delete(id):n.add(id);return n;});
+  const bulkDelete=()=>{
+    const ids=new Set(selectedIds);
+    const now=Date.now();
+    const updatedJobs=(stateRef.current.jobs||[]).map(x=>
+      ids.has(x.id)?{...x,deleted:true,status:"done",phaseStartedAt:null,lastModifiedAt:now}:x
+    );
+    stateRef.current={...stateRef.current,jobs:updatedJobs};
+    setJobs(updatedJobs);
+    setSelectedIds(new Set());
+    setConfirmBulkDelete(false);
+    saveNow&&saveNow();
+  };
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap"}}>
@@ -2496,21 +2516,51 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
           <div style={{paddingTop:4,borderTop:`1px solid ${C.border}`,marginBottom:10}}>
             <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
               <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",flex:1}}>Completed · {done.length}{q&&` of ${filtered.filter(j=>j.status==="done").length}`}</div>
-              {q&&<button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:13,padding:0}} onClick={()=>setSearch("")}><i className="ti ti-x"/></button>}
+              {q&&<button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:13,padding:0}} onClick={()=>{setSearch("");setSelectedIds(new Set());setConfirmBulkDelete(false);}}><i className="ti ti-x"/></button>}
             </div>
             <div style={{position:"relative"}}>
               <i className="ti ti-search" style={{position:"absolute",left:10,top:"50%",transform:"translateY(-50%)",color:C.muted,fontSize:14,pointerEvents:"none"}}/>
               <input
                 style={{...inp(),paddingLeft:32,fontSize:13}}
                 value={search}
-                onChange={e=>setSearch(e.target.value)}
+                onChange={e=>{setSearch(e.target.value);setSelectedIds(new Set());setConfirmBulkDelete(false);}}
                 placeholder="Search customer, part number, machine, operator…"
               />
             </div>
+            {q&&done.length>0&&(
+              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
+                <button style={{...btn("outline",false,true),fontSize:11,padding:"4px 10px"}} onClick={toggleSelectAll}>
+                  <i className={`ti ti-${allVisibleSelected?"square-check":"square"}`}/>
+                  {allVisibleSelected?` Deselect all (${done.length})`:" Select all"}
+                </button>
+                {selectedIds.size>0&&!confirmBulkDelete&&(
+                  <button style={{...btn("danger",false,true),fontSize:11,padding:"4px 10px"}} onClick={()=>setConfirmBulkDelete(true)}>
+                    <i className="ti ti-trash"/> Delete {selectedIds.size} job{selectedIds.size!==1?"s":""}
+                  </button>
+                )}
+                {confirmBulkDelete&&(
+                  <div style={{display:"flex",alignItems:"center",gap:6,background:`${C.red}12`,border:`1px solid ${C.red}40`,borderRadius:8,padding:"6px 10px"}}>
+                    <span style={{fontSize:11,color:C.red,fontWeight:700}}><i className="ti ti-alert-triangle"/> Delete {selectedIds.size} job{selectedIds.size!==1?"s":""}?</span>
+                    <button style={{...btn("danger",true,true),fontSize:11,padding:"3px 10px"}} onClick={bulkDelete}><i className="ti ti-check"/> Yes</button>
+                    <button style={{...btn("outline",false,true),fontSize:11,padding:"3px 10px"}} onClick={()=>setConfirmBulkDelete(false)}>Cancel</button>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10,marginBottom:16}}>
             {done.map(j=>(
-              <AdminJobCard key={j.id} j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef}/>
+              <div key={j.id} style={{position:"relative"}}>
+                {q&&(
+                  <div
+                    onClick={()=>toggleOne(j.id)}
+                    style={{position:"absolute",top:6,right:6,zIndex:2,cursor:"pointer",background:selectedIds.has(j.id)?C.blue:"rgba(0,0,0,.45)",borderRadius:4,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",border:`1px solid ${selectedIds.has(j.id)?C.blue:C.border}`}}
+                  >
+                    {selectedIds.has(j.id)&&<i className="ti ti-check" style={{color:"#fff",fontSize:12}}/>}
+                  </div>
+                )}
+                <AdminJobCard j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef}/>
+              </div>
             ))}
           </div>
         </>
