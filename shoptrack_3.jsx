@@ -2527,38 +2527,34 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
                 placeholder="Search customer, part number, machine, operator…"
               />
             </div>
-            {q&&done.length>0&&(
-              <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
-                <button style={{...btn("outline",false,true),fontSize:11,padding:"4px 10px"}} onClick={toggleSelectAll}>
-                  <i className={`ti ti-${allVisibleSelected?"square-check":"square"}`}/>
-                  {allVisibleSelected?` Deselect all (${done.length})`:" Select all"}
+            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:8,flexWrap:"wrap"}}>
+              <button style={{...btn("outline",false,true),fontSize:11,padding:"4px 10px"}} onClick={toggleSelectAll}>
+                <i className={`ti ti-${allVisibleSelected?"square-check":"square"}`}/>
+                {allVisibleSelected?` Deselect all (${done.length})`:" Select all"}
+              </button>
+              {selectedIds.size>0&&!confirmBulkDelete&&(
+                <button style={{...btn("danger",false,true),fontSize:11,padding:"4px 10px"}} onClick={()=>setConfirmBulkDelete(true)}>
+                  <i className="ti ti-trash"/> Delete {selectedIds.size} job{selectedIds.size!==1?"s":""}
                 </button>
-                {selectedIds.size>0&&!confirmBulkDelete&&(
-                  <button style={{...btn("danger",false,true),fontSize:11,padding:"4px 10px"}} onClick={()=>setConfirmBulkDelete(true)}>
-                    <i className="ti ti-trash"/> Delete {selectedIds.size} job{selectedIds.size!==1?"s":""}
-                  </button>
-                )}
-                {confirmBulkDelete&&(
-                  <div style={{display:"flex",alignItems:"center",gap:6,background:`${C.red}12`,border:`1px solid ${C.red}40`,borderRadius:8,padding:"6px 10px"}}>
-                    <span style={{fontSize:11,color:C.red,fontWeight:700}}><i className="ti ti-alert-triangle"/> Delete {selectedIds.size} job{selectedIds.size!==1?"s":""}?</span>
-                    <button style={{...btn("danger",true,true),fontSize:11,padding:"3px 10px"}} onClick={bulkDelete}><i className="ti ti-check"/> Yes</button>
-                    <button style={{...btn("outline",false,true),fontSize:11,padding:"3px 10px"}} onClick={()=>setConfirmBulkDelete(false)}>Cancel</button>
-                  </div>
-                )}
-              </div>
-            )}
+              )}
+              {confirmBulkDelete&&(
+                <div style={{display:"flex",alignItems:"center",gap:6,background:`${C.red}12`,border:`1px solid ${C.red}40`,borderRadius:8,padding:"6px 10px"}}>
+                  <span style={{fontSize:11,color:C.red,fontWeight:700}}><i className="ti ti-alert-triangle"/> Delete {selectedIds.size} job{selectedIds.size!==1?"s":""}?</span>
+                  <button style={{...btn("danger",true,true),fontSize:11,padding:"3px 10px"}} onClick={bulkDelete}><i className="ti ti-check"/> Yes</button>
+                  <button style={{...btn("outline",false,true),fontSize:11,padding:"3px 10px"}} onClick={()=>setConfirmBulkDelete(false)}>Cancel</button>
+                </div>
+              )}
+            </div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10,marginBottom:16}}>
             {done.map(j=>(
               <div key={j.id} style={{position:"relative"}}>
-                {q&&(
-                  <div
-                    onClick={()=>toggleOne(j.id)}
-                    style={{position:"absolute",top:6,right:6,zIndex:2,cursor:"pointer",background:selectedIds.has(j.id)?C.blue:"rgba(0,0,0,.45)",borderRadius:4,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",border:`1px solid ${selectedIds.has(j.id)?C.blue:C.border}`}}
-                  >
-                    {selectedIds.has(j.id)&&<i className="ti ti-check" style={{color:"#fff",fontSize:12}}/>}
-                  </div>
-                )}
+                <div
+                  onClick={()=>toggleOne(j.id)}
+                  style={{position:"absolute",top:6,right:6,zIndex:2,cursor:"pointer",background:selectedIds.has(j.id)?C.blue:"rgba(0,0,0,.45)",borderRadius:4,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",border:`1px solid ${selectedIds.has(j.id)?C.blue:C.border}`}}
+                >
+                  {selectedIds.has(j.id)&&<i className="ti ti-check" style={{color:"#fff",fontSize:12}}/>}
+                </div>
                 <AdminJobCard j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef}/>
               </div>
             ))}
