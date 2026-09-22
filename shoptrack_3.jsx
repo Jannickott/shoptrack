@@ -2087,7 +2087,7 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
 // ═══════════════════════════════════════════════════════
 // ALL JOBS (ADMIN)
 // ═══════════════════════════════════════════════════════
-function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef}){
+function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef,selected,onToggleSelect}){
   const [editing,setEditing]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState(false);
   const [editCustomer,setEditCustomer]=useState("");
@@ -2181,7 +2181,8 @@ function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef})
           {j.customer&&<div style={{fontSize:13,color:C.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.customer}</div>}
           <div style={{fontSize:10,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><i className="ti ti-hash"/> {j.job}</div>
         </div>
-        <div style={{display:"flex",gap:4}}>
+        <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          {onToggleSelect&&<button style={{background:"none",border:"none",color:selected?C.blue:C.muted,cursor:"pointer",fontSize:16,padding:2}} onClick={onToggleSelect}><i className={`ti ti-${selected?"square-check":"square"}`}/></button>}
           <button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:14,padding:2}} onClick={()=>{setConfirmDelete(false);editing?setEditing(false):openEdit();}}><i className={`ti ti-${editing?"x":"pencil"}`}/></button>
           <button style={{background:"none",border:"none",color:confirmDelete?C.red:C.muted,cursor:"pointer",fontSize:14,padding:2}} onClick={()=>{setConfirmDelete(d=>!d);setEditing(false);}}><i className="ti ti-trash"/></button>
         </div>
@@ -2548,15 +2549,7 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
           </div>
           <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:10,marginBottom:16}}>
             {done.map(j=>(
-              <div key={j.id} style={{position:"relative"}}>
-                <div
-                  onClick={()=>toggleOne(j.id)}
-                  style={{position:"absolute",top:6,right:6,zIndex:2,cursor:"pointer",background:selectedIds.has(j.id)?C.blue:"rgba(0,0,0,.45)",borderRadius:4,width:20,height:20,display:"flex",alignItems:"center",justifyContent:"center",border:`1px solid ${selectedIds.has(j.id)?C.blue:C.border}`}}
-                >
-                  {selectedIds.has(j.id)&&<i className="ti ti-check" style={{color:"#fff",fontSize:12}}/>}
-                </div>
-                <AdminJobCard j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef}/>
-              </div>
+              <AdminJobCard key={j.id} j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef} selected={selectedIds.has(j.id)} onToggleSelect={()=>toggleOne(j.id)}/>
             ))}
           </div>
         </>
