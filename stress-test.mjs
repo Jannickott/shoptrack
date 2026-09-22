@@ -341,24 +341,27 @@ try {
 
 // ── 10. Cleanup ───────────────────────────────────────────
 console.log(hdr("10. Cleanup"));
-// Deletes ALL jobs (test + real) — stress test leaves the database clean.
+// Only deletes jobs created by this stress test — real jobs are preserved.
 try {
   const cleanSnap = await get(`${BASE}/api/data`);
-  const allJobIds = (cleanSnap.jobs || []).map(j => j.id);
-  if (allJobIds.length === 0) {
-    record("All jobs cleared", true, "no jobs found");
+  const isTestJob = j => {
+    const id = String(j.id);
+    return id.startsWith("stress-test-") || id.startsWith("race-device-") || id.startsWith("bulk-");
+  };
+  const testJobIds = (cleanSnap.jobs || []).filter(isTestJob).map(j => j.id);
+  if (testJobIds.length === 0) {
+    record("Test data cleaned up", true, "no test jobs found");
   } else {
-    console.log(`   Removing ${allJobIds.length} jobs (test + any pre-existing)...`);
     await post(`${BASE}/api/data`, {
       ...cleanSnap,
-      _deleteJobIds: allJobIds,
+      _deleteJobIds: testJobIds,
       settingsVersion: now() + 4_000_000,
     });
     await sleep(300);
     const afterClean = await get(`${BASE}/api/data`);
-    const remaining = (afterClean.jobs || []).length;
-    record("All jobs cleared", remaining === 0,
-      `${remaining} jobs remain after cleanup`);
+    const remaining = (afterClean.jobs || []).filter(isTestJob).length;
+    record("Test data cleaned up", remaining === 0,
+      `${remaining} of ${testJobIds.length} test jobs remain`);
   }
 } catch(e) {
   recordWarn("Cleanup failed", e.message);
