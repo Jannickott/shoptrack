@@ -5617,9 +5617,12 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
                   return(
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                       {[["fraesLagerLinks",e.fraesLagerLinks,0,0],["fraesLagerRechts",e.fraesLagerRechts,1,0],["fraesLag3",e.fraesLag3,0,1],["fraesLag4",e.fraesLag4,1,1]].map(([k,val,xi,yi])=>(
-                        <div key={k} style={{display:"flex",flexDirection:"column",gap:4}}>
-                          <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",borderRadius:6,border:`1px solid ${C.border}`,backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none"}}/>
-                          {val&&<div style={{...mono,fontSize:14,textAlign:"center"}}>{val}°</div>}
+                        <div key={k} style={{display:"flex",flexDirection:"column",gap:0,border:`2px solid ${val?C.amber:C.border}`,borderRadius:10,overflow:"hidden"}}>
+                          <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none"}}/>
+                          <div style={{padding:"6px 10px",background:C.raised,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"baseline",justifyContent:"center",gap:4}}>
+                            <span style={{...mono,fontSize:22,color:val?C.green:C.muted}}>{val||"—"}</span>
+                            {val&&<span style={{fontSize:16,color:C.amber,fontWeight:700}}>°</span>}
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -6016,10 +6019,17 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             return(
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
                 {[["fraesLagerLinks","Oben Links / Top Left",0,0],["fraesLagerRechts","Oben Rechts / Top Right",1,0],["fraesLag3","Unten Links / Bottom Left",0,1],["fraesLag4","Unten Rechts / Bottom Right",1,1]].map(([k,lbl,xi,yi])=>(
-                  <div key={k} style={{display:"flex",flexDirection:"column",gap:6}}>
-                    <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",borderRadius:8,border:`1px solid ${C.border}`,backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none"}}/>
-                    <div style={{fontSize:9,color:C.muted}}>{lbl}</div>
-                    {numInp(k,"°")}
+                  <div key={k} style={{display:"flex",flexDirection:"column",gap:0,border:`2px solid ${e[k]?C.amber:C.border}`,borderRadius:10,overflow:"hidden",background:C.surface}}>
+                    {/* image quadrant */}
+                    <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none"}}/>
+                    {/* label + input row */}
+                    <div style={{padding:"8px 10px",borderTop:`1px solid ${C.border}`,background:C.raised}}>
+                      <div style={{fontSize:10,color:C.amber,fontWeight:700,letterSpacing:.5,marginBottom:4}}>{lbl}</div>
+                      <div style={{position:"relative"}}>
+                        <input style={{...inp(),...mono,width:"100%",textAlign:"right",fontSize:22,fontWeight:700,paddingRight:32,height:44,boxSizing:"border-box",border:`1px solid ${e[k]?C.amber:C.border}`,color:C.green}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder="—"/>
+                        <span style={{position:"absolute",right:10,top:"50%",transform:"translateY(-50%)",fontSize:18,color:C.amber,fontWeight:700,pointerEvents:"none"}}>°</span>
+                      </div>
+                    </div>
                   </div>
                 ))}
               </div>
