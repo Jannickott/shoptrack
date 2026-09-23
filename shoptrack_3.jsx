@@ -5892,7 +5892,6 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
                   <text x={LABEL_X} y={ey+5} textAnchor="start" fontSize="13" fontWeight="700" fill={stroke} fontFamily="monospace">{g.label} =</text>
                   <foreignObject x={INPUT_X} y={ey-INPUT_H/2} width={INPUT_W} height={INPUT_H}>
                     <input
-                      xmlns="http://www.w3.org/1999/xhtml"
                       style={{width:"100%",height:"100%",background:C.raised,border:`1px solid ${stroke}55`,borderRadius:"4px",color:C.green,fontSize:"15px",fontWeight:"700",textAlign:"right",padding:"0 5px",fontFamily:"'Share Tech Mono',monospace",outline:"none",boxSizing:"border-box"}}
                       value={e[g.inputKey]||""}
                       onChange={ev=>setE(g.inputKey,ev.target.value)}
