@@ -5858,61 +5858,50 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     // the larger one. Amber group drawn first so blue renders on top.
     // Input column on right, color-coded to match, space-evenly distributed.
     // Gear section: SVG on left contains circles + straight leader lines + label letters.
-    // Input column on right is absolutely positioned so each "= [input]" row aligns
-    // exactly with its circle's cy coordinate.
-    const gearSvgSection=(title,totalKey,totalPh,ratioKey,gears)=>{
-      const VW=100; // SVG viewport width
-      const LBL=12; // units reserved on right for label text
-      const maxY=Math.max(...gears.map(g=>Math.max(g.cy+g.r, g.cy+(g.exitDy||0))+8));
+    // Full-width SVG with foreignObject inputs on the leader lines.
+    // flip=false: circles on left, lines go right. flip=true: circles on right, lines go left.
+    const gearSvgSection=(title,totalKey,totalPh,ratioKey,gears,flip=false)=>{
+      const VW=260;
+      const LINE_END=flip?152:93;
+      const LABEL_X=flip?111:96;
+      const INPUT_X=flip?5:127;
+      const INPUT_W=flip?103:128;
+      const INPUT_H=24;
+      const maxY=Math.max(...gears.map(g=>g.cy+g.r))+15;
       return(
-        <div style={{padding:"8px 10px 8px"}}>
-          <div style={{fontSize:9,color:C.amber,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:4}}>{title}</div>
-          {(totalKey||ratioKey)&&<div style={{display:"flex",gap:6,marginBottom:5}}>
-            {totalKey&&<div style={{flex:1}}><div style={{fontSize:8,color:C.muted,marginBottom:2}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
-            {ratioKey&&<div style={{flex:1}}><div style={{fontSize:8,color:C.muted,marginBottom:2}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
+        <div style={{padding:"8px 10px 10px"}}>
+          <div style={{fontSize:12,color:C.amber,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:5}}>{title}</div>
+          {(totalKey||ratioKey)&&<div style={{display:"flex",gap:8,marginBottom:8}}>
+            {totalKey&&<div style={{flex:1}}><div style={{fontSize:10,color:C.muted,marginBottom:2}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
+            {ratioKey&&<div style={{flex:1}}><div style={{fontSize:10,color:C.muted,marginBottom:2}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
           </div>}
-          {/* position:relative so input column can overlay the right side */}
-          <div style={{position:"relative"}}>
-            {/* SVG: circles drawn amber-first so blue overlaps. Leader line from circle
-                right edge → straight right → label letter at SVG right edge */}
-            <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"50%",display:"block"}}>
-              {["amber","blue"].flatMap(col=>gears.filter(g=>g.color===col).map(g=>{
-                const stroke=col==="blue"?C.blue:C.amber;
-                // Line can exit from any point on the circle. exitDy shifts the exit
-                // point vertically along the circle edge (useful for compound gears).
-                const edy=g.exitDy||0;
-                const edx=Math.sqrt(Math.max(0,g.r*g.r-edy*edy));
-                const ex=g.cx+edx, ey=g.cy+edy;
-                return(
-                  <g key={g.label}>
-                    <circle cx={g.cx} cy={g.cy} r={g.r} fill={stroke+"1a"} stroke={stroke} strokeWidth="1.5"/>
-                    {/* Crosshairs */}
-                    <line x1={g.cx-g.r*0.36} y1={g.cy} x2={g.cx+g.r*0.36} y2={g.cy} stroke={stroke} strokeWidth="0.6" opacity="0.8"/>
-                    <line x1={g.cx} y1={g.cy-g.r*0.36} x2={g.cx} y2={g.cy+g.r*0.36} stroke={stroke} strokeWidth="0.6" opacity="0.8"/>
-                    {/* Leader line from exit point on circle edge → label */}
-                    <line x1={ex} y1={ey} x2={VW-LBL} y2={ey} stroke={stroke} strokeWidth="1"/>
-                    {/* Label letter at end of leader line */}
-                    <text x={VW-1} y={ey+3.5} textAnchor="end" fontSize="9" fontWeight="800"
-                      fill={stroke} fontFamily="monospace" letterSpacing="0">{g.label}</text>
-                  </g>
-                );
-              }))}
-            </svg>
-            {/* Input boxes: absolutely positioned on the right half, top% aligns with line exit y */}
-            <div style={{position:"absolute",top:0,left:"50%",right:0,height:"100%"}}>
-              {gears.map(g=>{
-                const col=g.color==="blue"?C.blue:C.amber;
-                const ey=g.cy+(g.exitDy||0);
-                return(
-                  <div key={g.label} style={{position:"absolute",top:`${ey/maxY*100}%`,left:4,right:2,transform:"translateY(-50%)",display:"flex",alignItems:"center",gap:2}}>
-                    <span style={{color:C.muted,fontSize:9,flexShrink:0}}>=</span>
-                    <input style={{flex:1,minWidth:0,height:19,background:C.raised,border:`1px solid ${col}55`,borderRadius:2,color:C.green,fontSize:10,textAlign:"right",padding:"0 3px",fontFamily:"'Share Tech Mono',monospace",outline:"none"}}
-                      value={e[g.inputKey]||""} onChange={ev=>setE(g.inputKey,ev.target.value)}/>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"100%",display:"block",overflow:"visible"}} xmlns="http://www.w3.org/2000/svg">
+            {["amber","blue"].flatMap(col=>gears.filter(g=>g.color===col).map(g=>{
+              const stroke=col==="blue"?C.blue:C.amber;
+              const fill=stroke+"1a";
+              const edy=g.exitDy||0;
+              const edx=Math.sqrt(Math.max(0,g.r*g.r-edy*edy));
+              const ex=flip?g.cx-edx:g.cx+edx;
+              const ey=g.cy+edy;
+              return(
+                <g key={g.label}>
+                  <circle cx={g.cx} cy={g.cy} r={g.r} fill={fill} stroke={stroke} strokeWidth="2"/>
+                  <line x1={g.cx-g.r*0.38} y1={g.cy} x2={g.cx+g.r*0.38} y2={g.cy} stroke={stroke} strokeWidth="0.9" strokeDasharray="2,1.5"/>
+                  <line x1={g.cx} y1={g.cy-g.r*0.38} x2={g.cx} y2={g.cy+g.r*0.38} stroke={stroke} strokeWidth="0.9" strokeDasharray="2,1.5"/>
+                  <line x1={ex} y1={ey} x2={LINE_END} y2={ey} stroke={stroke} strokeWidth="1.3"/>
+                  <text x={LABEL_X} y={ey+5} textAnchor="start" fontSize="13" fontWeight="700" fill={stroke} fontFamily="monospace">{g.label} =</text>
+                  <foreignObject x={INPUT_X} y={ey-INPUT_H/2} width={INPUT_W} height={INPUT_H}>
+                    <input
+                      xmlns="http://www.w3.org/1999/xhtml"
+                      style={{width:"100%",height:"100%",background:C.raised,border:`1px solid ${stroke}55`,borderRadius:"4px",color:C.green,fontSize:"15px",fontWeight:"700",textAlign:"right",padding:"0 5px",fontFamily:"'Share Tech Mono',monospace",outline:"none",boxSizing:"border-box"}}
+                      value={e[g.inputKey]||""}
+                      onChange={ev=>setE(g.inputKey,ev.target.value)}
+                    />
+                  </foreignObject>
+                </g>
+              );
+            }))}
+          </svg>
         </div>
       );
     };
@@ -5942,57 +5931,41 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       );
     };
     // ── Gear circle positions ─────────────────────────────────────────────
-    // Amber group and blue group are the two color families from the paper.
-    // Touching circles = meshing gears (distance between centers = sum of radii).
-    // "c inside b" = compound gear: c is drawn inside b (offset slightly so
-    // both leader lines are at different y-values and remain readable).
-    // All circles kept within cx+r ≤ 88 so the leader line is always visible.
+    // Scaled up for tablet readability. exitDy shifts the leader line exit
+    // point along the circle edge to space out adjacent leader lines.
+    // flip=true sections (Steigung, Fräserdrehzahl): circles on RIGHT (cx ~200-255),
+    // lines go LEFT. flip=false (Zahnzahl, Längsvorschub): circles on LEFT (cx ≤ 88).
     //
-    // Steigung: amber a→Zw→b (chain), blue c (compound inside b)→d (touches c)
+    // Steigung (flip=true): amber a→Zw→b, blue c (compound on b shaft)→d
     const steigungGears=[
-      {label:"a", inputKey:"steigA",  cx:10, cy:12, r:10, color:"amber"},
-      {label:"Zw",inputKey:"steigZw", cx:26, cy:34, r:16, color:"amber"},
-      // b touches Zw: dist(b,Zw)=sqrt(20²+32²)≈37.7 ≈ 16+22
-      {label:"b", inputKey:"steigB",  cx:46, cy:66, r:22, color:"amber"},
-      // c is the compound gear on b's shaft — drawn inside b, offset 6 px
-      {label:"c", inputKey:"steigC",  cx:50, cy:70, r:13, color:"blue"},
-      // d touches c: dist(d,c)=sqrt(9²+25²)≈26.6 ≈ 13+14
-      {label:"d", inputKey:"steigD",  cx:59, cy:95, r:14, color:"blue"},
+      {label:"a",  inputKey:"steigA",  cx:250, cy:19,  r:11, color:"amber"},
+      {label:"Zw", inputKey:"steigZw", cx:234, cy:54,  r:18, color:"amber"},
+      {label:"c",  inputKey:"steigC",  cx:210, cy:112, r:14, color:"blue",  exitDy:-13},
+      {label:"b",  inputKey:"steigB",  cx:214, cy:106, r:24, color:"amber", exitDy:+22},
+      {label:"d",  inputKey:"steigD",  cx:201, cy:152, r:15, color:"blue",  exitDy:+8},
     ];
-    // Zahnzahl: amber d→Zw (vertical touch)→c, blue b→a (b and a touch externally)
+    // Zahnzahl (flip=false): amber d→Zw→c, blue a (compound on c shaft)→b
     const zahnzahlGears=[
-      {label:"d", inputKey:"zahnD",  cx:60, cy:12, r:14, color:"amber"},
-      // Zw touches d vertically: dist=14+11=25, cy_Zw=12+25=37
-      {label:"Zw",inputKey:"zahnZw", cx:60, cy:37, r:11, color:"amber"},
-      // c touches Zw: dist(c,Zw)=sqrt(12²+20²)≈23.3 ≈ 11+12
-      {label:"c", inputKey:"zahnC",  cx:48, cy:57, r:12, color:"amber"},
-      {label:"b", inputKey:"zahnB",  cx:22, cy:86, r:20, color:"blue"},
-      // a touches b externally: dist(a,b)=sqrt(24²+20²)≈31.2 ≈ 20+11
-      {label:"a", inputKey:"zahnA",  cx:46, cy:66, r:11, color:"blue"},
+      {label:"d",  inputKey:"zahnD",  cx:60, cy:19,  r:16, color:"amber"},
+      {label:"Zw", inputKey:"zahnZw", cx:60, cy:59,  r:13, color:"amber", exitDy:-10},
+      {label:"c",  inputKey:"zahnC",  cx:48, cy:91,  r:14, color:"amber", exitDy:-10},
+      {label:"a",  inputKey:"zahnA",  cx:46, cy:106, r:13, color:"blue",  exitDy:+10},
+      {label:"b",  inputKey:"zahnB",  cx:22, cy:138, r:23, color:"blue",  exitDy:+8},
     ];
-    // Fräserdrehzahl: amber a→b (a touches b), blue c (compound inside b)→d (touches c)
+    // Fräserdrehzahl (flip=true): amber a→b, blue c (compound on b shaft)→d
     const fraesDrehzahlGears=[
-      {label:"a", inputKey:"fraesA",  cx:12, cy:22, r:11, color:"amber"},
-      // b touches a: dist(b,a)=sqrt(23²+24²)≈33.2 ≈ 11+22
-      {label:"b", inputKey:"fraesB",  cx:35, cy:46, r:22, color:"amber"},
-      // c is compound inside b, offset 7 px
-      {label:"c", inputKey:"fraesC",  cx:41, cy:52, r:12, color:"blue"},
-      // d touches c: dist(d,c)=sqrt(20²+20²)≈28.3 ≈ 12+16
-      {label:"d", inputKey:"fraesD",  cx:61, cy:72, r:16, color:"blue"},
+      {label:"a",  inputKey:"fraesA",  cx:248, cy:35,  r:13, color:"amber"},
+      {label:"b",  inputKey:"fraesB",  cx:225, cy:74,  r:24, color:"amber", exitDy:+24},
+      {label:"c",  inputKey:"fraesC",  cx:219, cy:83,  r:14, color:"blue",  exitDy:-13},
+      {label:"d",  inputKey:"fraesD",  cx:199, cy:115, r:18, color:"blue",  exitDy:+10},
     ];
-    // Längsvorschub: amber a→b (touches), blue c (compound inside b)→Zw (touches c)→d (touches Zw)
-    // Zw placed below-right of c so it sits clearly outside b and at a distinct height.
+    // Längsvorschub (flip=false): amber a→b, blue c (compound on b shaft)→Zw→d
     const laengsGears=[
-      {label:"a", inputKey:"laengsA",  cx:12, cy:14, r:10, color:"amber"},
-      // b touches a: dist(b,a)=sqrt(17²+25²)≈30.2 ≈ 10+20
-      {label:"b", inputKey:"laengsB",  cx:29, cy:39, r:20, color:"amber"},
-      // c compound inside b, offset ~8 px from b center
-      {label:"c", inputKey:"laengsC",  cx:35, cy:45, r:11, color:"blue"},
-      // Zw touches c, placed below-right so it is clearly OUTSIDE b and at distinct cy
-      // dist(Zw,c)=sqrt(11²+18²)≈21≈11+10; dist(Zw,b)=sqrt(17²+24²)≈29>20 (outside b)
-      {label:"Zw",inputKey:"laengsZw", cx:46, cy:63, r:10, color:"blue"},
-      // d touches Zw: dist(d,Zw)=sqrt(17²+17²)≈24≈10+14
-      {label:"d", inputKey:"laengsD",  cx:63, cy:80, r:14, color:"blue"},
+      {label:"a",  inputKey:"laengsA",  cx:12, cy:22,  r:12, color:"amber"},
+      {label:"b",  inputKey:"laengsB",  cx:29, cy:62,  r:23, color:"amber", exitDy:-8},
+      {label:"c",  inputKey:"laengsC",  cx:35, cy:72,  r:13, color:"blue",  exitDy:+13},
+      {label:"Zw", inputKey:"laengsZw", cx:46, cy:101, r:12, color:"blue"},
+      {label:"d",  inputKey:"laengsD",  cx:63, cy:128, r:16, color:"blue"},
     ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
@@ -6045,10 +6018,10 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         </div>
         {/* Gear trains — 2×2 grid, each cell matches the paper layout */}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:`1px solid ${C.border}`}}>
-          <div style={{borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}>{gearSvgSection("Zahnzahl / Tooth Count","zahnzahl","80","zahnzahlRatio",zahnzahlGears)}</div>
-          <div style={{borderBottom:`1px solid ${C.border}`}}>{gearSvgSection("Steigung / Pitch","steigung","","",steigungGears)}</div>
-          <div style={{borderRight:`1px solid ${C.border}`}}>{gearSvgSection("Fräserdrehzahl / Cutter RPM","fraesDrehzahl","1312","",fraesDrehzahlGears)}</div>
-          <div>{gearSvgSection("Längsvorschub / Long. Feed","laengs","0,7","",laengsGears)}</div>
+          <div style={{borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}>{gearSvgSection("Zahnzahl / Tooth Count","zahnzahl","80","zahnzahlRatio",zahnzahlGears,false)}</div>
+          <div style={{borderBottom:`1px solid ${C.border}`}}>{gearSvgSection("Steigung / Pitch","steigung","","",steigungGears,true)}</div>
+          <div style={{borderRight:`1px solid ${C.border}`}}>{gearSvgSection("Fräserdrehzahl / Cutter RPM","fraesDrehzahl","1312","",fraesDrehzahlGears,true)}</div>
+          <div>{gearSvgSection("Längsvorschub / Long. Feed","laengs","0,7","",laengsGears,false)}</div>
         </div>
         {/* Switch positions */}
         {secHdr("Schalterstellungen / Switch Positions — auf rot einstellen")}
