@@ -5460,8 +5460,8 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
         <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onBack}><i className="ti ti-arrow-left"/></button>
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:18,fontWeight:700,color:C.text}}>{sheet.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[sheet.customer,sheet.machine,sheet.operation&&`Op ${sheet.operation}`].filter(Boolean).join(" · ")}</div></div>
-        {onDuplicate&&<button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} title="Duplicate sheet" onClick={onDuplicate}><i className="ti ti-copy"/></button>}
-        <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onEdit}><i className="ti ti-edit"/></button>
+        {onDuplicate&&<button style={{...btn("outline",false,true),padding:"10px 16px",flexShrink:0,fontSize:22}} title="Duplicate sheet" onClick={onDuplicate}><i className="ti ti-copy"/></button>}
+        <button style={{...btn("outline",false,true),padding:"10px 16px",flexShrink:0,fontSize:22}} onClick={onEdit}><i className="ti ti-edit"/></button>
       </div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {sheet.department&&<span style={{fontSize:10,fontWeight:700,color:C.blue,background:"rgba(59,130,246,.12)",border:"1px solid rgba(59,130,246,.3)",borderRadius:6,padding:"3px 10px"}}><i className="ti ti-building" style={{fontSize:10}}/> {sheet.department}</span>}
@@ -5562,7 +5562,7 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
             {sheet.photos.map((p,i)=>(
               <div key={i} style={{borderRadius:8,overflow:"hidden",background:C.raised,aspectRatio:"4/3",position:"relative",cursor:"zoom-in"}} onClick={()=>setLightboxPhoto(p)}>
                 <img src={p.url} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                {p.caption&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.65)",color:"#fff",fontSize:10,padding:"4px 8px",lineHeight:1.4}}>{p.caption}</div>}
+                {p.caption&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.7)",color:"#fff",fontSize:14,fontWeight:500,padding:"8px 10px",lineHeight:1.4}}>{p.caption}</div>}
               </div>
             ))}
           </div>
@@ -5572,7 +5572,7 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
         <div onClick={()=>setLightboxPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
           <img src={lightboxPhoto.url} style={{maxWidth:"100%",maxHeight:"calc(100vh - 120px)",borderRadius:10,objectFit:"contain",boxShadow:"0 8px 40px rgba(0,0,0,.6)"}} onClick={e=>e.stopPropagation()}/>
           {lightboxPhoto.caption&&(
-            <div onClick={e=>e.stopPropagation()} style={{marginTop:12,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"10px 16px",maxWidth:500,width:"100%",color:"#fff",fontSize:13,lineHeight:1.5,textAlign:"center"}}>
+            <div onClick={e=>e.stopPropagation()} style={{marginTop:14,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",borderRadius:10,padding:"14px 20px",maxWidth:600,width:"100%",color:"#fff",fontSize:18,fontWeight:500,lineHeight:1.5,textAlign:"center"}}>
               {lightboxPhoto.caption}
             </div>
           )}
@@ -6337,7 +6337,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
               <div key={i} style={{position:"relative",borderRadius:8,overflow:"hidden",background:C.raised,aspectRatio:"4/3"}}>
                 <img src={p.url} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
                 <button onClick={()=>setF("photos",(form.photos||[]).filter((_,j)=>j!==i))} style={{position:"absolute",top:4,right:4,background:"rgba(0,0,0,.7)",border:"none",borderRadius:4,color:"#fff",cursor:"pointer",padding:"2px 6px",fontSize:12}}><i className="ti ti-x"/></button>
-                {p.caption!==undefined&&<input style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.6)",border:"none",color:"#fff",fontSize:10,padding:"4px 8px",outline:"none"}} value={p.caption||""} onChange={e=>setF("photos",(form.photos||[]).map((x,j)=>j===i?{...x,caption:e.target.value}:x))} placeholder="Caption…"/>}
+                {p.caption!==undefined&&<input style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.7)",border:"none",color:"#fff",fontSize:15,fontWeight:500,padding:"10px 10px",outline:"none"}} value={p.caption||""} onChange={e=>setF("photos",(form.photos||[]).map((x,j)=>j===i?{...x,caption:e.target.value}:x))} placeholder="Caption…"/>}
               </div>
             ))}
           </div>
