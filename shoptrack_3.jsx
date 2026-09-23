@@ -5857,25 +5857,22 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     // (e.g. c inside b) shares the shaft — drawn as a smaller circle inside
     // the larger one. Amber group drawn first so blue renders on top.
     // Input column on right, color-coded to match, space-evenly distributed.
-    // Gear section: SVG on left contains circles + straight leader lines + label letters.
-    // Full-width SVG with foreignObject inputs on the leader lines.
+    // Gear section: full-width SVG shows circles + leader lines + letter labels only.
+    // Input fields are rendered below the SVG so circles get the full width (matching reference).
     // flip=false: circles on left, lines go right. flip=true: circles on right, lines go left.
     const gearSvgSection=(title,totalKey,totalPh,ratioKey,gears,flip=false)=>{
-      const VW=260;
-      const LINE_END=flip?152:93;
-      const LABEL_X=flip?108:98;
-      const INPUT_X=flip?5:133;
-      const INPUT_W=flip?100:122;
-      const INPUT_H=20;
+      const VW=280;
+      const LINE_END=flip?43:165;
+      const LABEL_X=flip?5:170;
       const maxY=Math.max(...gears.map(g=>g.cy+g.r))+15;
       return(
         <div style={{padding:"8px 10px 10px"}}>
           <div style={{fontSize:12,color:C.amber,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:5}}>{title}</div>
-          {(totalKey||ratioKey)&&<div style={{display:"flex",gap:8,marginBottom:8}}>
+          {(totalKey||ratioKey)&&<div style={{display:"flex",gap:8,marginBottom:6}}>
             {totalKey&&<div style={{flex:1}}><div style={{fontSize:10,color:C.muted,marginBottom:2}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
             {ratioKey&&<div style={{flex:1}}><div style={{fontSize:10,color:C.muted,marginBottom:2}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
           </div>}
-          <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"100%",display:"block",overflow:"visible"}} xmlns="http://www.w3.org/2000/svg">
+          <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"100%",display:"block"}}>
             {["amber","blue"].flatMap(col=>gears.filter(g=>g.color===col).map(g=>{
               const stroke=col==="blue"?C.blue:C.amber;
               const fill=stroke+"1a";
@@ -5889,18 +5886,26 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
                   <line x1={g.cx-g.r*0.38} y1={g.cy} x2={g.cx+g.r*0.38} y2={g.cy} stroke={stroke} strokeWidth="0.9" strokeDasharray="2,1.5"/>
                   <line x1={g.cx} y1={g.cy-g.r*0.38} x2={g.cx} y2={g.cy+g.r*0.38} stroke={stroke} strokeWidth="0.9" strokeDasharray="2,1.5"/>
                   <line x1={ex} y1={ey} x2={LINE_END} y2={ey} stroke={stroke} strokeWidth="1.3"/>
-                  <text x={LABEL_X} y={ey+5} textAnchor="start" fontSize="13" fontWeight="700" fill={stroke} fontFamily="monospace">{g.label} =</text>
-                  <foreignObject x={INPUT_X} y={ey-INPUT_H/2} width={INPUT_W} height={INPUT_H}>
-                    <input
-                      style={{width:"100%",height:"100%",background:C.raised,border:`1px solid ${stroke}55`,borderRadius:"4px",color:C.green,fontSize:"15px",fontWeight:"700",textAlign:"right",padding:"0 5px",fontFamily:"'Share Tech Mono',monospace",outline:"none",boxSizing:"border-box"}}
-                      value={e[g.inputKey]||""}
-                      onChange={ev=>setE(g.inputKey,ev.target.value)}
-                    />
-                  </foreignObject>
+                  <text x={LABEL_X} y={ey+5} textAnchor="start" fontSize="14" fontWeight="700" fill={stroke} fontFamily="monospace">{g.label} =</text>
                 </g>
               );
             }))}
           </svg>
+          <div style={{display:"flex",flexWrap:"wrap",gap:"4px 10px",marginTop:4}}>
+            {gears.map(g=>{
+              const stroke=g.color==="blue"?C.blue:C.amber;
+              return(
+                <div key={g.label} style={{display:"flex",alignItems:"center",gap:3}}>
+                  <span style={{fontSize:12,fontWeight:700,color:stroke,fontFamily:"monospace",whiteSpace:"nowrap"}}>{g.label} =</span>
+                  <input
+                    style={{width:54,height:20,background:C.raised,border:`1px solid ${stroke}55`,borderRadius:"4px",color:C.green,fontSize:"13px",fontWeight:"700",textAlign:"right",padding:"0 4px",fontFamily:"'Share Tech Mono',monospace",outline:"none",boxSizing:"border-box"}}
+                    value={e[g.inputKey]||""}
+                    onChange={ev=>setE(g.inputKey,ev.target.value)}
+                  />
+                </div>
+              );
+            })}
+          </div>
         </div>
       );
     };
@@ -5935,40 +5940,40 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     // flip=true: circles RIGHT side (cx ~200-255), lines LEFT.
     // flip=false: circles LEFT side (cx ≤ 85), lines RIGHT.
     //
-    // Steigung (flip=true): amber a→Zw→b[outer]/c[inner]→d
-    // Circles touch: a→Zw dist=33, Zw→b dist=48, b→d dist=42. c/b ratio ≈ 0.72
+    // Steigung (flip=true, circles right, VW=280): a→Zw→b[outer]/c[inner]→d
+    // Scaled 1.83× vs old. Circles touch. c/b ratio ≈ 0.73
     const steigungGears=[
-      {label:"a",  inputKey:"steigA",  cx:248, cy:18,  r:13, color:"amber"},
-      {label:"Zw", inputKey:"steigZw", cx:232, cy:48,  r:20, color:"amber"},
-      {label:"b",  inputKey:"steigB",  cx:214, cy:93,  r:28, color:"amber", exitDy:-16},
-      {label:"c",  inputKey:"steigC",  cx:214, cy:93,  r:20, color:"blue",  exitDy:+16},
-      {label:"d",  inputKey:"steigD",  cx:196, cy:131, r:14, color:"blue"},
+      {label:"a",  inputKey:"steigA",  cx:252, cy:33,  r:24, color:"amber"},
+      {label:"Zw", inputKey:"steigZw", cx:229, cy:88,  r:37, color:"amber"},
+      {label:"b",  inputKey:"steigB",  cx:196, cy:170, r:51, color:"amber", exitDy:-30},
+      {label:"c",  inputKey:"steigC",  cx:196, cy:170, r:37, color:"blue",  exitDy:+30},
+      {label:"d",  inputKey:"steigD",  cx:163, cy:240, r:26, color:"blue"},
     ];
-    // Zahnzahl (flip=false): amber d→Zw→b[outer]/c[inner]→a
-    // Circles touch: d→Zw dist=33, Zw→b dist=35, b→a dist=42. c/b ratio ≈ 0.73
+    // Zahnzahl (flip=false, circles left, VW=280): d→Zw→b[outer]/c[inner]→a
+    // Scaled 1.83×. c/b ratio ≈ 0.73
     const zahnzahlGears=[
-      {label:"d",  inputKey:"zahnD",  cx:68, cy:22,  r:20, color:"amber"},
-      {label:"Zw", inputKey:"zahnZw", cx:50, cy:50,  r:13, color:"amber"},
-      {label:"c",  inputKey:"zahnC",  cx:30, cy:78,  r:16, color:"blue",  exitDy:-13},
-      {label:"b",  inputKey:"zahnB",  cx:30, cy:78,  r:22, color:"amber", exitDy:+13},
-      {label:"a",  inputKey:"zahnA",  cx:12, cy:116, r:20, color:"blue"},
+      {label:"d",  inputKey:"zahnD",  cx:124, cy:38,  r:37, color:"amber"},
+      {label:"Zw", inputKey:"zahnZw", cx:91,  cy:88,  r:24, color:"amber"},
+      {label:"c",  inputKey:"zahnC",  cx:61,  cy:143, r:29, color:"blue",  exitDy:-24},
+      {label:"b",  inputKey:"zahnB",  cx:61,  cy:143, r:40, color:"amber", exitDy:+24},
+      {label:"a",  inputKey:"zahnA",  cx:41,  cy:216, r:37, color:"blue"},
     ];
-    // Fräserdrehzahl (flip=true): amber a→b[outer]/c[inner]→d
-    // Circles touch: a→b dist=44, b→d dist=48. c/b ratio ≈ 0.73
+    // Fräserdrehzahl (flip=true, circles right, VW=280): a→b[outer]/c[inner]→d
+    // Scaled 1.83×. c/b ratio ≈ 0.73
     const fraesDrehzahlGears=[
-      {label:"a",  inputKey:"fraesA",  cx:246, cy:20,  r:18, color:"amber"},
-      {label:"b",  inputKey:"fraesB",  cx:222, cy:58,  r:26, color:"amber", exitDy:-15},
-      {label:"c",  inputKey:"fraesC",  cx:222, cy:58,  r:19, color:"blue",  exitDy:+15},
-      {label:"d",  inputKey:"fraesD",  cx:200, cy:101, r:22, color:"blue"},
+      {label:"a",  inputKey:"fraesA",  cx:247, cy:34,  r:33, color:"amber"},
+      {label:"b",  inputKey:"fraesB",  cx:210, cy:106, r:48, color:"amber", exitDy:-30},
+      {label:"c",  inputKey:"fraesC",  cx:210, cy:106, r:35, color:"blue",  exitDy:+30},
+      {label:"d",  inputKey:"fraesD",  cx:170, cy:185, r:40, color:"blue"},
     ];
-    // Längsvorschub (flip=false): amber a→b[outer]/c[inner]→Zw→d
-    // Nearly vertical chain. c/b ratio ≈ 0.69
+    // Längsvorschub (flip=false, circles left, VW=280): a→b[outer]/c[inner]→Zw→d
+    // Nearly vertical chain, scaled 1.83×. d is the largest circle.
     const laengsGears=[
-      {label:"a",  inputKey:"laengsA",  cx:22, cy:20,  r:16, color:"amber"},
-      {label:"b",  inputKey:"laengsB",  cx:22, cy:52,  r:16, color:"amber", exitDy:-9},
-      {label:"c",  inputKey:"laengsC",  cx:22, cy:52,  r:11, color:"blue",  exitDy:+9},
-      {label:"Zw", inputKey:"laengsZw", cx:22, cy:78,  r:10, color:"blue"},
-      {label:"d",  inputKey:"laengsD",  cx:22, cy:110, r:22, color:"blue"},
+      {label:"a",  inputKey:"laengsA",  cx:40, cy:37,  r:29, color:"amber"},
+      {label:"b",  inputKey:"laengsB",  cx:40, cy:95,  r:29, color:"amber", exitDy:-16},
+      {label:"c",  inputKey:"laengsC",  cx:40, cy:95,  r:20, color:"blue",  exitDy:+16},
+      {label:"Zw", inputKey:"laengsZw", cx:40, cy:143, r:18, color:"blue"},
+      {label:"d",  inputKey:"laengsD",  cx:40, cy:201, r:40, color:"blue"},
     ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
