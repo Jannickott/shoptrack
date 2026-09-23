@@ -5232,6 +5232,15 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
     saveSubDepts({...(subDepartments||{}),[editingAdminDept]:cur.filter(x=>x!==name)});
     if(adminSubDept===name) setAdminSubDept("");
   };
+  const duplicateSheet=sheet=>{
+    const now=Date.now();
+    const copy={...sheet,id:now,partNumber:sheet.partNumber+" (copy)",createdAt:now,updatedAt:now,createdBy:user?.name||""};
+    const updated=[copy,...(setupSheets||[])];
+    setSetupSheets(updated);
+    if(stateRef) stateRef.current={...stateRef.current,setupSheets:updated};
+    setSelectedId(now);
+    setView("edit");
+  };
   const backupPdf=async(sheet)=>{
     try{await fetch("/api/setupsheet-pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheet})});}
     catch{}
@@ -5241,7 +5250,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
   const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
   if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
-  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onGoToTool={onGoToTool} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
+  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -5330,7 +5339,10 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
           <div key={s.id} onClick={()=>{setSelectedId(s.id);setView("detail");}} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",cursor:"pointer"}}>
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}}>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:16,fontWeight:700,color:C.text,marginBottom:2}}>{s.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[s.customer,s.material].filter(Boolean).join(" · ")}</div></div>
-              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>{s.department&&deptFilt==="all"&&<span style={{fontSize:9,fontWeight:700,color:C.blue,background:"rgba(59,130,246,.12)",padding:"2px 7px",borderRadius:6}}>{s.department}</span>}{s.subDepartment&&subDeptFilt==="all"&&<span style={{fontSize:9,fontWeight:700,color:"#a78bfa",background:"rgba(167,139,250,.12)",padding:"2px 7px",borderRadius:6}}>{s.subDepartment}</span>}<span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",padding:"3px 8px",borderRadius:6}}>{s.machine}</span>{s.operation&&<span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:6,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[s.operation]||C.muted,background:{"Side 1":"rgba(59,130,246,.12)","Side 2":"rgba(46,213,115,.12)","Finish Part":"rgba(240,165,0,.12)"}[s.operation]||"transparent"}}>{s.operation}</span>}</div>
+              <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
+                <button style={{background:"none",border:"none",color:C.muted,cursor:"pointer",fontSize:13,padding:"2px 4px",borderRadius:4}} title="Duplicate sheet" onClick={e=>{e.stopPropagation();duplicateSheet(s);}}><i className="ti ti-copy"/></button>
+                {s.department&&deptFilt==="all"&&<span style={{fontSize:9,fontWeight:700,color:C.blue,background:"rgba(59,130,246,.12)",padding:"2px 7px",borderRadius:6}}>{s.department}</span>}{s.subDepartment&&subDeptFilt==="all"&&<span style={{fontSize:9,fontWeight:700,color:"#a78bfa",background:"rgba(167,139,250,.12)",padding:"2px 7px",borderRadius:6}}>{s.subDepartment}</span>}<span style={{fontSize:10,fontWeight:700,color:C.amber,background:"rgba(240,165,0,.12)",padding:"3px 8px",borderRadius:6}}>{s.machine}</span>{s.operation&&<span style={{fontSize:9,fontWeight:700,padding:"2px 7px",borderRadius:6,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[s.operation]||C.muted,background:{"Side 1":"rgba(59,130,246,.12)","Side 2":"rgba(46,213,115,.12)","Finish Part":"rgba(240,165,0,.12)"}[s.operation]||"transparent"}}>{s.operation}</span>}
+              </div>
             </div>
             <div style={{display:"flex",gap:12,fontSize:9,color:C.muted,letterSpacing:.5}}>
               <span><i className="ti ti-tool"/> {(s.tools||[]).filter(t=>t.description).length} tools</span>
@@ -5345,7 +5357,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
   );
 }
 
-function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool}){
+function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool,onDuplicate}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const [lightboxUrl,setLightboxUrl]=useState(null);
   const [mzDetOpen,setMzDetOpen]=useState({schnecke:false,werkstuck:false,entgraten:false});
@@ -5448,6 +5460,7 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:16}}>
         <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onBack}><i className="ti ti-arrow-left"/></button>
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:18,fontWeight:700,color:C.text}}>{sheet.partNumber}</div><div style={{fontSize:11,color:C.muted}}>{[sheet.customer,sheet.machine,sheet.operation&&`Op ${sheet.operation}`].filter(Boolean).join(" · ")}</div></div>
+        {onDuplicate&&<button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} title="Duplicate sheet" onClick={onDuplicate}><i className="ti ti-copy"/></button>}
         <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onEdit}><i className="ti ti-edit"/></button>
       </div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
@@ -5680,6 +5693,7 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
       <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
         <button style={btn("primary",true)} onClick={printPdf}><i className="ti ti-file-type-pdf"/> Export PDF</button>
         <button style={btn("outline",true)} onClick={onEdit}><i className="ti ti-edit"/> Edit Setup Sheet</button>
+        {onDuplicate&&<button style={btn("outline",true)} onClick={onDuplicate}><i className="ti ti-copy"/> Duplicate Sheet</button>}
         {!deleteConfirmSS
           ?<button style={{...btn("outline",true),borderColor:"rgba(231,76,60,.4)",color:C.red}} onClick={()=>setDeleteConfirmSS(true)}><i className="ti ti-trash"/> Delete</button>
           :<div style={{background:"rgba(231,76,60,.1)",border:`1px solid ${C.red}`,borderRadius:8,padding:"10px 12px"}}>
