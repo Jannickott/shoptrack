@@ -5359,7 +5359,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
 
 function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool,onDuplicate}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
-  const [lightboxUrl,setLightboxUrl]=useState(null);
+  const [lightboxPhoto,setLightboxPhoto]=useState(null);
   const [mzDetOpen,setMzDetOpen]=useState({schnecke:false,werkstuck:false,entgraten:false});
   const rc=pos=>{if(!pos)return"";return(sheet.restartPrefix||"NAT")+String(pos).padStart(sheet.restartPad||2,"0");};
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
@@ -5560,18 +5560,23 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
           <div style={{fontSize:8,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Photos</div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
             {sheet.photos.map((p,i)=>(
-              <div key={i} style={{borderRadius:8,overflow:"hidden",background:C.raised,aspectRatio:"4/3",position:"relative",cursor:"zoom-in"}} onClick={()=>setLightboxUrl(p.url)}>
+              <div key={i} style={{borderRadius:8,overflow:"hidden",background:C.raised,aspectRatio:"4/3",position:"relative",cursor:"zoom-in"}} onClick={()=>setLightboxPhoto(p)}>
                 <img src={p.url} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
-                {p.caption&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.65)",color:"#fff",fontSize:10,padding:"4px 8px"}}>{p.caption}</div>}
+                {p.caption&&<div style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.65)",color:"#fff",fontSize:10,padding:"4px 8px",lineHeight:1.4}}>{p.caption}</div>}
               </div>
             ))}
           </div>
         </div>
       )}
-      {lightboxUrl&&(
-        <div onClick={()=>setLightboxUrl(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
-          <img src={lightboxUrl} style={{maxWidth:"100%",maxHeight:"calc(100vh - 80px)",borderRadius:10,objectFit:"contain",boxShadow:"0 8px 40px rgba(0,0,0,.6)"}} onClick={e=>e.stopPropagation()}/>
-          <button onClick={()=>setLightboxUrl(null)} style={{marginTop:16,background:"rgba(255,255,255,.12)",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,color:"#fff",fontSize:14,fontWeight:700,padding:"10px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}><i className="ti ti-x"/> Close</button>
+      {lightboxPhoto&&(
+        <div onClick={()=>setLightboxPhoto(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.92)",zIndex:999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
+          <img src={lightboxPhoto.url} style={{maxWidth:"100%",maxHeight:"calc(100vh - 120px)",borderRadius:10,objectFit:"contain",boxShadow:"0 8px 40px rgba(0,0,0,.6)"}} onClick={e=>e.stopPropagation()}/>
+          {lightboxPhoto.caption&&(
+            <div onClick={e=>e.stopPropagation()} style={{marginTop:12,background:"rgba(255,255,255,.1)",border:"1px solid rgba(255,255,255,.2)",borderRadius:8,padding:"10px 16px",maxWidth:500,width:"100%",color:"#fff",fontSize:13,lineHeight:1.5,textAlign:"center"}}>
+              {lightboxPhoto.caption}
+            </div>
+          )}
+          <button onClick={()=>setLightboxPhoto(null)} style={{marginTop:14,background:"rgba(255,255,255,.12)",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,color:"#fff",fontSize:14,fontWeight:700,padding:"10px 28px",cursor:"pointer",display:"flex",alignItems:"center",gap:8}}><i className="ti ti-x"/> Close</button>
         </div>
       )}
       {sheet.subDepartment==="150"&&(()=>{
