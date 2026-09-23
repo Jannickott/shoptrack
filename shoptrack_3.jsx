@@ -5609,13 +5609,22 @@ ${(sheet.photos||[]).length?`<h2>Photos</h2><div class="photos">${sheet.photos.m
               {[["mn",e.mn],["Z",e.z],["β",e.beta],["dk",e.dk],["uo",e.uo],["df",e.df]].filter(([,v])=>v).map(([lbl,v])=>(<span key={lbl} style={{marginRight:8}}><span style={{fontSize:9,color:C.muted}}>{lbl}=</span><span style={{...mono,fontSize:13}}>{v}</span></span>))}
               {e.fraeserDia&&<span><span style={{fontSize:9,color:C.muted}}>Fräser Ø </span><span style={{...mono,fontSize:13}}>{e.fraeserDia}</span></span>}
             </div>
-            {(e.fraesLagerLinks||e.fraesLagerRechts)&&(<>
+            {(e.fraesLagerLinks||e.fraesLagerRechts||e.fraesLag3||e.fraesLag4)&&(<>
               {secH("Fräslagerstellung / Cutter Position")}
-              <div style={{padding:"10px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-                {[["L",e.fraesLagerLinks],["R",e.fraesLagerRechts]].map(([side,val])=>(<div key={side} style={{display:"flex",flexDirection:"column",alignItems:"center",gap:6}}>
-                  {fraesImg(side)}
-                  {val&&<div style={{...mono,fontSize:14,textAlign:"center"}}>{val}</div>}
-                </div>))}
+              <div style={{padding:"10px 14px"}}>
+                {(()=>{
+                  const isDark=document.documentElement.dataset.theme==="dark"||(!document.documentElement.dataset.theme&&window.matchMedia("(prefers-color-scheme:dark)").matches);
+                  return(
+                    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                      {[["fraesLagerLinks",e.fraesLagerLinks,0,0],["fraesLagerRechts",e.fraesLagerRechts,1,0],["fraesLag3",e.fraesLag3,0,1],["fraesLag4",e.fraesLag4,1,1]].map(([k,val,xi,yi])=>(
+                        <div key={k} style={{display:"flex",flexDirection:"column",gap:4}}>
+                          <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",borderRadius:6,border:`1px solid ${C.border}`,backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none"}}/>
+                          {val&&<div style={{...mono,fontSize:14,textAlign:"center"}}>{val}°</div>}
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             </>)}
             {secH("Laufrichtung / Direction")}
@@ -5999,27 +6008,23 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             <input style={{...inp(),...mono,flex:1}} value={e.fraeserDia||""} onChange={ev=>setE("fraeserDia",ev.target.value)} placeholder="e.g. 20 H55"/>
           </div>
         </div>
-        {/* Fräslagerstellung — scanned image, no background, 4 angle inputs */}
+        {/* Fräslagerstellung — 4-position image grid, no white background */}
         {secHdr("Fräslagerstellung / Cutter Position")}
-        <div style={{padding:"10px 14px 8px"}}>
-          <canvas style={{width:"100%",display:"block",marginBottom:10,mixBlendMode:"multiply"}} ref={el=>{
-            if(!el||el._drawn) return; el._drawn=true;
-            const IMG_W=1168,IMG_H=832,SHOW=0.40;
-            const dw=el.parentElement?.offsetWidth-28||300;
-            const scale=dw/IMG_H;
-            el.width=Math.round(dw); el.height=Math.round(IMG_W*scale*SHOW);
-            const dark=window.matchMedia("(prefers-color-scheme:dark)").matches||document.documentElement.dataset.theme==="dark";
-            if(dark){el.style.filter="invert(1)";el.style.mixBlendMode="screen";}
-            const img=new Image();
-            img.onload=()=>{const ctx=el.getContext("2d");ctx.translate(0,IMG_W*scale);ctx.rotate(-Math.PI/2);ctx.scale(scale,scale);ctx.drawImage(img,0,0);};
-            img.src="/eriks-fraeslager.jpg";
-          }}/>
-          {/* 4 angle inputs, one per figure (top-left, top-right, bottom-left, bottom-right) */}
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"6px 12px"}}>
-            {[["fraesLagerLinks","Oben Links / Top Left"],["fraesLagerRechts","Oben Rechts / Top Right"],["fraesLag3","Unten Links / Bottom Left"],["fraesLag4","Unten Rechts / Bottom Right"]].map(([k,lbl])=>(
-              <div key={k}><div style={{fontSize:9,color:C.muted,marginBottom:3}}>{lbl}</div>{numInp(k,"°")}</div>
-            ))}
-          </div>
+        <div style={{padding:"10px 14px 12px"}}>
+          {(()=>{
+            const isDark=document.documentElement.dataset.theme==="dark"||(!document.documentElement.dataset.theme&&window.matchMedia("(prefers-color-scheme:dark)").matches);
+            return(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                {[["fraesLagerLinks","Oben Links / Top Left",0,0],["fraesLagerRechts","Oben Rechts / Top Right",1,0],["fraesLag3","Unten Links / Bottom Left",0,1],["fraesLag4","Unten Rechts / Bottom Right",1,1]].map(([k,lbl,xi,yi])=>(
+                  <div key={k} style={{display:"flex",flexDirection:"column",gap:6}}>
+                    <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",borderRadius:8,border:`1px solid ${C.border}`,backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none"}}/>
+                    <div style={{fontSize:9,color:C.muted}}>{lbl}</div>
+                    {numInp(k,"°")}
+                  </div>
+                ))}
+              </div>
+            );
+          })()}
         </div>
         {/* Direction + differential */}
         {secHdr("Laufrichtung / Direction")}
