@@ -5936,39 +5936,39 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     // flip=false: circles LEFT side (cx ≤ 85), lines RIGHT.
     //
     // Steigung (flip=true): amber a→Zw→b[outer]/c[inner]→d
-    // Label column top-to-bottom: a, Zw, b, c, d  (b exits up, c exits down)
+    // Circles touch: a→Zw dist=33, Zw→b dist=48, b→d dist=42. c/b ratio ≈ 0.72
     const steigungGears=[
-      {label:"a",  inputKey:"steigA",  cx:250, cy:22,  r:11, color:"amber"},
-      {label:"Zw", inputKey:"steigZw", cx:234, cy:46,  r:18, color:"amber"},
-      {label:"b",  inputKey:"steigB",  cx:215, cy:82,  r:22, color:"amber", exitDy:-13},
-      {label:"c",  inputKey:"steigC",  cx:215, cy:82,  r:13, color:"blue",  exitDy:+13},
-      {label:"d",  inputKey:"steigD",  cx:200, cy:118, r:15, color:"blue"},
+      {label:"a",  inputKey:"steigA",  cx:248, cy:18,  r:13, color:"amber"},
+      {label:"Zw", inputKey:"steigZw", cx:232, cy:48,  r:20, color:"amber"},
+      {label:"b",  inputKey:"steigB",  cx:214, cy:93,  r:28, color:"amber", exitDy:-16},
+      {label:"c",  inputKey:"steigC",  cx:214, cy:93,  r:20, color:"blue",  exitDy:+16},
+      {label:"d",  inputKey:"steigD",  cx:196, cy:131, r:14, color:"blue"},
     ];
     // Zahnzahl (flip=false): amber d→Zw→b[outer]/c[inner]→a
-    // Label column top-to-bottom: d, Zw, c, b, a  (c exits up, b exits down)
+    // Circles touch: d→Zw dist=33, Zw→b dist=35, b→a dist=42. c/b ratio ≈ 0.73
     const zahnzahlGears=[
-      {label:"d",  inputKey:"zahnD",  cx:62, cy:22,  r:18, color:"amber"},
-      {label:"Zw", inputKey:"zahnZw", cx:44, cy:48,  r:12, color:"amber"},
-      {label:"c",  inputKey:"zahnC",  cx:28, cy:80,  r:12, color:"blue",  exitDy:-12},
-      {label:"b",  inputKey:"zahnB",  cx:28, cy:80,  r:22, color:"amber", exitDy:+12},
-      {label:"a",  inputKey:"zahnA",  cx:10, cy:117, r:18, color:"blue"},
+      {label:"d",  inputKey:"zahnD",  cx:68, cy:22,  r:20, color:"amber"},
+      {label:"Zw", inputKey:"zahnZw", cx:50, cy:50,  r:13, color:"amber"},
+      {label:"c",  inputKey:"zahnC",  cx:30, cy:78,  r:16, color:"blue",  exitDy:-13},
+      {label:"b",  inputKey:"zahnB",  cx:30, cy:78,  r:22, color:"amber", exitDy:+13},
+      {label:"a",  inputKey:"zahnA",  cx:12, cy:116, r:20, color:"blue"},
     ];
     // Fräserdrehzahl (flip=true): amber a→b[outer]/c[inner]→d
-    // Label column top-to-bottom: a, b, c, d  (b exits up, c exits down)
+    // Circles touch: a→b dist=44, b→d dist=48. c/b ratio ≈ 0.73
     const fraesDrehzahlGears=[
-      {label:"a",  inputKey:"fraesA",  cx:248, cy:18,  r:12, color:"amber"},
-      {label:"b",  inputKey:"fraesB",  cx:222, cy:60,  r:22, color:"amber", exitDy:-12},
-      {label:"c",  inputKey:"fraesC",  cx:222, cy:60,  r:12, color:"blue",  exitDy:+12},
-      {label:"d",  inputKey:"fraesD",  cx:200, cy:100, r:18, color:"blue"},
+      {label:"a",  inputKey:"fraesA",  cx:246, cy:20,  r:18, color:"amber"},
+      {label:"b",  inputKey:"fraesB",  cx:222, cy:58,  r:26, color:"amber", exitDy:-15},
+      {label:"c",  inputKey:"fraesC",  cx:222, cy:58,  r:19, color:"blue",  exitDy:+15},
+      {label:"d",  inputKey:"fraesD",  cx:200, cy:101, r:22, color:"blue"},
     ];
     // Längsvorschub (flip=false): amber a→b[outer]/c[inner]→Zw→d
-    // Label column top-to-bottom: a, b, c, Zw, d  (b exits up, c exits down)
+    // Nearly vertical chain. c/b ratio ≈ 0.69
     const laengsGears=[
-      {label:"a",  inputKey:"laengsA",  cx:12, cy:22,  r:12, color:"amber"},
-      {label:"b",  inputKey:"laengsB",  cx:28, cy:58,  r:22, color:"amber", exitDy:-12},
-      {label:"c",  inputKey:"laengsC",  cx:28, cy:58,  r:12, color:"blue",  exitDy:+12},
-      {label:"Zw", inputKey:"laengsZw", cx:44, cy:90,  r:10, color:"blue"},
-      {label:"d",  inputKey:"laengsD",  cx:60, cy:116, r:16, color:"blue"},
+      {label:"a",  inputKey:"laengsA",  cx:22, cy:20,  r:16, color:"amber"},
+      {label:"b",  inputKey:"laengsB",  cx:22, cy:52,  r:16, color:"amber", exitDy:-9},
+      {label:"c",  inputKey:"laengsC",  cx:22, cy:52,  r:11, color:"blue",  exitDy:+9},
+      {label:"Zw", inputKey:"laengsZw", cx:22, cy:78,  r:10, color:"blue"},
+      {label:"d",  inputKey:"laengsD",  cx:22, cy:110, r:22, color:"blue"},
     ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
