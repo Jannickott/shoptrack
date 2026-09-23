@@ -5863,10 +5863,10 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     const gearSvgSection=(title,totalKey,totalPh,ratioKey,gears,flip=false)=>{
       const VW=260;
       const LINE_END=flip?152:93;
-      const LABEL_X=flip?111:96;
-      const INPUT_X=flip?5:127;
-      const INPUT_W=flip?103:128;
-      const INPUT_H=24;
+      const LABEL_X=flip?108:98;
+      const INPUT_X=flip?5:133;
+      const INPUT_W=flip?100:122;
+      const INPUT_H=20;
       const maxY=Math.max(...gears.map(g=>g.cy+g.r))+15;
       return(
         <div style={{padding:"8px 10px 10px"}}>
@@ -5930,41 +5930,45 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       );
     };
     // ── Gear circle positions ─────────────────────────────────────────────
-    // Scaled up for tablet readability. exitDy shifts the leader line exit
-    // point along the circle edge to space out adjacent leader lines.
-    // flip=true sections (Steigung, Fräserdrehzahl): circles on RIGHT (cx ~200-255),
-    // lines go LEFT. flip=false (Zahnzahl, Längsvorschub): circles on LEFT (cx ≤ 88).
+    // Compound pairs share the SAME cx,cy (concentric circles): outer amber ring (b),
+    // inner blue circle (c). exitDy splits their leader lines above/below center.
+    // flip=true: circles RIGHT side (cx ~200-255), lines LEFT.
+    // flip=false: circles LEFT side (cx ≤ 85), lines RIGHT.
     //
-    // Steigung (flip=true): amber a→Zw→b, blue c (compound on b shaft)→d
+    // Steigung (flip=true): amber a→Zw→b[outer]/c[inner]→d
+    // Label column top-to-bottom: a, Zw, b, c, d  (b exits up, c exits down)
     const steigungGears=[
-      {label:"a",  inputKey:"steigA",  cx:250, cy:19,  r:11, color:"amber"},
-      {label:"Zw", inputKey:"steigZw", cx:234, cy:54,  r:18, color:"amber"},
-      {label:"c",  inputKey:"steigC",  cx:210, cy:112, r:14, color:"blue",  exitDy:-13},
-      {label:"b",  inputKey:"steigB",  cx:214, cy:106, r:24, color:"amber", exitDy:+22},
-      {label:"d",  inputKey:"steigD",  cx:201, cy:152, r:15, color:"blue",  exitDy:+8},
+      {label:"a",  inputKey:"steigA",  cx:250, cy:22,  r:11, color:"amber"},
+      {label:"Zw", inputKey:"steigZw", cx:234, cy:46,  r:18, color:"amber"},
+      {label:"b",  inputKey:"steigB",  cx:215, cy:82,  r:22, color:"amber", exitDy:-13},
+      {label:"c",  inputKey:"steigC",  cx:215, cy:82,  r:13, color:"blue",  exitDy:+13},
+      {label:"d",  inputKey:"steigD",  cx:200, cy:118, r:15, color:"blue"},
     ];
-    // Zahnzahl (flip=false): amber d→Zw→c, blue a (compound on c shaft)→b
+    // Zahnzahl (flip=false): amber d→Zw→b[outer]/c[inner]→a
+    // Label column top-to-bottom: d, Zw, c, b, a  (c exits up, b exits down)
     const zahnzahlGears=[
-      {label:"d",  inputKey:"zahnD",  cx:60, cy:19,  r:16, color:"amber"},
-      {label:"Zw", inputKey:"zahnZw", cx:60, cy:59,  r:13, color:"amber", exitDy:-10},
-      {label:"c",  inputKey:"zahnC",  cx:48, cy:91,  r:14, color:"amber", exitDy:-10},
-      {label:"a",  inputKey:"zahnA",  cx:46, cy:106, r:13, color:"blue",  exitDy:+10},
-      {label:"b",  inputKey:"zahnB",  cx:22, cy:138, r:23, color:"blue",  exitDy:+8},
+      {label:"d",  inputKey:"zahnD",  cx:62, cy:22,  r:18, color:"amber"},
+      {label:"Zw", inputKey:"zahnZw", cx:44, cy:48,  r:12, color:"amber"},
+      {label:"c",  inputKey:"zahnC",  cx:28, cy:80,  r:12, color:"blue",  exitDy:-12},
+      {label:"b",  inputKey:"zahnB",  cx:28, cy:80,  r:22, color:"amber", exitDy:+12},
+      {label:"a",  inputKey:"zahnA",  cx:10, cy:117, r:18, color:"blue"},
     ];
-    // Fräserdrehzahl (flip=true): amber a→b, blue c (compound on b shaft)→d
+    // Fräserdrehzahl (flip=true): amber a→b[outer]/c[inner]→d
+    // Label column top-to-bottom: a, b, c, d  (b exits up, c exits down)
     const fraesDrehzahlGears=[
-      {label:"a",  inputKey:"fraesA",  cx:248, cy:35,  r:13, color:"amber"},
-      {label:"b",  inputKey:"fraesB",  cx:225, cy:74,  r:24, color:"amber", exitDy:+24},
-      {label:"c",  inputKey:"fraesC",  cx:219, cy:83,  r:14, color:"blue",  exitDy:-13},
-      {label:"d",  inputKey:"fraesD",  cx:199, cy:115, r:18, color:"blue",  exitDy:+10},
+      {label:"a",  inputKey:"fraesA",  cx:248, cy:18,  r:12, color:"amber"},
+      {label:"b",  inputKey:"fraesB",  cx:222, cy:60,  r:22, color:"amber", exitDy:-12},
+      {label:"c",  inputKey:"fraesC",  cx:222, cy:60,  r:12, color:"blue",  exitDy:+12},
+      {label:"d",  inputKey:"fraesD",  cx:200, cy:100, r:18, color:"blue"},
     ];
-    // Längsvorschub (flip=false): amber a→b, blue c (compound on b shaft)→Zw→d
+    // Längsvorschub (flip=false): amber a→b[outer]/c[inner]→Zw→d
+    // Label column top-to-bottom: a, b, c, Zw, d  (b exits up, c exits down)
     const laengsGears=[
       {label:"a",  inputKey:"laengsA",  cx:12, cy:22,  r:12, color:"amber"},
-      {label:"b",  inputKey:"laengsB",  cx:29, cy:62,  r:23, color:"amber", exitDy:-8},
-      {label:"c",  inputKey:"laengsC",  cx:35, cy:72,  r:13, color:"blue",  exitDy:+13},
-      {label:"Zw", inputKey:"laengsZw", cx:46, cy:101, r:12, color:"blue"},
-      {label:"d",  inputKey:"laengsD",  cx:63, cy:128, r:16, color:"blue"},
+      {label:"b",  inputKey:"laengsB",  cx:28, cy:58,  r:22, color:"amber", exitDy:-12},
+      {label:"c",  inputKey:"laengsC",  cx:28, cy:58,  r:12, color:"blue",  exitDy:+12},
+      {label:"Zw", inputKey:"laengsZw", cx:44, cy:90,  r:10, color:"blue"},
+      {label:"d",  inputKey:"laengsD",  cx:60, cy:116, r:16, color:"blue"},
     ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
