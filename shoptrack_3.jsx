@@ -3348,6 +3348,93 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
 }
 
 // ═══════════════════════════════════════════════════════
+// DELEGATE JOBS — reassign active jobs when operator is away
+// ═══════════════════════════════════════════════════════
+function DelegateJobs({users,jobs,setJobs,saveNow}){
+  const operators=users.filter(u=>u.active&&!u.removed&&u.role!=="admin");
+  const [fromId,setFromId]=useState("");
+  const [toId,setToId]=useState("");
+  const [done,setDone]=useState(false);
+
+  const fromUser=operators.find(u=>String(u.id)===fromId);
+  const toUser=operators.find(u=>String(u.id)===toId);
+  const activeJobs=fromUser?jobs.filter(j=>j.operatorId===fromUser.id&&j.status!=="done"&&!j.deleted):[];
+
+  const delegate=()=>{
+    if(!fromUser||!toUser||activeJobs.length===0) return;
+    setJobs(prev=>prev.map(j=>
+      j.operatorId===fromUser.id&&j.status!=="done"&&!j.deleted
+        ?{...j,operatorId:toUser.id,operatorName:toUser.name,lastModifiedAt:Date.now()}
+        :j
+    ));
+    saveNow&&saveNow();
+    setDone(true);
+  };
+
+  const reset=()=>{setFromId("");setToId("");setDone(false);};
+
+  const sel={background:"#1a2535",border:`1px solid ${C.border}`,borderRadius:6,color:C.text,fontSize:13,padding:"6px 10px",width:"100%",outline:"none"};
+
+  if(done) return(
+    <div style={{textAlign:"center",padding:"40px 20px"}}>
+      <div style={{fontSize:32,marginBottom:12}}>✓</div>
+      <div style={{color:C.green,fontWeight:700,fontSize:15,marginBottom:4}}>Jobs delegated</div>
+      <div style={{color:C.muted,fontSize:12,marginBottom:20}}>{activeJobs.length} job{activeJobs.length!==1?"s":""} moved from <b style={{color:C.text}}>{fromUser?.name}</b> to <b style={{color:C.text}}>{toUser?.name}</b></div>
+      <button style={btn("outline")} onClick={reset}>Delegate again</button>
+    </div>
+  );
+
+  return(
+    <div style={{maxWidth:480}}>
+      <div style={{color:C.muted,fontSize:12,marginBottom:20,lineHeight:1.6}}>
+        Select the operator who is sick or on holiday, then choose who should cover their active jobs.
+      </div>
+
+      <div style={{display:"flex",flexDirection:"column",gap:16}}>
+        <div>
+          <div style={{fontSize:11,color:C.amber,fontWeight:700,letterSpacing:.5,marginBottom:6}}>AWAY OPERATOR</div>
+          <select style={sel} value={fromId} onChange={e=>{setFromId(e.target.value);setToId("");}}>
+            <option value="">— Select operator —</option>
+            {operators.map(u=><option key={u.id} value={String(u.id)}>{u.name}</option>)}
+          </select>
+        </div>
+
+        {fromUser&&(
+          <div style={{background:"#1a2535",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px"}}>
+            <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Active jobs for <b style={{color:C.text}}>{fromUser.name}</b></div>
+            {activeJobs.length===0
+              ?<div style={{color:C.muted,fontSize:12}}>No active jobs — nothing to delegate.</div>
+              :activeJobs.map(j=>(
+                <div key={j.id} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+                  <span style={{color:C.text,fontWeight:600}}>{j.job||j.partNumber||"Job"}</span>
+                  <span style={{color:C.muted}}>{j.machine||""}</span>
+                </div>
+              ))
+            }
+          </div>
+        )}
+
+        {fromUser&&activeJobs.length>0&&(
+          <div>
+            <div style={{fontSize:11,color:C.amber,fontWeight:700,letterSpacing:.5,marginBottom:6}}>COVERING OPERATOR</div>
+            <select style={sel} value={toId} onChange={e=>setToId(e.target.value)}>
+              <option value="">— Select operator —</option>
+              {operators.filter(u=>u.id!==fromUser.id).map(u=><option key={u.id} value={String(u.id)}>{u.name}</option>)}
+            </select>
+          </div>
+        )}
+
+        {fromUser&&toUser&&activeJobs.length>0&&(
+          <button style={{...btn("filled"),background:C.amber,color:"#000",fontWeight:700}} onClick={delegate}>
+            <i className="ti ti-arrows-exchange"/> Delegate {activeJobs.length} job{activeJobs.length!==1?"s":""} to {toUser.name}
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
 // MANAGE TAB
 // ═══════════════════════════════════════════════════════
 function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,departments,setDepartments,saveNow,efficiencyGoals,setEfficiencyGoals,jobs,setJobs}){
@@ -3360,12 +3447,14 @@ function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,d
         <button style={tag(view==="departments")} onClick={()=>setView("departments")}><i className="ti ti-tag"/> Departments</button>
         <button style={tag(view==="goals")}       onClick={()=>setView("goals")}      ><i className="ti ti-target"/> Goals</button>
         <button style={tag(view==="settings")}    onClick={()=>setView("settings")}   ><i className="ti ti-adjustments"/> Settings</button>
+        <button style={tag(view==="delegate")}    onClick={()=>setView("delegate")}   ><i className="ti ti-arrows-exchange"/> Delegate</button>
       </div>
       {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments} jobs={jobs} setJobs={setJobs}/>}
       {view==="machines"   &&<ManageMachines    machines={machines} setMachines={setMachines} departments={departments} jobs={jobs} saveNow={saveNow}/>}
       {view==="departments"&&<ManageDepartments departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
       {view==="goals"      &&<ManageEfficiencyGoals efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} machines={machines} departments={departments} saveNow={saveNow}/>}
       {view==="settings"   &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours}/>}
+      {view==="delegate"   &&<DelegateJobs      users={users} jobs={jobs} setJobs={setJobs} saveNow={saveNow}/>}
     </div>
   );
 }
