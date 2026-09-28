@@ -3353,83 +3353,106 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
 function DelegateJobs({users,jobs,setJobs,saveNow}){
   const operators=users.filter(u=>u.active&&!u.removed&&u.role!=="admin");
   const [fromId,setFromId]=useState("");
-  const [toId,setToId]=useState("");
-  const [done,setDone]=useState(false);
+  // assignments: { [jobId]: operatorId string }
+  const [assignments,setAssignments]=useState({});
+  const [delegated,setDelegated]=useState([]); // summary after confirm
 
   const fromUser=operators.find(u=>String(u.id)===fromId);
-  const toUser=operators.find(u=>String(u.id)===toId);
   const activeJobs=fromUser?jobs.filter(j=>j.operatorId===fromUser.id&&j.status!=="done"&&!j.deleted):[];
 
-  const delegate=()=>{
-    if(!fromUser||!toUser||activeJobs.length===0) return;
-    setJobs(prev=>prev.map(j=>
-      j.operatorId===fromUser.id&&j.status!=="done"&&!j.deleted
-        ?{...j,operatorId:toUser.id,operatorName:toUser.name,lastModifiedAt:Date.now()}
-        :j
-    ));
+  const setAssign=(jobId,toId)=>setAssignments(prev=>({...prev,[jobId]:toId}));
+
+  const readyJobs=activeJobs.filter(j=>assignments[j.id]);
+  const canConfirm=readyJobs.length>0;
+
+  const confirm=()=>{
+    const now=Date.now();
+    const summary=[];
+    setJobs(prev=>prev.map(j=>{
+      const toId=assignments[j.id];
+      if(!toId) return j;
+      const toUser=operators.find(u=>String(u.id)===toId);
+      if(!toUser) return j;
+      summary.push({job:j.job||j.partNumber||"Job",machine:j.machine||"",to:toUser.name});
+      return{...j,operatorId:toUser.id,operatorName:toUser.name,lastModifiedAt:now};
+    }));
     saveNow&&saveNow();
-    setDone(true);
+    setDelegated(summary);
   };
 
-  const reset=()=>{setFromId("");setToId("");setDone(false);};
+  const reset=()=>{setFromId("");setAssignments({});setDelegated([]);};
 
-  const sel={background:"#1a2535",border:`1px solid ${C.border}`,borderRadius:6,color:C.text,fontSize:13,padding:"6px 10px",width:"100%",outline:"none"};
+  const selStyle={background:"#1a2535",border:`1px solid ${C.border}`,borderRadius:6,color:C.text,fontSize:12,padding:"4px 8px",outline:"none"};
 
-  if(done) return(
-    <div style={{textAlign:"center",padding:"40px 20px"}}>
-      <div style={{fontSize:32,marginBottom:12}}>✓</div>
-      <div style={{color:C.green,fontWeight:700,fontSize:15,marginBottom:4}}>Jobs delegated</div>
-      <div style={{color:C.muted,fontSize:12,marginBottom:20}}>{activeJobs.length} job{activeJobs.length!==1?"s":""} moved from <b style={{color:C.text}}>{fromUser?.name}</b> to <b style={{color:C.text}}>{toUser?.name}</b></div>
-      <button style={btn("outline")} onClick={reset}>Delegate again</button>
+  if(delegated.length>0) return(
+    <div style={{maxWidth:480}}>
+      <div style={{color:C.green,fontWeight:700,fontSize:14,marginBottom:12}}><i className="ti ti-circle-check"/> {delegated.length} job{delegated.length!==1?"s":""} delegated</div>
+      {delegated.map((d,i)=>(
+        <div key={i} style={{display:"flex",justifyContent:"space-between",padding:"5px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
+          <span style={{color:C.text,fontWeight:600}}>{d.job}</span>
+          <span style={{color:C.muted}}>{d.machine}</span>
+          <span style={{color:C.amber}}>→ {d.to}</span>
+        </div>
+      ))}
+      <button style={{...btn("outline"),marginTop:16}} onClick={reset}>Delegate again</button>
     </div>
   );
 
   return(
-    <div style={{maxWidth:480}}>
-      <div style={{color:C.muted,fontSize:12,marginBottom:20,lineHeight:1.6}}>
-        Select the operator who is sick or on holiday, then choose who should cover their active jobs.
+    <div style={{maxWidth:560}}>
+      <div style={{color:C.muted,fontSize:12,marginBottom:16,lineHeight:1.6}}>
+        Select the away operator, then assign each job to whoever should cover it. Leave a job unassigned to keep it on hold.
       </div>
 
-      <div style={{display:"flex",flexDirection:"column",gap:16}}>
-        <div>
-          <div style={{fontSize:11,color:C.amber,fontWeight:700,letterSpacing:.5,marginBottom:6}}>AWAY OPERATOR</div>
-          <select style={sel} value={fromId} onChange={e=>{setFromId(e.target.value);setToId("");}}>
-            <option value="">— Select operator —</option>
-            {operators.map(u=><option key={u.id} value={String(u.id)}>{u.name}</option>)}
-          </select>
+      <div style={{marginBottom:16}}>
+        <div style={{fontSize:11,color:C.amber,fontWeight:700,letterSpacing:.5,marginBottom:6}}>AWAY OPERATOR</div>
+        <select style={{...selStyle,width:220,fontSize:13,padding:"6px 10px"}} value={fromId} onChange={e=>{setFromId(e.target.value);setAssignments({});}}>
+          <option value="">— Select operator —</option>
+          {operators.map(u=><option key={u.id} value={String(u.id)}>{u.name}</option>)}
+        </select>
+      </div>
+
+      {fromUser&&activeJobs.length===0&&(
+        <div style={{color:C.muted,fontSize:12}}>{fromUser.name} has no active jobs.</div>
+      )}
+
+      {fromUser&&activeJobs.length>0&&(<>
+        <div style={{fontSize:11,color:C.amber,fontWeight:700,letterSpacing:.5,marginBottom:8}}>
+          ASSIGN JOBS — {readyJobs.length} of {activeJobs.length} assigned
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:16}}>
+          {activeJobs.map(j=>{
+            const assigned=assignments[j.id]||"";
+            return(
+              <div key={j.id} style={{display:"grid",gridTemplateColumns:"1fr auto auto",gap:8,alignItems:"center",background:"#1a2535",border:`1px solid ${assigned?C.amber:C.border}`,borderRadius:8,padding:"8px 12px"}}>
+                <div>
+                  <div style={{color:C.text,fontWeight:600,fontSize:13}}>{j.job||j.partNumber||"Job"}</div>
+                  <div style={{color:C.muted,fontSize:11}}>{j.machine||""}{j.op?` · Op ${j.op}`:""}</div>
+                </div>
+                <select style={selStyle} value={assigned} onChange={e=>setAssign(j.id,e.target.value)}>
+                  <option value="">— Keep on hold —</option>
+                  {operators.filter(u=>u.id!==fromUser.id).map(u=><option key={u.id} value={String(u.id)}>{u.name}</option>)}
+                </select>
+                {assigned&&<i className="ti ti-check" style={{color:C.green,fontSize:14}}/>}
+              </div>
+            );
+          })}
         </div>
 
-        {fromUser&&(
-          <div style={{background:"#1a2535",border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px"}}>
-            <div style={{fontSize:11,color:C.muted,marginBottom:4}}>Active jobs for <b style={{color:C.text}}>{fromUser.name}</b></div>
-            {activeJobs.length===0
-              ?<div style={{color:C.muted,fontSize:12}}>No active jobs — nothing to delegate.</div>
-              :activeJobs.map(j=>(
-                <div key={j.id} style={{display:"flex",justifyContent:"space-between",padding:"4px 0",borderBottom:`1px solid ${C.border}`,fontSize:12}}>
-                  <span style={{color:C.text,fontWeight:600}}>{j.job||j.partNumber||"Job"}</span>
-                  <span style={{color:C.muted}}>{j.machine||""}</span>
-                </div>
-              ))
-            }
-          </div>
-        )}
-
-        {fromUser&&activeJobs.length>0&&(
-          <div>
-            <div style={{fontSize:11,color:C.amber,fontWeight:700,letterSpacing:.5,marginBottom:6}}>COVERING OPERATOR</div>
-            <select style={sel} value={toId} onChange={e=>setToId(e.target.value)}>
-              <option value="">— Select operator —</option>
-              {operators.filter(u=>u.id!==fromUser.id).map(u=><option key={u.id} value={String(u.id)}>{u.name}</option>)}
-            </select>
-          </div>
-        )}
-
-        {fromUser&&toUser&&activeJobs.length>0&&(
-          <button style={{...btn("filled"),background:C.amber,color:"#000",fontWeight:700}} onClick={delegate}>
-            <i className="ti ti-arrows-exchange"/> Delegate {activeJobs.length} job{activeJobs.length!==1?"s":""} to {toUser.name}
+        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+          <button style={{...btn("filled"),background:canConfirm?C.amber:"#333",color:canConfirm?"#000":C.muted,fontWeight:700,cursor:canConfirm?"pointer":"default"}} onClick={canConfirm?confirm:undefined}>
+            <i className="ti ti-arrows-exchange"/> Confirm {readyJobs.length} delegation{readyJobs.length!==1?"s":""}
           </button>
-        )}
-      </div>
+          {activeJobs.length>1&&(
+            <button style={{...btn("outline"),fontSize:11}} onClick={()=>{
+              const first=operators.find(u=>u.id!==fromUser.id);
+              if(!first) return;
+              const all={};activeJobs.forEach(j=>{all[j.id]=String(first.id);});
+              setAssignments(all);
+            }}>Assign all to one</button>
+          )}
+        </div>
+      </>)}
     </div>
   );
 }
