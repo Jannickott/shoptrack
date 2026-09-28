@@ -5935,40 +5935,36 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     // flip=true: circles RIGHT side (cx ~200-255), lines LEFT.
     // flip=false: circles LEFT side (cx ≤ 85), lines RIGHT.
     //
-    // Steigung (flip=true, circles right, VW=280): a→Zw→b[outer]/c[inner]→d
-    // Scaled 1.83× vs old. Circles touch. c/b ratio ≈ 0.73
+    // Steigung (flip=true, circles right): a→Zw→b[outer]/c[inner]→d
     const steigungGears=[
       {label:"a",  inputKey:"steigA",  cx:252, cy:33,  r:24, color:"amber"},
       {label:"Zw", inputKey:"steigZw", cx:229, cy:88,  r:37, color:"amber"},
-      {label:"b",  inputKey:"steigB",  cx:196, cy:170, r:51, color:"amber", exitDy:-30},
-      {label:"c",  inputKey:"steigC",  cx:196, cy:170, r:37, color:"blue",  exitDy:+30},
-      {label:"d",  inputKey:"steigD",  cx:163, cy:240, r:26, color:"blue"},
+      {label:"b",  inputKey:"steigB",  cx:183, cy:163, r:51, color:"amber", exitDy:-30},
+      {label:"c",  inputKey:"steigC",  cx:183, cy:163, r:37, color:"blue",  exitDy:+30},
+      {label:"d",  inputKey:"steigD",  cx:167, cy:224, r:26, color:"blue"},
     ];
-    // Zahnzahl (flip=false, circles left, VW=280): d→Zw→b[outer]/c[inner]→a
-    // Scaled 1.83×. c/b ratio ≈ 0.73
+    // Zahnzahl (flip=false, circles left): d→Zw→b[outer]/c[inner]→a
     const zahnzahlGears=[
-      {label:"d",  inputKey:"zahnD",  cx:124, cy:38,  r:37, color:"amber"},
-      {label:"Zw", inputKey:"zahnZw", cx:91,  cy:88,  r:24, color:"amber"},
-      {label:"c",  inputKey:"zahnC",  cx:61,  cy:143, r:29, color:"blue",  exitDy:-24},
-      {label:"b",  inputKey:"zahnB",  cx:61,  cy:143, r:40, color:"amber", exitDy:+24},
-      {label:"a",  inputKey:"zahnA",  cx:41,  cy:216, r:37, color:"blue"},
+      {label:"d",  inputKey:"zahnD",  cx:124, cy:42,  r:37, color:"amber"},
+      {label:"Zw", inputKey:"zahnZw", cx:92,  cy:94,  r:24, color:"amber"},
+      {label:"c",  inputKey:"zahnC",  cx:113, cy:163, r:35, color:"blue",  exitDy:-30},
+      {label:"b",  inputKey:"zahnB",  cx:113, cy:163, r:48, color:"amber", exitDy:+30},
+      {label:"a",  inputKey:"zahnA",  cx:62,  cy:224, r:44, color:"blue"},
     ];
-    // Fräserdrehzahl (flip=true, circles right, VW=280): a→b[outer]/c[inner]→d
-    // Scaled 1.83×. c/b ratio ≈ 0.73
+    // Fräserdrehzahl (flip=true, circles right): a→b[outer]/c[inner]→d
     const fraesDrehzahlGears=[
-      {label:"a",  inputKey:"fraesA",  cx:247, cy:34,  r:33, color:"amber"},
-      {label:"b",  inputKey:"fraesB",  cx:210, cy:106, r:48, color:"amber", exitDy:-30},
-      {label:"c",  inputKey:"fraesC",  cx:210, cy:106, r:35, color:"blue",  exitDy:+30},
-      {label:"d",  inputKey:"fraesD",  cx:170, cy:185, r:40, color:"blue"},
+      {label:"a",  inputKey:"fraesA",  cx:234, cy:34,  r:33, color:"amber"},
+      {label:"b",  inputKey:"fraesB",  cx:197, cy:106, r:48, color:"amber", exitDy:-30},
+      {label:"c",  inputKey:"fraesC",  cx:197, cy:106, r:35, color:"blue",  exitDy:+30},
+      {label:"d",  inputKey:"fraesD",  cx:173, cy:177, r:40, color:"blue"},
     ];
-    // Längsvorschub (flip=false, circles left, VW=280): a→b[outer]/c[inner]→Zw→d
-    // Nearly vertical chain, scaled 1.83×. d is the largest circle.
+    // Längsvorschub (flip=false, circles left): a→b[outer]/c[inner]→Zw→d
     const laengsGears=[
-      {label:"a",  inputKey:"laengsA",  cx:40, cy:37,  r:29, color:"amber"},
-      {label:"b",  inputKey:"laengsB",  cx:40, cy:95,  r:29, color:"amber", exitDy:-16},
-      {label:"c",  inputKey:"laengsC",  cx:40, cy:95,  r:20, color:"blue",  exitDy:+16},
-      {label:"Zw", inputKey:"laengsZw", cx:40, cy:143, r:18, color:"blue"},
-      {label:"d",  inputKey:"laengsD",  cx:40, cy:201, r:40, color:"blue"},
+      {label:"a",  inputKey:"laengsA",  cx:70, cy:37,  r:29, color:"amber"},
+      {label:"b",  inputKey:"laengsB",  cx:70, cy:95,  r:29, color:"amber", exitDy:-16},
+      {label:"c",  inputKey:"laengsC",  cx:70, cy:95,  r:20, color:"blue",  exitDy:+16},
+      {label:"Zw", inputKey:"laengsZw", cx:70, cy:143, r:18, color:"blue"},
+      {label:"d",  inputKey:"laengsD",  cx:70, cy:201, r:40, color:"blue"},
     ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
