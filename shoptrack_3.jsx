@@ -5947,8 +5947,8 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     const zahnzahlGears=[
       {label:"d",  inputKey:"zahnD",  cx:124, cy:42,  r:37, color:"amber"},
       {label:"Zw", inputKey:"zahnZw", cx:92,  cy:94,  r:24, color:"amber"},
-      {label:"c",  inputKey:"zahnC",  cx:113, cy:163, r:35, color:"amber", exitDy:-30},
-      {label:"b",  inputKey:"zahnB",  cx:113, cy:163, r:48, color:"blue",  exitDy:+30},
+      {label:"c",  inputKey:"zahnC",  cx:113, cy:163, r:48, color:"blue",  exitDy:-30},
+      {label:"b",  inputKey:"zahnB",  cx:113, cy:163, r:35, color:"amber", exitDy:+30},
       {label:"a",  inputKey:"zahnA",  cx:62,  cy:224, r:44, color:"blue"},
     ];
     // Fräserdrehzahl (flip=true, circles right): a→b[outer]/c[inner]→d
