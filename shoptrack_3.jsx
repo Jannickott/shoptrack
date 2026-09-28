@@ -5861,9 +5861,12 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     // Input fields are rendered below the SVG so circles get the full width (matching reference).
     // flip=false: circles on left, lines go right. flip=true: circles on right, lines go left.
     const gearSvgSection=(title,totalKey,totalPh,ratioKey,gears,flip=false)=>{
-      const VW=280;
-      const LINE_END=flip?43:165;
-      const LABEL_X=flip?5:170;
+      const VW=300;
+      const LINE_END=flip?125:165;
+      const LABEL_X=flip?90:170;
+      const INPUT_X=flip?5:215;
+      const INPUT_W=80;
+      const INPUT_H=20;
       const maxY=Math.max(...gears.map(g=>g.cy+g.r))+15;
       return(
         <div style={{padding:"8px 10px 10px"}}>
@@ -5872,7 +5875,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             {totalKey&&<div style={{flex:1}}><div style={{fontSize:10,color:C.muted,marginBottom:2}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
             {ratioKey&&<div style={{flex:1}}><div style={{fontSize:10,color:C.muted,marginBottom:2}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
           </div>}
-          <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"100%",display:"block"}}>
+          <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"100%",display:"block"}} overflow="visible">
             {["amber","blue"].flatMap(col=>gears.filter(g=>g.color===col).map(g=>{
               const stroke=col==="blue"?C.blue:C.amber;
               const fill=stroke+"1a";
@@ -5887,25 +5890,17 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
                   <line x1={g.cx} y1={g.cy-g.r*0.38} x2={g.cx} y2={g.cy+g.r*0.38} stroke={stroke} strokeWidth="0.9" strokeDasharray="2,1.5"/>
                   <line x1={ex} y1={ey} x2={LINE_END} y2={ey} stroke={stroke} strokeWidth="1.3"/>
                   <text x={LABEL_X} y={ey+5} textAnchor="start" fontSize="14" fontWeight="700" fill={stroke} fontFamily="monospace">{g.label} =</text>
+                  <foreignObject x={INPUT_X} y={ey-INPUT_H/2} width={INPUT_W} height={INPUT_H}>
+                    <input
+                      style={{width:"100%",height:"100%",background:C.raised,border:`1px solid ${stroke}55`,borderRadius:"4px",color:C.green,fontSize:"13px",fontWeight:"700",textAlign:"right",padding:"0 4px",fontFamily:"'Share Tech Mono',monospace",outline:"none",boxSizing:"border-box"}}
+                      value={e[g.inputKey]||""}
+                      onChange={ev=>setE(g.inputKey,ev.target.value)}
+                    />
+                  </foreignObject>
                 </g>
               );
             }))}
           </svg>
-          <div style={{display:"flex",flexWrap:"wrap",gap:"4px 10px",marginTop:4}}>
-            {gears.map(g=>{
-              const stroke=g.color==="blue"?C.blue:C.amber;
-              return(
-                <div key={g.label} style={{display:"flex",alignItems:"center",gap:3}}>
-                  <span style={{fontSize:12,fontWeight:700,color:stroke,fontFamily:"monospace",whiteSpace:"nowrap"}}>{g.label} =</span>
-                  <input
-                    style={{width:54,height:20,background:C.raised,border:`1px solid ${stroke}55`,borderRadius:"4px",color:C.green,fontSize:"13px",fontWeight:"700",textAlign:"right",padding:"0 4px",fontFamily:"'Share Tech Mono',monospace",outline:"none",boxSizing:"border-box"}}
-                    value={e[g.inputKey]||""}
-                    onChange={ev=>setE(g.inputKey,ev.target.value)}
-                  />
-                </div>
-              );
-            })}
-          </div>
         </div>
       );
     };
