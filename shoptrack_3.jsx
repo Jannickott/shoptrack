@@ -3444,12 +3444,19 @@ function DelegateJobs({users,jobs,setJobs,saveNow}){
             <i className="ti ti-arrows-exchange"/> Confirm {readyJobs.length} delegation{readyJobs.length!==1?"s":""}
           </button>
           {activeJobs.length>1&&(
-            <button style={{...btn("outline"),fontSize:11}} onClick={()=>{
-              const first=operators.find(u=>u.id!==fromUser.id);
-              if(!first) return;
-              const all={};activeJobs.forEach(j=>{all[j.id]=String(first.id);});
-              setAssignments(all);
-            }}>Assign all to one</button>
+            <div style={{display:"flex",alignItems:"center",gap:6}}>
+              <span style={{fontSize:11,color:C.muted,whiteSpace:"nowrap"}}>Assign all to:</span>
+              <select style={{...selStyle,fontSize:12,padding:"4px 8px"}} defaultValue="" onChange={e=>{
+                const toId=e.target.value;
+                if(!toId) return;
+                const all={};activeJobs.forEach(j=>{all[j.id]=toId;});
+                setAssignments(all);
+                e.target.value="";
+              }}>
+                <option value="">— Pick operator —</option>
+                {operators.filter(u=>u.id!==fromUser.id).map(u=><option key={u.id} value={String(u.id)}>{u.name}</option>)}
+              </select>
+            </div>
           )}
         </div>
       </>)}
