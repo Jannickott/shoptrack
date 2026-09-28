@@ -5905,13 +5905,14 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
       );
     };
     // Rotary switch selector
-    const switchDial=(k,label)=>{
-      const val=e[k]||"";
+    const switchDial=(k,label,opts={})=>{
+      const labels=opts.labels||[1,2,3];
+      const n=labels.length;
+      const step=n>1?120/(n-1):0;
       const cx=40,cy=40,r=26;
-      const angles=[-150,-90,-30];
-      const pos=angles.map((a,i)=>({n:i+1,x:cx+r*Math.cos(a*Math.PI/180),y:cy+r*Math.sin(a*Math.PI/180)}));
-      const selected=parseInt(val);
-      const selPos=pos.find(p=>p.n===selected);
+      const pos=labels.map((lbl,i)=>{const a=(-150+i*step)*Math.PI/180;return{lbl:String(lbl),x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)};});
+      const val=e[k]!=null&&e[k]!==""?String(e[k]):null;
+      const selPos=val!=null?pos.find(p=>p.lbl===val):null;
       return(
         <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
           <div style={{fontSize:9,color:C.amber,fontWeight:700,letterSpacing:.5}}>{label}</div>
@@ -5919,10 +5920,10 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             <circle cx={cx} cy={cy} r={r+10} fill="none" stroke={C.border} strokeWidth="1.5"/>
             <circle cx={cx} cy={cy} r={4} fill={C.muted}/>
             {selPos&&<line x1={cx} y1={cy} x2={selPos.x} y2={selPos.y} stroke="#e53e3e" strokeWidth="3" strokeLinecap="round"/>}
-            {pos.map(p=>{const sel=p.n===selected;return(
-              <g key={p.n} onClick={()=>setE(k,sel?"":String(p.n))} style={{cursor:"pointer"}}>
+            {pos.map((p,i)=>{const sel=val===p.lbl;return(
+              <g key={i} onClick={()=>setE(k,sel?"":p.lbl)} style={{cursor:"pointer"}}>
                 <circle cx={p.x} cy={p.y} r={10} fill={sel?"#e53e3e":C.raised} stroke={sel?"#e53e3e":C.border} strokeWidth="1.5"/>
-                <text x={p.x} y={p.y+4} textAnchor="middle" fontSize="11" fontWeight="800" fill={sel?"#fff":C.muted}>{p.n}</text>
+                <text x={p.x} y={p.y+4} textAnchor="middle" fontSize="11" fontWeight="800" fill={sel?"#fff":C.muted}>{p.lbl}</text>
               </g>
             );})}
           </svg>
@@ -6025,7 +6026,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         {/* Switch positions */}
         {secHdr("Schalterstellungen / Switch Positions — auf rot einstellen")}
         <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          {[["schalterA2","a2"],["schalterA3","a3"],["schalterA4","a4"],["schalterA5","a5"]].map(([k,lbl])=>switchDial(k,lbl))}
+          {[["schalterA2","a2",{}],["schalterA3","a3",{labels:[0,1,2,3]}],["schalterA4","a4",{labels:[1,2,2,1]}],["schalterA5","a5",{}]].map(([k,lbl,opts])=>switchDial(k,lbl,opts))}
         </div>
         {/* Tauchsteuerung + production */}
         {secHdr("Tauchsteuerung / Plunge + Production")}
