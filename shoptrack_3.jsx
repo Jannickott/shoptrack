@@ -5876,8 +5876,8 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
             {ratioKey&&<div style={{flex:1}}><div style={{fontSize:10,color:C.muted,marginBottom:2}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
           </div>}
           <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"100%",display:"block"}} overflow="visible">
-            {["amber","blue"].flatMap(col=>gears.filter(g=>g.color===col).map(g=>{
-              const stroke=col==="blue"?C.blue:C.amber;
+            {[...gears].sort((a,b)=>b.r-a.r).map(g=>{
+              const stroke=g.color==="blue"?C.blue:C.amber;
               const fill=stroke+"1a";
               const edy=g.exitDy||0;
               const edx=Math.sqrt(Math.max(0,g.r*g.r-edy*edy));
@@ -5899,7 +5899,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
                   </foreignObject>
                 </g>
               );
-            }))}
+            })}
           </svg>
         </div>
       );
@@ -5947,8 +5947,8 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     const zahnzahlGears=[
       {label:"d",  inputKey:"zahnD",  cx:124, cy:42,  r:37, color:"amber"},
       {label:"Zw", inputKey:"zahnZw", cx:92,  cy:94,  r:24, color:"amber"},
-      {label:"c",  inputKey:"zahnC",  cx:113, cy:163, r:35, color:"blue",  exitDy:-30},
-      {label:"b",  inputKey:"zahnB",  cx:113, cy:163, r:48, color:"amber", exitDy:+30},
+      {label:"c",  inputKey:"zahnC",  cx:113, cy:163, r:35, color:"amber", exitDy:-30},
+      {label:"b",  inputKey:"zahnB",  cx:113, cy:163, r:48, color:"blue",  exitDy:+30},
       {label:"a",  inputKey:"zahnA",  cx:62,  cy:224, r:44, color:"blue"},
     ];
     // Fräserdrehzahl (flip=true, circles right): a→b[outer]/c[inner]→d
