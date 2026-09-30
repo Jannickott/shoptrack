@@ -616,7 +616,7 @@ export default function App(){
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
-      {tab==="reports"  &&<ReportsTab        jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals}/>}
+      {tab==="reports"  &&<ReportsTab        jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
@@ -2620,12 +2620,12 @@ function ResolvedIssueCard({entry,setDowntimeLog,saveNow}){
 // ═══════════════════════════════════════════════════════
 // REPORTS — date range + filters + export
 // ═══════════════════════════════════════════════════════
-function ReportsTab({jobs,machines,departments,efficiencyGoals}){
+function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,downtimeLog}){
   const MONTHS=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const done=jobs.filter(j=>j.status==='done');
   const allMachNames=[...new Set([...machines.filter(m=>m.active).map(m=>m.name),...done.map(j=>j.machine)])].sort();
   const allDepts=departments||[];
-  const targetEff=efficiencyGoals?.overall??80;
+  const dl=downtimeLog||[];
 
   const [mode,setMode]=useState('machine');
   const [period,setPeriod]=useState('month');
@@ -2636,14 +2636,30 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
   const [jobSearch,setJobSearch]=useState('');
   const [machFilter,setMachFilter]=useState('all');
 
-  const jEff=j=>{const t=(j.runSec||0)+(j.setupSec||0);return t>0?Math.round((j.runSec||0)/t*100):null;};
-  const avgEff=arr=>{const v=arr.map(j=>jEff(j)).filter(e=>e!==null);return v.length?Math.round(v.reduce((s,e)=>s+e,0)/v.length):null;};
-
   const entityJobs=name=>{
     if(mode==='machine') return done.filter(j=>j.machine===name);
     const ms=machines.filter(m=>m.department===name).map(m=>m.name);
     return done.filter(j=>ms.includes(j.machine));
   };
+
+  // Same formula as dashboard: run / (availableWorkSec × machineCount)
+  const bucketStats=(name,b)=>{
+    const inRange=j=>(j.completedAt||0)>=b.start&&(j.completedAt||0)<b.end;
+    const ej=entityJobs(name).filter(inRange);
+    const runSec=ej.reduce((s,j)=>s+(j.runSec||0),0);
+    const setupSec=ej.reduce((s,j)=>s+(j.setupSec||0),0);
+    let machCount,machNames;
+    if(mode==='machine'){machCount=1;machNames=[name];}
+    else{machNames=machines.filter(m=>m.active&&m.department===name).map(m=>m.name);machCount=Math.max(machNames.length,1);}
+    const issueSec=dl.filter(d=>(machNames.length===0||machNames.includes(d.machineName))&&(d.resolvedAt||0)>=b.start&&(d.resolvedAt||0)<b.end).reduce((s,d)=>s+(d.downtimeSec||0),0);
+    const availSec=Math.max(calcAvailableWorkSec(workHours||{},b.start,b.end)*machCount,1);
+    const eff=Math.round(runSec/availSec*100);
+    return{runSec,setupSec,issueSec,availSec,eff};
+  };
+
+  // For job mode: keep run/(run+setup) ratio (comparing across machines for one job)
+  const jEff=j=>{const t=(j.runSec||0)+(j.setupSec||0);return t>0?Math.round((j.runSec||0)/t*100):null;};
+  const avgEff=arr=>{const v=arr.map(j=>jEff(j)).filter(e=>e!==null);return v.length?Math.round(v.reduce((s,e)=>s+e,0)/v.length):null;};
 
   const getBuckets=()=>{
     const now=new Date(); const res=[];
@@ -2668,6 +2684,16 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
     return res;
   };
 
+  const getTarget=(entityName)=>{
+    const goals=efficiencyGoals||{};
+    if(entityName&&mode==='machine'&&goals.machines?.[entityName]!=null) return goals.machines[entityName];
+    if(entityName&&mode==='department'&&goals.departments?.[entityName]!=null) return goals.departments[entityName];
+    if(period==='week') return goals.week??75;
+    if(period==='month') return goals.month??78;
+    return goals.overall??80;
+  };
+  const targetEff=getTarget(entityA||null);
+
   const hasB=!!entityB&&mode!=='job'&&!showAll;
   const buckets=getBuckets();
 
@@ -2681,21 +2707,19 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
       const byMach={};
       matched.forEach(j=>{if(!byMach[j.machine])byMach[j.machine]=[];byMach[j.machine].push(j);});
       chartData=Object.entries(byMach).sort((a,b)=>b[1].length-a[1].length).map(([mach,mj])=>({
-        label:mach,effA:avgEff(mj),countA:mj.length
+        label:mach,sA:{eff:avgEff(mj),runSec:mj.reduce((s,j)=>s+(j.runSec||0),0),setupSec:mj.reduce((s,j)=>s+(j.setupSec||0),0),issueSec:0,availSec:mj.reduce((s,j)=>s+(j.runSec||0)+(j.setupSec||0),1)},countA:mj.length
       }));
     }
   } else if(showAll){
     const entities=mode==='machine'?allMachNames:allDepts;
     const b=buckets[buckets.length-1];
-    const inRange=j=>(j.completedAt||0)>=b.start&&(j.completedAt||0)<b.end;
-    chartData=entities.map(name=>{const ej=entityJobs(name).filter(inRange);return{label:name,effA:avgEff(ej),countA:ej.length};});
+    chartData=entities.map(name=>({label:name,sA:bucketStats(name,b)}));
   } else if(entityA){
-    chartData=buckets.map(b=>{
-      const inRange=j=>(j.completedAt||0)>=b.start&&(j.completedAt||0)<b.end;
-      const ajA=entityJobs(entityA).filter(inRange);
-      const ajB=entityB?entityJobs(entityB).filter(inRange):[];
-      return{label:b.label,effA:avgEff(ajA),effB:entityB?avgEff(ajB):undefined,countA:ajA.length,countB:ajB.length};
-    });
+    chartData=buckets.map(b=>({
+      label:b.label,
+      sA:bucketStats(entityA,b),
+      sB:entityB?bucketStats(entityB,b):null,
+    }));
   }
 
   // SVG chart dimensions
@@ -2710,15 +2734,25 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
 
   const showChart=(mode==='job'?jobSearch.trim().length>0:showAll||!!entityA)&&chartData.length>0;
 
-  const drawBar=(eff,bx,color,cnt,cntY)=>{
-    if(eff===null||eff===undefined) return null;
-    const bh=Math.max(cH*(eff/100),2); const by=MT+cH-bh;
-    const inside=bh>18;
+  const drawBar=(stats,bx,cntY)=>{
+    if(!stats) return null;
+    const{runSec=0,setupSec=0,issueSec=0,availSec=1,eff=0}=stats;
+    if(availSec<=0) return null;
+    const runPct=Math.min(runSec/availSec,1);
+    const setupPct=Math.min(setupSec/availSec,Math.max(1-runPct,0));
+    const issuePct=Math.min(issueSec/availSec,Math.max(1-runPct-setupPct,0));
+    const freePct=Math.max(1-runPct-setupPct-issuePct,0);
+    const freeH=cH*freePct, issueH=cH*issuePct, setupH=cH*setupPct, runH=cH*runPct;
+    const y0=MT, y1=y0+freeH, y2=y1+issueH, y3=y2+setupH;
+    const inside=runH>14;
     return(
       <g>
-        <rect x={bx-barW/2} y={by} width={barW} height={bh} fill={color} fillOpacity={0.88} rx={2}/>
-        <text x={bx} y={inside?by+bh/2+3.5:by-3} textAnchor="middle" fontSize={9} fill={inside?"white":color} fontWeight="700">{eff}%</text>
-        {cnt>0&&<text x={bx} y={cntY} textAnchor="middle" fontSize={7} fill={C.muted}>{cnt}</text>}
+        {freeH>0.5&&<rect x={bx-barW/2} y={y0} width={barW} height={freeH} fill={C.border} fillOpacity={0.5} rx={2}/>}
+        {issueH>0.5&&<rect x={bx-barW/2} y={y1} width={barW} height={issueH} fill={C.red} fillOpacity={0.85}/>}
+        {setupH>0.5&&<rect x={bx-barW/2} y={y2} width={barW} height={setupH} fill={C.amber} fillOpacity={0.85}/>}
+        {runH>0.5&&<rect x={bx-barW/2} y={y3} width={barW} height={runH} fill={C.green} fillOpacity={0.88} rx={2}/>}
+        <text x={bx} y={inside?y3+runH/2+3.5:y3-3} textAnchor="middle" fontSize={9} fill={inside?'#fff':C.green} fontWeight="700">{eff}%</text>
+        {cntY&&<text x={bx} y={cntY} textAnchor="middle" fontSize={7} fill={C.muted}>{stats.count||''}</text>}
       </g>
     );
   };
@@ -2856,12 +2890,11 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
               const cx=xCtr(i);
               const bxA=hasB?cx-barW*0.58:cx;
               const bxB=cx+barW*0.58;
-              const cntY=MT+cH+(rotLabels?40:30);
               const lblY=MT+cH+(rotLabels?14:16);
               return(
                 <g key={i}>
-                  {drawBar(d.effA,bxA,C.blue,d.countA,cntY)}
-                  {hasB&&drawBar(d.effB,bxB,C.amber,d.countB,cntY+8)}
+                  {drawBar(d.sA,bxA)}
+                  {hasB&&drawBar(d.sB,bxB)}
                   {rotLabels
                     ?<text x={cx} y={MT+cH+8} textAnchor="end" fontSize={8} fill={C.muted} transform={`rotate(-35,${cx},${MT+cH+8})`}>{d.label}</text>
                     :<text x={cx} y={lblY} textAnchor="middle" fontSize={9} fill={C.muted}>{d.label}</text>
@@ -2872,17 +2905,16 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals}){
             <line x1={ML} x2={ML} y1={MT} y2={MT+cH} stroke={C.border} strokeWidth={1}/>
             <line x1={ML} x2={ML+cW} y1={MT+cH} y2={MT+cH} stroke={C.border} strokeWidth={1}/>
           </svg>
-          <div style={{display:'flex',gap:14,justifyContent:'center',marginTop:8,flexWrap:'wrap'}}>
-            {mode==='job'
-              ?<span style={{fontSize:10,color:C.muted,display:'flex',alignItems:'center',gap:5}}><span style={{width:10,height:10,borderRadius:2,background:C.blue,display:'inline-block'}}/>Avg efficiency per machine · "{jobSearch}"</span>
-              :<>
-                {entityA&&<span style={{fontSize:10,color:C.blue,display:'flex',alignItems:'center',gap:5,fontWeight:600}}><span style={{width:10,height:10,borderRadius:2,background:C.blue,display:'inline-block'}}/>{entityA}</span>}
-                {entityB&&<span style={{fontSize:10,color:C.amber,display:'flex',alignItems:'center',gap:5,fontWeight:600}}><span style={{width:10,height:10,borderRadius:2,background:C.amber,display:'inline-block'}}/>{entityB}</span>}
-              </>
-            }
-            <span style={{fontSize:10,color:C.green,display:'flex',alignItems:'center',gap:5}}>
-              <span style={{width:14,height:2,background:C.green,display:'inline-block'}}/> Target {targetEff}%
+          <div style={{display:'flex',gap:14,justifyContent:'center',marginTop:8,flexWrap:'wrap',alignItems:'center'}}>
+            <span style={{fontSize:10,color:C.green,display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:C.green,display:'inline-block'}}/> Run</span>
+            <span style={{fontSize:10,color:C.amber,display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:C.amber,display:'inline-block'}}/> Setup</span>
+            <span style={{fontSize:10,color:C.red,display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:C.red,display:'inline-block'}}/> Issues</span>
+            <span style={{fontSize:10,color:C.muted,display:'flex',alignItems:'center',gap:4}}><span style={{width:10,height:10,borderRadius:2,background:C.border,display:'inline-block'}}/> Available</span>
+            <span style={{fontSize:10,color:C.green,display:'flex',alignItems:'center',gap:4}}>
+              <span style={{width:14,height:2,background:C.green,display:'inline-block',borderTop:'2px dashed '+C.green}}/> Target {targetEff}%
             </span>
+            {hasB&&entityA&&<span style={{fontSize:10,color:C.blue,display:'flex',alignItems:'center',gap:4,fontWeight:600}}>{entityA}</span>}
+            {hasB&&entityB&&<span style={{fontSize:10,color:C.amber,display:'flex',alignItems:'center',gap:4,fontWeight:600}}>{entityB}</span>}
           </div>
         </div>
       ):(
