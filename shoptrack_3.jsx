@@ -2635,16 +2635,24 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,downtim
   const [showAll,setShowAll]=useState(false);
   const [jobSearch,setJobSearch]=useState('');
   const [machFilter,setMachFilter]=useState('all');
+  const [weekNumInput,setWeekNumInput]=useState('');
+
+  // ISO week helpers
+  const getISOWeek=d=>{const t=new Date(d);t.setHours(0,0,0,0);t.setDate(t.getDate()+3-((t.getDay()+6)%7));const w1=new Date(t.getFullYear(),0,4);return 1+Math.round(((t-w1)/86400000-3+((w1.getDay()+6)%7))/7);};
+  const isoWeekToMonday=(year,week)=>{const jan4=new Date(year,0,4);const dow=jan4.getDay()||7;const m=new Date(jan4);m.setDate(jan4.getDate()-dow+1+(week-1)*7);m.setHours(0,0,0,0);return m;};
+  const currentISOWeek=getISOWeek(new Date());
+  const weekRefMonday=weekNumInput?isoWeekToMonday(new Date().getFullYear(),parseInt(weekNumInput)):null;
 
   const entityJobs=name=>{
-    if(mode==='machine') return done.filter(j=>j.machine===name);
+    if(mode==='machine') return jobs.filter(j=>j.machine===name);
     const ms=machines.filter(m=>m.department===name).map(m=>m.name);
-    return done.filter(j=>ms.includes(j.machine));
+    return jobs.filter(j=>ms.includes(j.machine));
   };
 
   // Same formula as dashboard: run / (availableWorkSec × machineCount)
+  // Uses createdAt so jobs belong to the week they were started (matches dashboard)
   const bucketStats=(name,b)=>{
-    const inRange=j=>(j.completedAt||0)>=b.start&&(j.completedAt||0)<b.end;
+    const inRange=j=>(j.createdAt||0)>=b.start&&(j.createdAt||0)<b.end;
     const ej=entityJobs(name).filter(inRange);
     const runSec=ej.reduce((s,j)=>s+(j.runSec||0),0);
     const setupSec=ej.reduce((s,j)=>s+(j.setupSec||0),0);
@@ -2666,10 +2674,14 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,downtim
     for(let i=count-1;i>=0;i--){
       let start,end,label;
       if(period==='week'){
-        const mon=new Date(now); mon.setDate(now.getDate()-((now.getDay()+6)%7)-i*7); mon.setHours(0,0,0,0);
+        // If a week number was entered, start from that week; otherwise start from current week
+        const baseMonday=weekRefMonday||new Date(now);
+        if(!weekRefMonday){baseMonday.setDate(now.getDate()-((now.getDay()+6)%7));baseMonday.setHours(0,0,0,0);}
+        const mon=new Date(baseMonday); mon.setDate(baseMonday.getDate()-i*7);
         const nxt=new Date(mon); nxt.setDate(mon.getDate()+7);
         start=mon.getTime(); end=nxt.getTime();
-        label=`${mon.getDate()}/${mon.getMonth()+1}`;
+        const wn=getISOWeek(mon);
+        label=`W${wn}`;
       } else if(period==='month'){
         const d=new Date(now.getFullYear(),now.getMonth()-i,1);
         const nxt=new Date(d.getFullYear(),d.getMonth()+1,1);
@@ -2781,6 +2793,19 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,downtim
             <select style={{...sel(),fontSize:10,padding:'4px 6px'}} value={count} onChange={e=>setCount(Number(e.target.value))}>
               {[4,6,8,12,24].map(v=><option key={v} value={v}>Last {v}</option>)}
             </select>
+            {period==='week'&&(
+              <div style={{display:'flex',alignItems:'center',gap:4}}>
+                <span style={{fontSize:10,color:C.muted,whiteSpace:'nowrap'}}>Week #</span>
+                <input
+                  type="number" min="1" max="53"
+                  placeholder={String(currentISOWeek)}
+                  value={weekNumInput}
+                  onChange={e=>setWeekNumInput(e.target.value)}
+                  style={{...inp(),width:52,fontSize:10,padding:'3px 6px',textAlign:'center'}}
+                />
+                {weekNumInput&&<button onClick={()=>setWeekNumInput('')} style={{background:'none',border:'none',color:C.muted,cursor:'pointer',fontSize:12,padding:0}}><i className="ti ti-x"/></button>}
+              </div>
+            )}
           </div>
         )}
       </div>
