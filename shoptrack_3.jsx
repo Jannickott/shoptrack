@@ -3629,13 +3629,23 @@ function suggestRoute(hist){
   return steps;
 }
 
-// Planned seconds for a step: typed minutes win, else the history estimate
+// Planned seconds for a step: typed minutes win, else the history estimate.
+// Setup is once per step, run grows with the quantity.
 function stepDuration(step,qty,hist){
   const est=estimateStep(hist,step);
   const num=v=>v===""||v==null||isNaN(Number(v))?null:Number(v);
   const setup=num(step.setupMin)!=null?num(step.setupMin)*60:est?.setupSec;
   const perPc=num(step.runMinPerPc)!=null?num(step.runMinPerPc)*60:est?.runPerPcSec;
-  return {est,durationSec:setup==null||perPc==null?null:Math.round(setup+perPc*(qty||0))};
+  if(setup==null||perPc==null) return {est,durationSec:null};
+  const setupSec=Math.round(setup),runSec=Math.round(perPc*(qty||0));
+  return {est,setupSec,runSec,durationSec:setupSec+runSec};
+}
+
+// The moment `sec` of work time has passed inside a block's segments
+function workPoint(segs,sec){
+  let left=sec*1000;
+  for(const [s,e] of segs){if(left<=e-s) return s+left;left-=e-s;}
+  return segs.length?segs[segs.length-1][1]:null;
 }
 
 // Work window [start,end] of the day containing ms, or null on a day off
@@ -3662,36 +3672,56 @@ function addWorkTime(wh,startMs,sec){
 
 // Greedy forward plan: running jobs first (their estimated remaining time), then
 // orders in priority order; each step waits for the previous one and goes to the
-// machine in its department that can finish it first.
+// machine in its department that can finish it first. A machine that is already
+// set up for the same part and step needs no new setup.
 function buildPlan({orders,jobs,allMachines,machines,workHours,now}){
   const free={};machines.forEach(m=>{free[m.name]=now;});
+  const last={}; // machine → what it is set up for: {part,stepIdx,orderId,live}
   const blocks=[];
   jobs.filter(j=>j.status!=="done"&&j.status!=="deburring"&&free[j.machine]!=null).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).forEach(j=>{
-    const typical=median(partHistory(jobs,allMachines,j.job).filter(h=>h.machine===j.machine).map(h=>h.setupSec+h.runSec));
+    const h=partHistory(jobs,allMachines,j.job).filter(x=>x.machine===j.machine);
+    const typSetup=median(h.map(x=>x.setupSec)),typRun=median(h.map(x=>x.runSec));
     const lt=liveTime(j);
-    let r;
-    if(typical!=null) r=addWorkTime(workHours,free[j.machine],Math.max(0,typical-(lt.setup+lt.run+lt.setup2+lt.run2)));
-    else{const w=dayWindow(workHours,now);r=w&&now<w[1]?{end:w[1],segs:[[Math.max(now,w[0]),w[1]]]}:{end:now,segs:[]};} // unknown: assume it finishes today
-    blocks.push({live:true,guess:typical==null,machine:j.machine,end:r.end,segs:r.segs,label:[j.customer,j.job].filter(Boolean).join(" · "),operator:j.operatorName});
+    const inSetup=j.status==="setup"||j.status==="side2_setup";
+    let r,setupLeft=0;
+    if(typSetup!=null&&typRun!=null){
+      const remaining=Math.max(0,typSetup+typRun-(lt.setup+lt.run+lt.setup2+lt.run2));
+      if(inSetup) setupLeft=Math.min(remaining,Math.max(0,typSetup-(j.status==="setup"?lt.setup:lt.setup2)));
+      r=addWorkTime(workHours,free[j.machine],remaining);
+    }else{const w=dayWindow(workHours,now);r=w&&now<w[1]?{end:w[1],segs:[[Math.max(now,w[0]),w[1]]]}:{end:now,segs:[]};} // unknown: assume it finishes today
+    blocks.push({live:true,guess:typSetup==null,inSetup,machine:j.machine,end:r.end,segs:r.segs,setupEnd:workPoint(r.segs,setupLeft),
+      label:[j.customer,j.job].filter(Boolean).join(" · "),operator:j.operatorName});
     free[j.machine]=Math.max(free[j.machine],r.end);
+    last[j.machine]={part:normPart(j.job),live:true};
   });
   const ordered=orders.filter(o=>!o.deleted&&!o.done).sort(orderCmp);
   const results={};
   ordered.forEach(o=>{
     const hist=partHistory(jobs,allMachines,o.partNumber);
     let prevEnd=now,problem=null;const steps=[];
+    const part=normPart(o.partNumber);
     for(const [i,st] of (o.steps||[]).entries()){
-      const {durationSec}=stepDuration(st,o.quantity,hist);
+      const sd=stepDuration(st,o.quantity,hist);
       const name=st.machine||st.department||"?";
-      if(durationSec==null){problem=`Step ${i+1} (${name}) has no time — no history, enter minutes`;break;}
+      if(sd.durationSec==null){problem=`Step ${i+1} (${name}) has no time — no history, enter minutes`;break;}
       const cands=st.machine?machines.filter(m=>m.name===st.machine):machines.filter(m=>m.department===st.department);
       if(!cands.length){problem=`No active machine for step ${i+1} (${name})`;break;}
       let best=null;
-      cands.forEach(m=>{const r=addWorkTime(workHours,Math.max(free[m.name],prevEnd),durationSec);if(r.ok&&(!best||r.end<best.r.end))best={m,r};});
+      cands.forEach(m=>{
+        // Same part and same step of the route right before on this machine (another
+        // order, or the job running now) → it's already set up
+        const p=last[m.name];
+        const setUp=!!p&&p.part===part&&p.orderId!==o.id&&(p.live||p.stepIdx===i);
+        const setupSec=setUp?0:sd.setupSec;
+        const r=addWorkTime(workHours,Math.max(free[m.name],prevEnd),setupSec+sd.runSec);
+        if(r.ok&&(!best||r.end<best.r.end))best={m,r,setupSec,setUp};
+      });
       if(!best){problem=`No work hours set — can't plan step ${i+1}`;break;}
       free[best.m.name]=best.r.end;
-      const b={orderId:o.id,stepIdx:i,machine:best.m.name,start:best.r.segs[0]?.[0]??prevEnd,end:best.r.end,segs:best.r.segs,durationSec,
-        label:[o.customer,o.partNumber].filter(Boolean).join(" · ")};
+      last[best.m.name]={part,stepIdx:i,orderId:o.id};
+      const b={orderId:o.id,stepIdx:i,machine:best.m.name,start:best.r.segs[0]?.[0]??prevEnd,end:best.r.end,segs:best.r.segs,
+        setupSec:best.setupSec,runSec:sd.runSec,durationSec:best.setupSec+sd.runSec,setupSaved:best.setUp?sd.setupSec:0,
+        setupEnd:workPoint(best.r.segs,best.setupSec),label:[o.customer,o.partNumber].filter(Boolean).join(" · ")};
       prevEnd=best.r.end;blocks.push(b);steps.push(b);
     }
     const end=!problem&&steps.length?prevEnd:null;
@@ -3729,16 +3759,23 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
   const lateCount=plan.ordered.filter(o=>plan.results[o.id]?.late).length;
   const fmtDay=ms=>new Date(ms).toLocaleDateString("en-GB",{weekday:"short",day:"2-digit",month:"short"});
 
-  // Pieces of a machine's blocks inside one day's work window, as % positions
+  // Pieces of a machine's blocks inside one day's work window, as % positions,
+  // split where setup ends so setup can be drawn darker
   const daySegments=(machine,w)=>{
     const out=[];
+    const piece=(b,key,a,z,setup)=>{if(z>a)out.push({b,key,setup,left:(a-w[0])/(w[1]-w[0])*100,width:(z-a)/(w[1]-w[0])*100,sec:(z-a)/1000});};
     plan.blocks.filter(b=>b.machine===machine).forEach((b,bi)=>b.segs.forEach(([s,e],si)=>{
       if(e<=w[0]||s>=w[1]) return;
       const a=Math.max(s,w[0]),z=Math.min(e,w[1]);
-      out.push({b,key:`${bi}-${si}`,left:(a-w[0])/(w[1]-w[0])*100,width:(z-a)/(w[1]-w[0])*100,sec:(z-a)/1000});
+      const cut=b.setupEnd==null?a:Math.min(Math.max(b.setupEnd,a),z);
+      piece(b,`${bi}-${si}-s`,a,cut,true);
+      piece(b,`${bi}-${si}-r`,cut,z,false);
     }));
     return out;
   };
+  const blockInfo=b=>b.live
+    ?`Running now: ${b.label} (${b.operator||""})${b.guess?" — no history, assumed done today":b.inSetup?" — in setup":""}`
+    :`${b.label} · step ${b.stepIdx+1}\nSetup ${b.setupSaved?`skipped (${b.machine} already set up for this part, saves ${fmtHM(b.setupSaved)})`:fmtHM(b.setupSec)} + run ${fmtHM(b.runSec)}`;
 
   if(editing) return <PlanOrderForm order={editing} jobs={jobs} machines={machines} activeMachines={activeMachines} allDepts={allDepts}
     onCancel={()=>setEditing(null)}
@@ -3750,9 +3787,12 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
   const todayStart=new Date().setHours(0,0,0,0);
   const weekNo=(()=>{const t=new Date(weekStart);t.setDate(t.getDate()+3);const w1=new Date(t.getFullYear(),0,4);return 1+Math.round(((t-w1)/86400000-3+((w1.getDay()+6)%7))/7);})();
 
-  const blockStyle=(b,selected)=>({position:"absolute",top:3,bottom:3,borderRadius:4,overflow:"hidden",whiteSpace:"nowrap",fontSize:9,lineHeight:"14px",padding:"1px 3px",cursor:b.live?"default":"pointer",
-    color:b.live?C.text:"#111",fontWeight:700,
-    background:b.live?"repeating-linear-gradient(45deg,#3a4a60,#3a4a60 4px,#2e3b4e 4px,#2e3b4e 8px)":colorOf(b.orderId),
+  // Setup = same colour, darkened, so setup vs run shows at a glance
+  const blockStyle=(b,selected,setup)=>({position:"absolute",top:3,bottom:3,overflow:"hidden",whiteSpace:"nowrap",fontSize:9,lineHeight:"14px",padding:"1px 3px",cursor:b.live?"default":"pointer",
+    color:b.live||setup?C.text:"#111",fontWeight:700,
+    background:b.live
+      ?(setup?"repeating-linear-gradient(45deg,#2a3546,#2a3546 4px,#202a38 4px,#202a38 8px)":"repeating-linear-gradient(45deg,#3a4a60,#3a4a60 4px,#2e3b4e 4px,#2e3b4e 8px)")
+      :setup?`linear-gradient(rgba(0,0,0,.5),rgba(0,0,0,.5)),${colorOf(b.orderId)}`:colorOf(b.orderId),
     opacity:selectedId&&!selected?0.3:1,border:selected?"2px solid #fff":"none",boxSizing:"border-box"});
 
   const weekView=(
@@ -3778,11 +3818,11 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
               if(!w) return <div key={d} style={{background:"rgba(255,255,255,.02)",borderRadius:4,minHeight:34}}/>;
               return(
                 <div key={d} style={{position:"relative",background:C.raised,borderRadius:4,minHeight:34,outline:d===todayStart?`1px solid ${C.amber}55`:"none"}}>
-                  {daySegments(m.name,w).map(({b,key,left,width})=>(
-                    <div key={key} title={`${b.live?"Running now: ":""}${b.label}${b.live?` (${b.operator||""})${b.guess?" — no history, assumed done today":""}`:` · step ${b.stepIdx+1}`}\n${fmtDate(b.segs[0]?.[0]??b.end)} → ${fmtDate(b.end)}`}
+                  {daySegments(m.name,w).map(({b,key,left,width,setup})=>(
+                    <div key={key} title={`${setup?"SETUP — ":""}${blockInfo(b)}\n${fmtDate(b.segs[0]?.[0]??b.end)} → ${fmtDate(b.end)}`}
                       onClick={()=>!b.live&&setSelectedId(id=>id===b.orderId?null:b.orderId)}
-                      style={{...blockStyle(b,b.orderId===selectedId),left:`${left}%`,width:`${width}%`}}>
-                      {width>12?b.label:""}
+                      style={{...blockStyle(b,b.orderId===selectedId,setup),left:`${left}%`,width:`${width}%`}}>
+                      {width>12?(setup?"Setup":b.label):""}
                     </div>
                   ))}
                 </div>
@@ -3791,7 +3831,7 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
           </div>
         ))}
       </div>
-      <div style={{fontSize:9,color:C.muted,marginTop:8}}>Each day shows its work hours. Striped = running now (estimated). Click a block to highlight its order.</div>
+      <div style={{fontSize:9,color:C.muted,marginTop:8}}>Each day shows its work hours. Dark part = setup, bright part = run. Striped = running now (estimated). Click a block to highlight its order; hover for times.</div>
     </div>
   );
 
@@ -3822,17 +3862,20 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
               const w=dayWindow(workHours,d);
               if(!w) return <div key={d} style={{background:"rgba(255,255,255,.02)",borderRadius:2,minHeight:24}}/>;
               const segs=daySegments(m.name,w);
-              const load=Math.min(1,segs.reduce((s,x)=>s+x.sec,0)/((w[1]-w[0])/1000));
+              const daySec=(w[1]-w[0])/1000;
+              const load=Math.min(1,segs.reduce((s,x)=>s+x.sec,0)/daySec);
+              const setupLoad=Math.min(load,segs.filter(x=>x.setup).reduce((s,x)=>s+x.sec,0)/daySec);
               const sel=selectedId&&segs.some(x=>x.b.orderId===selectedId);
-              return <div key={d} title={`${m.name} · ${fmtDay(d)}\n${Math.round(load*100)}% planned${segs.length?"\n"+[...new Set(segs.map(x=>x.b.label))].join("\n"):""}`}
-                style={{background:load?`rgba(59,130,246,${0.15+load*0.75})`:C.raised,borderRadius:2,minHeight:24,fontSize:8,color:"#fff",textAlign:"center",lineHeight:"24px",outline:sel?"2px solid #fff":d===todayStart?`1px solid ${C.amber}88`:"none"}}>
+              return <div key={d} title={`${m.name} · ${fmtDay(d)}\n${Math.round(load*100)}% planned — ${Math.round(setupLoad*100)}% setup, ${Math.round((load-setupLoad)*100)}% run${segs.length?"\n"+[...new Set(segs.map(x=>x.b.label))].join("\n"):""}`}
+                style={{position:"relative",overflow:"hidden",background:load?`rgba(59,130,246,${0.15+load*0.75})`:C.raised,borderRadius:2,minHeight:24,fontSize:8,color:"#fff",textAlign:"center",lineHeight:"24px",outline:sel?"2px solid #fff":d===todayStart?`1px solid ${C.amber}88`:"none"}}>
                 {load>=0.05?Math.round(load*100):""}
+                {setupLoad>0&&<div style={{position:"absolute",left:0,right:0,bottom:0,height:`${Math.max(8,setupLoad*100)}%`,background:"rgba(240,165,0,.75)"}}/>}
               </div>;
             })}
           </div>
         ))}
       </div>
-      <div style={{fontSize:9,color:C.muted,marginTop:8,marginBottom:12}}>Numbers = % of that day's work hours planned on the machine. Hover a day to see the jobs.</div>
+      <div style={{fontSize:9,color:C.muted,marginTop:8,marginBottom:12}}>Numbers = % of that day's work hours planned on the machine; the <span style={{color:C.amber}}>amber part</span> is setup. Hover a day to see the jobs.</div>
       <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Finishing in {monthLabel}</div>
       {!finishing.length&&<div style={{fontSize:11,color:C.muted}}>No orders planned to finish this month.</div>}
       {finishing.map(o=>{const r=plan.results[o.id];return(
@@ -3872,7 +3915,7 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
                 <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
                   {(o.steps||[]).map((st,si)=>{const b=r.steps?.[si];return(
                     <span key={st.id||si} style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:C.raised,color:C.text}}>
-                      {si+1}. {st.department||"—"} → {b?b.machine:(st.machine||"any")}{b&&<span style={{color:C.muted}}> · {fmtHM(b.durationSec)} · {fmtDay(b.start)}</span>}
+                      {si+1}. {st.department||"—"} → {b?b.machine:(st.machine||"any")}{b&&<span style={{color:C.muted}}> · <span style={{color:C.amber}}>{b.setupSaved?"no setup":`${fmtHM(b.setupSec)} setup`}</span> + <span style={{color:C.green}}>{fmtHM(b.runSec)} run</span> · {fmtDay(b.start)}</span>}
                     </span>
                   );})}
                 </div>
@@ -3957,7 +4000,7 @@ function PlanOrderForm({order,jobs,machines,activeMachines,allDepts,onCancel,onS
         {suggested.length>0&&<button style={btn("outline",false,true)} onClick={()=>set("steps",suggested)}><i className="ti ti-history"/> Use previous route ({suggested.length})</button>}
       </div>
       {o.steps.map((st,i)=>{
-        const {est,durationSec}=stepDuration(st,qty,hist);
+        const {est,durationSec,setupSec,runSec}=stepDuration(st,qty,hist);
         const deptMachines=activeMachines.filter(m=>!st.department||m.department===st.department);
         return(
           <div key={st.id||i} style={{...card(),padding:"10px 12px"}}>
@@ -3981,7 +4024,7 @@ function PlanOrderForm({order,jobs,machines,activeMachines,allDepts,onCancel,onS
             </div>
             <div style={{fontSize:10,color:C.muted,marginTop:6,paddingLeft:32}}>
               {est?<>History: {Math.round(est.setupSec/60)} min setup{est.runPerPcSec!=null?` + ${(est.runPerPcSec/60).toFixed(1)} min/pc`:" (no piece counts)"} · median of {est.n} run{est.n!==1?"s":""} {est.basis==="machine"?`on ${st.machine}`:`in ${st.department}`}</>:"No history for this step — type the minutes"}
-              {durationSec!=null&&<span style={{color:C.text}}> · planned {fmtHM(durationSec)} for {qty} pcs</span>}
+              {durationSec!=null&&<span style={{color:C.text}}> · planned {fmtHM(durationSec)} for {qty} pcs (<span style={{color:C.amber}}>{fmtHM(setupSec)} setup</span> + <span style={{color:C.green}}>{fmtHM(runSec)} run</span>)</span>}
             </div>
           </div>
         );
