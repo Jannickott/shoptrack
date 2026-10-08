@@ -16,6 +16,7 @@ shoptrack-data.json
 shoptrack-data.json.tmp
 photos/
 backups/
+setupsheets/
 
 # SSL certificates — generated per machine, never sync
 *.pem
