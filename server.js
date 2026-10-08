@@ -5,6 +5,7 @@ import os from "os";
 import { fileURLToPath } from "url";
 import cors from "cors";
 import PDFDocument from "pdfkit";
+import crypto from "crypto";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app  = express();
@@ -85,6 +86,21 @@ function checkBackupSchedule() {
 // Run a startup backup (labelled "startup") so there's always one on server restart
 runBackup("startup");
 setInterval(checkBackupSchedule, 60 * 1000);
+
+// Move any inline photos out of the data file (runs after the startup backup)
+if (fs.existsSync(DATA_FILE)) {
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    const before = fs.statSync(DATA_FILE).size;
+    if (externalizePhotos(data) > 0) {
+      const tmp = DATA_FILE + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+      fs.renameSync(tmp, DATA_FILE);
+      const after = fs.statSync(DATA_FILE).size;
+      console.log(`  ✓ Moved inline photos to photos/inline/ — data file ${(before/1e6).toFixed(1)} MB → ${(after/1e6).toFixed(1)} MB`);
+    }
+  } catch (e) { console.error("  ✗ Photo cleanup failed:", e.message); }
+}
 
 // ── Server-side auto-pause ────────────────────────────────
 // Runs every 30 seconds. If any user has an autoPauseTime matching the
@@ -171,7 +187,8 @@ function runDowntimeTick() {
       const wh     = data.workHours || {};
       const DAYS   = ["sun","mon","tue","wed","thu","fri","sat"];
       const dayKey = DAYS[now.getDay()];
-      const dh     = wh[dayKey] || null;
+      // Legacy single {start,end} format applies to every day (same as the app)
+      const dh     = wh[dayKey] || (wh.start ? { start: wh.start, end: wh.end, enabled: true } : null);
       const inWork = !!(dh && dh.enabled && hhmm >= dh.start && hhmm < dh.end);
 
       const elapsedSec = Math.round((tickStart - lastDowntimeTickAt) / 1000);
@@ -246,8 +263,43 @@ app.post("/api/verify-pin", (req, res) => {
 });
 
 // ── POST /api/data — queued safe merge, then atomic write ─
-const ARRAY_KEYS  = ["users","machines","tools","departments","cabinets","setupSheets","workShifts"];
-const OBJECT_KEYS = ["workHours","machineIssues"];
+// tools are not in here: the server owns them and they only change through /api/tool-op
+const ARRAY_KEYS  = ["users","machines","departments","cabinets","setupSheets","workShifts"];
+const OBJECT_KEYS = ["workHours","efficiencyGoals"];
+
+// Logs are append-only, so merge by id instead of letting the last tablet to save
+// replace the whole list. An edited entry carries updatedAt — newest edit wins.
+function unionById(serverArr, incomingArr) {
+  const map = new Map();
+  (serverArr || []).forEach(e => map.set(e.id, e));
+  (incomingArr || []).forEach(e => {
+    const ex = map.get(e.id);
+    if (!ex || (e.updatedAt || 0) >= (ex.updatedAt || 0)) map.set(e.id, e);
+  });
+  return Array.from(map.values()).sort((a, b) => (a.id || 0) - (b.id || 0));
+}
+
+// Machine issues: merge per machine. The server owns downtimeSec (its 30 s tick),
+// and an issue is gone once its resolve entry is in downtimeLog — so a tablet that
+// hasn't polled yet can neither bring a resolved issue back nor reset the counter.
+function mergeIssues(serverIssues, incomingIssues, downtimeLog) {
+  const resolved = new Set((downtimeLog || []).map(d => `${d.machineName}|${d.reportedAt}`));
+  const s = serverIssues || {}, inc = incomingIssues || {};
+  const out = {};
+  new Set([...Object.keys(s), ...Object.keys(inc)]).forEach(k => {
+    const a = s[k], b = inc[k];
+    let pick;
+    if (a && b && a.reportedAt === b.reportedAt) {
+      pick = (b.updatedAt || 0) >= (a.updatedAt || 0) ? { ...b, downtimeSec: a.downtimeSec || 0 } : a;
+    } else if (a && b) {
+      pick = (b.reportedAt || 0) > (a.reportedAt || 0) ? b : a;
+    } else {
+      pick = a || b;
+    }
+    if (!resolved.has(`${k}|${pick.reportedAt}`)) out[k] = pick;
+  });
+  return out;
+}
 
 function mergeAndWrite(incoming) {
   if (!incoming || typeof incoming !== "object" ||
@@ -299,6 +351,13 @@ function mergeAndWrite(incoming) {
     });
   }
 
+  // Tablets' copies of tools are ignored (bootstrap from the first one if the server has none)
+  merged.tools = server.tools !== undefined ? server.tools : (incoming.tools || []);
+
+  merged.downtimeLog   = unionById(server.downtimeLog, incoming.downtimeLog);
+  merged.toolLog       = unionById(server.toolLog, incoming.toolLog);
+  merged.machineIssues = mergeIssues(server.machineIssues, incoming.machineIssues, merged.downtimeLog);
+
   merged.settingsVersion = Math.max(serverSV, incomingSV);
 
   // Clients never receive PINs (stripped in GET), so restore them from server copy
@@ -308,6 +367,8 @@ function mergeAndWrite(incoming) {
       (!u.pin && serverPins.has(u.id)) ? { ...u, pin: serverPins.get(u.id) } : u
     );
   }
+
+  externalizePhotos(merged);
 
   const tmpFile = DATA_FILE + ".tmp";
   fs.writeFileSync(tmpFile, JSON.stringify(merged, null, 2));
@@ -319,6 +380,79 @@ app.post("/api/data", (req, res) => {
   enqueueWrite(() => {
     try { mergeAndWrite(incoming); res.json({ ok: true }); }
     catch(e) { res.status(500).json({ error: e.message }); }
+  });
+});
+
+// ── Photos: keep them as files, not inside the data file ──
+// Inline base64 photos make every save send megabytes and eventually hit the
+// 25 MB request limit. Any inline photo that reaches the server is written to
+// photos/inline/ (named by content, so the same photo is stored once) and
+// replaced by its URL. Tablets pick up the URL on their next poll.
+function externalizePhotos(data) {
+  let count = 0;
+  const toFile = dataUrl => {
+    if (typeof dataUrl !== "string" || !dataUrl.startsWith("data:image")) return dataUrl;
+    const m = dataUrl.match(/^data:image\/(\w+);base64,/);
+    const ext = m && m[1] === "png" ? "png" : "jpg";
+    const rel = `inline/${crypto.createHash("sha1").update(dataUrl).digest("hex").slice(0, 20)}.${ext}`;
+    const filePath = path.join(PHOTOS_DIR, rel);
+    if (!fs.existsSync(filePath)) {
+      fs.mkdirSync(path.dirname(filePath), { recursive: true });
+      fs.writeFileSync(filePath, Buffer.from(dataUrl.replace(/^data:image\/\w+;base64,/, ""), "base64"));
+    }
+    count++;
+    return `/photos/${rel}`;
+  };
+  (data.tools || []).forEach(t => { if (t.photoData) t.photoData = toFile(t.photoData); });
+  (data.cabinets || []).forEach(c => { if (c.photoData) c.photoData = toFile(c.photoData); });
+  (data.setupSheets || []).forEach(s => (s.photos || []).forEach(p => { if (p.url) p.url = toFile(p.url); }));
+  (data.jobs || []).forEach(j => {
+    if (j.photoData)  j.photoData  = toFile(j.photoData);
+    if (j.photoData2) j.photoData2 = toFile(j.photoData2);
+  });
+  return count;
+}
+
+// ── POST /api/tool-op — every tool change goes through here ──
+// Applied one at a time on the server, so two tablets taking from the same tool
+// both count: "take 2" is sent as a change, not as "quantity is now 8".
+function applyToolOp(data, op) {
+  data.tools   = data.tools   || [];
+  data.toolLog = data.toolLog || [];
+  const i = data.tools.findIndex(t => String(t.id) === String(op.toolId));
+  if (op.type === "add") {
+    if (!data.tools.some(t => String(t.id) === String(op.tool.id))) data.tools.push(op.tool);
+  } else if (op.type === "delete") {
+    if (i >= 0) data.tools.splice(i, 1);
+  } else if (op.type === "update") {
+    if (i < 0) throw new Error("Tool not found");
+    const t = { ...data.tools[i], ...(op.set || {}) };
+    Object.entries(op.inc || {}).forEach(([k, v]) => { t[k] = Math.max(0, (t[k] || 0) + v); });
+    if (op.checkout) t.checkedOutBy = [...(t.checkedOutBy || []), op.checkout];
+    if (op.returnBy !== undefined) {
+      const by = t.checkedOutBy || [];
+      const idx = by.findIndex(x => x.operatorId === op.returnBy);
+      t.checkedOutBy = idx >= 0 ? [...by.slice(0, idx), ...by.slice(idx + 1)] : by.slice(0, -1);
+    }
+    data.tools[i] = t;
+  } else {
+    throw new Error("Unknown tool op");
+  }
+  if (op.log && !data.toolLog.some(e => e.id === op.log.id)) data.toolLog.push(op.log);
+}
+
+app.post("/api/tool-op", (req, res) => {
+  const op = req.body;
+  enqueueWrite(() => {
+    try {
+      const data = fs.existsSync(DATA_FILE) ? JSON.parse(fs.readFileSync(DATA_FILE, "utf8")) : {};
+      applyToolOp(data, op);
+      externalizePhotos(data);
+      const tmp = DATA_FILE + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+      fs.renameSync(tmp, DATA_FILE);
+      res.json({ ok: true, tools: data.tools });
+    } catch (e) { res.status(400).json({ error: e.message }); }
   });
 });
 

@@ -23,7 +23,10 @@ function fmtDetail(s){
 function fmtDate(ts){
   return new Date(ts).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
 }
-function toDateInput(ts){ return new Date(ts).toISOString().slice(0,10); }
+function toDateInput(ts){ const d=new Date(ts); return isNaN(d)?"":d.toISOString().slice(0,10); }
+// Saved times for a job, both sides together (two-sided jobs keep side 2 in setupSec2/runSec2)
+function jRunAll(j){ return (j.runSec||0)+(j.runSec2||0); }
+function jSetupAll(j){ return (j.setupSec||0)+(j.setupSec2||0); }
 function initials(n){ return n.split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase(); }
 function liveTime(j){
   const now=Date.now();
@@ -141,6 +144,48 @@ async function uploadPhoto(photoData, filename) {
   } catch {
     return photoData; // fallback: keep base64 if server unreachable
   }
+}
+
+// Every tool change goes to the server as an operation, applied there one at a time
+// (tools are not part of the regular 3 s save). The caller also updates local state
+// so the screen changes at once; the next poll brings the server's result.
+// op: {type:"add",tool} | {type:"delete",toolId} | {type:"update",toolId,set,inc,checkout,returnBy} + optional log
+function sendToolOp(op){
+  return fetch("/api/tool-op",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(op)}).catch(()=>{});
+}
+
+// Shrink a photo before it's stored — phone camera shots are several MB
+function resizeImage(dataUrl,maxW=1200,maxH=900){
+  return new Promise(res=>{
+    const img=new Image();
+    img.onload=()=>{
+      let w=img.width,h=img.height;
+      if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
+      if(h>maxH){w=Math.round(w*maxH/h);h=maxH;}
+      const c=document.createElement("canvas");c.width=w;c.height=h;
+      c.getContext("2d").drawImage(img,0,0,w,h);
+      res(c.toDataURL("image/jpeg",0.82));
+    };
+    img.onerror=()=>res(dataUrl);
+    img.src=dataUrl;
+  });
+}
+
+// Server owns machine issues and their downtimeSec. Keep a just-reported local issue
+// until the server has it, keep a local edit until it's saved, and don't bring back
+// an issue this tablet just resolved (its entry is already in the local downtimeLog).
+function mergeIssues(local,server,localLog){
+  const resolved=new Set((localLog||[]).map(d=>`${d.machineName}|${d.reportedAt}`));
+  const merged={};
+  Object.entries(server||{}).forEach(([k,sv])=>{
+    if(resolved.has(`${k}|${sv.reportedAt}`)) return;
+    const lv=local[k];
+    merged[k]=lv&&lv.reportedAt===sv.reportedAt&&(lv.updatedAt||0)>(sv.updatedAt||0)?{...lv,downtimeSec:sv.downtimeSec}:sv;
+  });
+  Object.entries(local||{}).forEach(([k,lv])=>{
+    if(!merged[k]&&!resolved.has(`${k}|${lv.reportedAt}`)&&Date.now()-(lv.reportedAt||0)<30000) merged[k]=lv;
+  });
+  return merged;
 }
 
 // ─── CSV EXPORT ───────────────────────────────────────────────────────────────
@@ -267,6 +312,7 @@ export default function App(){
             setupSheets:data.setupSheets,
             setupDeptParams:data.setupDeptParams,
             subDepartments:data.subDepartments,
+            efficiencyGoals:data.efficiencyGoals,
           };
         }
       })
@@ -324,12 +370,8 @@ export default function App(){
           });
           return [...localOnly,...merged];
         });
-        // Machine issues: keep local downtimeSec (more up-to-date)
-        if(data.machineIssues) setMachineIssues(local=>{
-          const merged={...data.machineIssues};
-          Object.keys(local).forEach(k=>{if(merged[k])merged[k]={...merged[k],downtimeSec:local[k].downtimeSec,counting:local[k].counting};});
-          return merged;
-        });
+        if(data.machineIssues) setMachineIssues(local=>mergeIssues(local,data.machineIssues,stateRef.current.downtimeLog));
+        if(data.efficiencyGoals&&JSON.stringify(data.efficiencyGoals)!==JSON.stringify(last.efficiencyGoals)) setEfficiencyGoals(data.efficiencyGoals);
         // Settings: only apply if the server value actually changed (another device saved it)
         const s=JSON.stringify;
         if(data.workHours  &&s(data.workHours) !==s(last.workHours)) {setWorkHours(data.workHours);workHoursRef.current=data.workHours;}
@@ -367,19 +409,28 @@ export default function App(){
         // Keep settingsVersion in sync with server (take the max — never go backwards)
         if((data.settingsVersion||0)>settingsVersionRef.current) settingsVersionRef.current=data.settingsVersion;
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals};
       }).catch(()=>setServerOnline(false));
     },5000);
     return()=>clearInterval(t);
   },[]);
 
-  const saveNow=()=>{
+  const doSave=()=>{
     const state=stateRef.current;
     // Detect settings changes — bump version so server knows this save has authoritative settings
-    const hash=JSON.stringify([state.users,state.machines,state.tools,state.departments,state.cabinets,state.workHours,state.setupDeptParams,state.subDepartments]);
+    const hash=JSON.stringify([state.users,state.machines,state.departments,state.cabinets,state.workHours,state.setupDeptParams,state.subDepartments,state.efficiencyGoals]);
     if(hash!==prevSettingsHashRef.current){prevSettingsHashRef.current=hash;settingsVersionRef.current=Date.now();}
     return fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...state,settingsVersion:settingsVersionRef.current})}).catch(()=>{});
   };
+  // Most handlers call setX(...) and then saveNow() in the same click, before stateRef
+  // has the new value — so save once now and again after the re-render has landed.
+  const savePendingRef=useRef(false);
+  const saveNow=()=>{savePendingRef.current=true;return doSave();};
+  useEffect(()=>{
+    if(!savePendingRef.current) return;
+    savePendingRef.current=false;
+    doSave();
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals]);
 
   // ── Refresh immediately when tab becomes visible again ────
   useEffect(()=>{
@@ -392,11 +443,7 @@ export default function App(){
           const localOnly=local.filter(j=>!serverIds.has(j.id));
           return [...localOnly,...data.jobs];
         });
-        if(data.machineIssues) setMachineIssues(local=>{
-          const merged={...data.machineIssues};
-          Object.keys(local).forEach(k=>{if(merged[k])merged[k]={...merged[k],downtimeSec:local[k].downtimeSec,counting:local[k].counting};});
-          return merged;
-        });
+        if(data.machineIssues) setMachineIssues(local=>mergeIssues(local,data.machineIssues,stateRef.current.downtimeLog));
         const s=JSON.stringify;
         const last=lastServerRef.current;
         if(data.workHours  &&s(data.workHours) !==s(last.workHours)) {setWorkHours(data.workHours);workHoursRef.current=data.workHours;}
@@ -500,6 +547,7 @@ export default function App(){
       const lt=liveTime(j);
       return{...j,paused:true,setupSec:lt.setup,runSec:lt.run,setupSec2:lt.setup2,runSec2:lt.run2,phaseStartedAt:null,lastModifiedAt:Date.now()};
     }));
+    saveNow();
   };
   const resolveIssue=(machineName)=>{
     const issue=machineIssues[machineName]; if(!issue) return;
@@ -508,6 +556,7 @@ export default function App(){
     setDowntimeLog(prev=>[...prev,{id:resolvedAt,machineName,...issue,resolvedBy:user.name,resolvedAt,downtimeSec}]);
     setMachineIssues(prev=>{const n={...prev};delete n[machineName];return n;});
     setJobs(prev=>prev.map(j=>j.machine===machineName&&j.paused?{...j,paused:false,phaseStartedAt:Date.now(),lastModifiedAt:Date.now()}:j));
+    saveNow();
   };
 
   const login =u=>{
@@ -617,7 +666,7 @@ export default function App(){
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
       {tab==="reports"  &&<ReportsTab        jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
-      {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
+      {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
 
@@ -1138,10 +1187,10 @@ function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,pauseJob,re
       const dur=(parseInt(nmH)||0)*3600+(parseInt(nmM)||0)*60;
       if(dur<=0) return;
       // Store duration only — timer starts when operator logs out
-      setJobs(prev=>prev.map(x=>x.id===j.id?{...x,nightMode:true,nightModeDuration:dur,nightModeEndsAt:null,nightModeDone:false}:x));
+      setJobs(prev=>prev.map(x=>x.id===j.id?{...x,nightMode:true,nightModeDuration:dur,nightModeEndsAt:null,nightModeDone:false,lastModifiedAt:Date.now()}:x));
       setNmForm(false);setNmH("");setNmM("");
     };
-    const cancelNightMode=()=>setJobs(prev=>prev.map(x=>x.id===j.id?{...x,nightMode:false,nightModeDuration:0,nightModeEndsAt:null,nightModeDone:false,nightPaused:false}:x));
+    const cancelNightMode=()=>setJobs(prev=>prev.map(x=>x.id===j.id?{...x,nightMode:false,nightModeDuration:0,nightModeEndsAt:null,nightModeDone:false,nightPaused:false,lastModifiedAt:Date.now()}:x));
 
     return(
       <div style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${color}`,border:`1px solid ${C.border}`,borderTopColor:color,padding:"12px 10px",display:"flex",flexDirection:"column",gap:6}}>
@@ -1717,14 +1766,16 @@ function MachineStatusTab({user,machines,machineIssues,reportIssue,resolveIssue}
 // ═══════════════════════════════════════════════════════
 function HistoryTab({user,jobs}){
   const [filt,setFilt]=useState("all");
-  const done=jobs.filter(j=>j.status==="done"&&j.operatorId===user.id&&(filt==="all"||j.machine.includes(filt)));
+  const mine=jobs.filter(j=>j.status==="done"&&j.operatorId===user.id);
+  const machineNames=[...new Set(mine.map(j=>j.machine))].sort();
+  const done=mine.filter(j=>filt==="all"||j.machine===filt);
   return(
     <div style={{padding:"14px 16px"}}>
-      <div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
-        {[["all","All"],["CNC Mill","CNC"],["Lathe","Lathes"],["Drill","Drill"]].map(([f,l])=>(
+      {machineNames.length>1&&<div style={{display:"flex",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        {[["all","All"],...machineNames.map(m=>[m,m])].map(([f,l])=>(
           <button key={f} style={tag(filt===f)} onClick={()=>setFilt(f)}>{l}</button>
         ))}
-      </div>
+      </div>}
       {!done.length?<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:12}}><i className="ti ti-list" style={{fontSize:30,display:"block",marginBottom:10,opacity:0.3}}/> No completed jobs.</div>
         :done.map(j=>(
         <div key={j.id} style={{...card(),display:"flex",gap:12}}>
@@ -1881,7 +1932,7 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
   const numActiveMachines=Math.max(machines.filter(m=>m.active&&!_hiddenGoalMachines.includes(m.name)).length,1);
   const availableWorkSec=calcAvailableWorkSec(workHours,yearStartMs,nowMs);
   const totalAvailSec=availableWorkSec*numActiveMachines;
-  const yearRunSec=yearDone.reduce((s,j)=>s+(j.runSec||0),0);
+  const yearRunSec=yearDone.reduce((s,j)=>s+jRunAll(j),0);
   const realEff=totalAvailSec>0?Math.round(yearRunSec/totalAvailSec*100):null;
   // Below-target jobs use job-level efficiency (run vs setup ratio)
   const belowTarget=done.filter(j=>{const e=jobEff(j);return e!==null&&e<targetEff;});
@@ -1903,10 +1954,10 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
   const jRun=j=>{const lt=liveTime(j);return lt.run+lt.run2;};
   const weekDowntime=
     downtimeLog.filter(d=>(d.resolvedAt||0)>=weekStart).reduce((s,d)=>s+d.downtimeSec,0)+
-    Object.values(machineIssues).filter(i=>(i.reportedAt||0)>=weekStart).reduce((s,i)=>s+Math.round((nowMs-(i.reportedAt||nowMs))/1000),0);
+    Object.values(machineIssues).filter(i=>(i.reportedAt||0)>=weekStart).reduce((s,i)=>s+(i.downtimeSec||0),0);
   const monthDowntime=
     downtimeLog.filter(d=>toDateInput(d.resolvedAt).startsWith(monthStr)).reduce((s,d)=>s+d.downtimeSec,0)+
-    Object.values(machineIssues).filter(i=>toDateInput(i.reportedAt).startsWith(monthStr)).reduce((s,i)=>s+Math.round((nowMs-(i.reportedAt||nowMs))/1000),0);
+    Object.values(machineIssues).filter(i=>toDateInput(i.reportedAt).startsWith(monthStr)).reduce((s,i)=>s+(i.downtimeSec||0),0);
   // Full week capacity: Monday 00:00 → next Monday 00:00 (weekend days contribute 0 via workHours)
   const weekEnd=new Date(monday); weekEnd.setDate(monday.getDate()+7);
   const wkTotalAvailSec=calcAvailableWorkSec(workHours,weekStart,weekEnd.getTime())*numActiveMachines;
@@ -1985,7 +2036,7 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
                 <div style={{fontSize:9,color:C.muted,letterSpacing:1,textTransform:"uppercase"}}>Live</div>
                 <div style={{display:"flex",alignItems:"center",gap:4}}>
                   <span style={{width:6,height:6,borderRadius:"50%",background:C.red,display:"inline-block"}}/>
-                  <span style={{fontSize:13,color:C.red,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{fmtHM(Math.round((Date.now()-(issue.reportedAt||Date.now()))/1000))}</span>
+                  <span style={{fontSize:13,color:C.red,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{fmtHM(issue.downtimeSec||0)}</span>
                 </div>
               </div>
             </div>
@@ -2354,7 +2405,7 @@ function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef,s
   );
 }
 
-function IssueCard({name,issue,setMachineIssues,resolveIssue}){
+function IssueCard({name,issue,setMachineIssues,resolveIssue,saveNow}){
   const [editing,setEditing]=useState(false);
   const [reason,setReason]=useState(issue.reason||"");
   const [status,setStatus]=useState(issue.status);
@@ -2362,8 +2413,9 @@ function IssueCard({name,issue,setMachineIssues,resolveIssue}){
   const [fixCost,setFixCost]=useState(issue.fixCost||"");
   const accentColor=issue.status==="down"?C.red:C.amber;
   const save=()=>{
-    setMachineIssues(prev=>({...prev,[name]:{...prev[name],status,reason,fixDescription:fixDescription.trim(),fixCost:fixCost.trim()}}));
+    setMachineIssues(prev=>({...prev,[name]:{...prev[name],status,reason,fixDescription:fixDescription.trim(),fixCost:fixCost.trim(),updatedAt:Date.now()}}));
     setEditing(false);
+    saveNow&&saveNow();
   };
   return(
     <div style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${accentColor}`,border:`1px solid ${C.border}`,borderTopColor:accentColor,padding:"10px",display:"flex",flexDirection:"column",gap:6}}>
@@ -2487,7 +2539,7 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
             {Object.entries(machineIssues).map(([name,issue])=>(
-              <IssueCard key={name} name={name} issue={issue} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue}/>
+              <IssueCard key={name} name={name} issue={issue} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} saveNow={saveNow}/>
             ))}
           </div>
         </div>
@@ -2565,7 +2617,7 @@ function ResolvedIssueCard({entry,setDowntimeLog,saveNow}){
   const [fixCost,setFixCost]=useState(entry.fixCost||"");
   const accentColor=entry.status==="down"?C.red:C.amber;
   const save=()=>{
-    setDowntimeLog(prev=>prev.map(e=>e.id===entry.id?{...e,reason:reason.trim(),fixDescription:fixDescription.trim(),fixCost:fixCost.trim()}:e));
+    setDowntimeLog(prev=>prev.map(e=>e.id===entry.id?{...e,reason:reason.trim(),fixDescription:fixDescription.trim(),fixCost:fixCost.trim(),updatedAt:Date.now()}:e));
     setEditing(false);
     saveNow&&saveNow();
   };
@@ -2654,8 +2706,8 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,downtim
   const bucketStats=(name,b)=>{
     const inRange=j=>(j.createdAt||0)>=b.start&&(j.createdAt||0)<b.end;
     const ej=entityJobs(name).filter(inRange);
-    const runSec=ej.reduce((s,j)=>s+(j.runSec||0),0);
-    const setupSec=ej.reduce((s,j)=>s+(j.setupSec||0),0);
+    const runSec=ej.reduce((s,j)=>s+jRunAll(j),0);
+    const setupSec=ej.reduce((s,j)=>s+jSetupAll(j),0);
     let machCount,machNames;
     if(mode==='machine'){machCount=1;machNames=[name];}
     else{machNames=machines.filter(m=>m.active&&m.department===name).map(m=>m.name);machCount=Math.max(machNames.length,1);}
@@ -2666,7 +2718,7 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,downtim
   };
 
   // For job mode: keep run/(run+setup) ratio (comparing across machines for one job)
-  const jEff=j=>{const t=(j.runSec||0)+(j.setupSec||0);return t>0?Math.round((j.runSec||0)/t*100):null;};
+  const jEff=j=>{const t=jRunAll(j)+jSetupAll(j);return t>0?Math.round(jRunAll(j)/t*100):null;};
   const avgEff=arr=>{const v=arr.map(j=>jEff(j)).filter(e=>e!==null);return v.length?Math.round(v.reduce((s,e)=>s+e,0)/v.length):null;};
 
   const getBuckets=()=>{
@@ -2719,7 +2771,7 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,downtim
       const byMach={};
       matched.forEach(j=>{if(!byMach[j.machine])byMach[j.machine]=[];byMach[j.machine].push(j);});
       chartData=Object.entries(byMach).sort((a,b)=>b[1].length-a[1].length).map(([mach,mj])=>({
-        label:mach,sA:{eff:avgEff(mj),runSec:mj.reduce((s,j)=>s+(j.runSec||0),0),setupSec:mj.reduce((s,j)=>s+(j.setupSec||0),0),issueSec:0,availSec:mj.reduce((s,j)=>s+(j.runSec||0)+(j.setupSec||0),1)},countA:mj.length
+        label:mach,sA:{eff:avgEff(mj),runSec:mj.reduce((s,j)=>s+jRunAll(j),0),setupSec:mj.reduce((s,j)=>s+jSetupAll(j),0),issueSec:0,availSec:mj.reduce((s,j)=>s+jRunAll(j)+jSetupAll(j),1)},countA:mj.length
       }));
     }
   } else if(showAll){
@@ -2973,8 +3025,8 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,downtim
                       <td style={td}>{j.job}</td>
                       <td style={td}>{j.machine}</td>
                       <td style={td}>{j.operatorName}</td>
-                      <td style={{...td,color:C.amber}}>{fmtHM(j.setupSec)}</td>
-                      <td style={{...td,color:C.green}}>{fmtHM(j.runSec)}</td>
+                      <td style={{...td,color:C.amber}}>{fmtHM(jSetupAll(j))}</td>
+                      <td style={{...td,color:C.green}}>{fmtHM(jRunAll(j))}</td>
                       <td style={{...td,color:ec,fontWeight:700}}>{e!==null?e+'%':'—'}</td>
                       <td style={{...td,color:C.muted,fontSize:10}}>{fmtDate(j.completedAt)}</td>
                     </tr>
@@ -3015,7 +3067,7 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
     const weekJobs=mj.filter(j=>(j.createdAt||0)>=weekStart);
     const logDown=downtimeLog.filter(d=>d.machineName===name).reduce((s,d)=>s+(d.downtimeSec||0),0);
     const activeIssue=machineIssues[name];
-    const activeDown=activeIssue?Math.round((now-(activeIssue.reportedAt||now))/1000):0;
+    const activeDown=activeIssue?(activeIssue.downtimeSec||0):0;
     const machDef=machines.find(m=>m.name===name);
     const weeklyTargetSec=(machDef?.weeklyTargetHours||0)*3600;
     const weekRunSec=weekJobs.reduce((s,j)=>{const lt=liveTime(j);return s+lt.run+lt.run2;},0);
@@ -3142,7 +3194,7 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
           {/* Active issue */}
           {machineIssues[selected]&&(()=>{
             const iss=machineIssues[selected];
-            const liveSec=Math.round((Date.now()-(iss.reportedAt||Date.now()))/1000);
+            const liveSec=iss.downtimeSec||0;
             return(
               <div style={{background:`${C.red}10`,border:`1px solid ${C.red}40`,borderLeft:`3px solid ${C.red}`,borderRadius:8,padding:"10px 12px",marginBottom:12,display:"flex",flexDirection:"column",gap:4}}>
                 <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
@@ -3536,17 +3588,17 @@ function ManageTab({users,setUsers,machines,setMachines,workHours,setWorkHours,d
         <button style={tag(view==="settings")}    onClick={()=>setView("settings")}   ><i className="ti ti-adjustments"/> Settings</button>
         <button style={tag(view==="delegate")}    onClick={()=>setView("delegate")}   ><i className="ti ti-arrows-exchange"/> Delegate</button>
       </div>
-      {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments} jobs={jobs} setJobs={setJobs}/>}
+      {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments} jobs={jobs} setJobs={setJobs} saveNow={saveNow}/>}
       {view==="machines"   &&<ManageMachines    machines={machines} setMachines={setMachines} departments={departments} jobs={jobs} saveNow={saveNow}/>}
       {view==="departments"&&<ManageDepartments departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
       {view==="goals"      &&<ManageEfficiencyGoals efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} machines={machines} departments={departments} saveNow={saveNow}/>}
-      {view==="settings"   &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours}/>}
+      {view==="settings"   &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours} saveNow={saveNow}/>}
       {view==="delegate"   &&<DelegateJobs      users={users} jobs={jobs} setJobs={setJobs} saveNow={saveNow}/>}
     </div>
   );
 }
 
-function AdminToolsTab({tools,setTools,toolLog,cabinets,setCabinets,departments,users,machines,saveNow,focusToolId,setFocusToolId}){
+function AdminToolsTab({tools,setTools,toolLog,setToolLog,cabinets,setCabinets,departments,users,machines,saveNow,focusToolId,setFocusToolId}){
   const [view,setView]=useState("tools");
   useEffect(()=>{if(focusToolId) setView("tools");},[focusToolId]);
   return(
@@ -3555,7 +3607,7 @@ function AdminToolsTab({tools,setTools,toolLog,cabinets,setCabinets,departments,
         <button style={tag(view==="tools")}    onClick={()=>setView("tools")}   ><i className="ti ti-package"/> Tools</button>
         <button style={tag(view==="cabinets")} onClick={()=>setView("cabinets")}><i className="ti ti-archive"/> Cabinets</button>
       </div>
-      {view==="tools"    &&<ManageTools    tools={tools} setTools={setTools} toolLog={toolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
+      {view==="tools"    &&<ManageTools    tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {view==="cabinets" &&<ManageCabinets cabinets={cabinets} setCabinets={setCabinets} departments={departments} saveNow={saveNow}/>}
     </div>
   );
@@ -3652,7 +3704,7 @@ function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
             :<><i className="ti ti-camera" style={{fontSize:30,opacity:0.3,display:"block",marginBottom:8}}/><div style={{fontSize:12,color:C.muted}}>Tap to add a photo of the cabinet</div></>}
         </div>
         <input type="file" ref={cabPhotoRef} accept="image/*" capture="environment" style={{display:"none"}}
-          onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setCabForm(p=>({...p,photoData:ev.target.result}));r.readAsDataURL(f);}}/>
+          onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>resizeImage(ev.target.result).then(d=>setCabForm(p=>({...p,photoData:d})));r.readAsDataURL(f);}}/>
         {cabForm.photoData&&<button style={{...btn("danger",false,true),marginTop:6,fontSize:9}} onClick={()=>setCabForm(p=>({...p,photoData:null}))}><i className="ti ti-x"/> Remove photo</button>}
       </div>
       <button style={btn("success",true)} onClick={saveCabinet}><i className="ti ti-check"/> {editCabId?"Save Changes":"Add Cabinet"}</button>
@@ -3770,7 +3822,7 @@ function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
   );
 }
 
-function WorkHoursSettings({workHours,setWorkHours}){
+function WorkHoursSettings({workHours,setWorkHours,saveNow}){
   const ORDER=["mon","tue","wed","thu","fri","sat","sun"];
   const todayKey=DAYS_KEY[new Date().getDay()];
   const [local,setLocal]=useState(()=>{
@@ -3784,7 +3836,7 @@ function WorkHoursSettings({workHours,setWorkHours}){
   });
   const [saved,setSaved]=useState(false);
   const setDay=(day,field,val)=>setLocal(prev=>({...prev,[day]:{...prev[day],[field]:val}}));
-  const save=()=>{setWorkHours(local);setSaved(true);setTimeout(()=>setSaved(false),2000);};
+  const save=()=>{setWorkHours(local);saveNow&&saveNow();setSaved(true);setTimeout(()=>setSaved(false),2000);};
   const todayHours=local[todayKey];
   return(
     <div>
@@ -4045,7 +4097,8 @@ function ManageDepartments({departments,setDepartments,saveNow}){
   );
 }
 
-function ManageOperators({users,setUsers,machines,departments,jobs,setJobs}){
+function ManageOperators({users,setUsers:setUsersRaw,machines,departments,jobs,setJobs,saveNow}){
+  const setUsers=fn=>{setUsersRaw(fn);saveNow&&saveNow();};
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [pin,setPin]=useState(""); const [errs,setErrs]=useState({});
   const [editId,setEditId]=useState(null); const [editPin,setEditPin]=useState(""); const [editErr,setEditErr]=useState("");
   const [editDeptId,setEditDeptId]=useState(null);
@@ -4232,7 +4285,8 @@ function ManageOperators({users,setUsers,machines,departments,jobs,setJobs}){
   );
 }
 
-function ManageMachines({machines,setMachines,departments,jobs,saveNow}){
+function ManageMachines({machines,setMachines:setMachinesRaw,departments,jobs,saveNow}){
+  const setMachines=fn=>{setMachinesRaw(fn);saveNow&&saveNow();};
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [dept,setDept]=useState(""); const [err,setErr]=useState("");
   const [editTargetId,setEditTargetId]=useState(null); const [editTargetHours,setEditTargetHours]=useState("");
   const [editDeptId,setEditDeptId]=useState(null); const [editDeptVal,setEditDeptVal]=useState("");
@@ -4425,71 +4479,58 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
   const typeTools=selectedType?(grouped[selectedType]||[]):[];
   const selectedTool=selectedId?tools.find(t=>String(t.id)===String(selectedId)):null;
 
+  // Apply a tool op locally (instant feedback) and send it to the server
+  const toolOp=(op,localUpdate)=>{
+    setTools(prev=>prev.map(t=>t.id===selectedTool.id?localUpdate(t):t));
+    if(op.log) setToolLog(prev=>[...prev,op.log]);
+    sendToolOp({type:"update",toolId:selectedTool.id,...op});
+  };
+  const logEntry=(action,quantity)=>{const now=Date.now();return{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity,action,timestamp:now};};
+  const _removeOneCheckout=(byArr)=>{
+    const myIdx=byArr.findIndex(x=>x.operatorId===user.id);
+    return myIdx>=0?[...byArr.slice(0,myIdx),...byArr.slice(myIdx+1)]:byArr.slice(0,-1);
+  };
   const doTake=()=>{
     if(!selectedTool) return;
     const qty=parseInt(takeQty)||1;
     if(qty<1||qty>selectedTool.quantity) return;
-    const now=Date.now();
-    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,quantity:t.quantity-qty}:t));
-    setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:qty,action:"take",timestamp:now}]);
-    setSelectedId(null);setTakeQty(1);saveNow();
+    toolOp({inc:{quantity:-qty},log:logEntry("take",qty)},t=>({...t,quantity:Math.max(0,t.quantity-qty)}));
+    setSelectedId(null);setTakeQty(1);
   };
   const doCheckout=()=>{
     if(!selectedTool||!selectedTool.returnable) return;
     const available=selectedTool.quantity-(selectedTool.checkedOutCount||0)-(selectedTool.damagedCount||0);
     if(available<1) return;
-    const now=Date.now();
-    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{
-      ...t,
-      checkedOutCount:(t.checkedOutCount||0)+1,
-      checkedOutBy:[...(t.checkedOutBy||[]),{operatorId:user.id,operatorName:user.name,timestamp:now}]
-    }:t));
-    setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:1,action:"checkout",timestamp:now}]);
-    setSelectedId(null);setTakeQty(1);saveNow();
-  };
-  const _removeOneCheckout=(byArr)=>{
-    const myIdx=byArr.findIndex(x=>x.operatorId===user.id);
-    return myIdx>=0?[...byArr.slice(0,myIdx),...byArr.slice(myIdx+1)]:byArr.slice(0,-1);
+    const by={operatorId:user.id,operatorName:user.name,timestamp:Date.now()};
+    toolOp({inc:{checkedOutCount:1},checkout:by,log:logEntry("checkout",1)},
+      t=>({...t,checkedOutCount:(t.checkedOutCount||0)+1,checkedOutBy:[...(t.checkedOutBy||[]),by]}));
+    setSelectedId(null);setTakeQty(1);
   };
   const doReturn=(regrinded=null)=>{
     if(!selectedTool||!selectedTool.returnable) return;
     if((selectedTool.checkedOutCount||0)<1) return;
-    const now=Date.now();
-    const updates={
-      checkedOutCount:Math.max(0,(selectedTool.checkedOutCount||0)-1),
-      checkedOutBy:_removeOneCheckout(selectedTool.checkedOutBy||[])
-    };
-    if(selectedTool.regrindable&&regrinded!==null) updates.needsRegrinding=!regrinded;
-    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,...updates}:t));
+    const set=selectedTool.regrindable&&regrinded!==null?{needsRegrinding:!regrinded}:{};
     const action=regrinded===true?"return-regrinded":regrinded===false?"return-needs-regrind":"return";
-    setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:1,action,timestamp:now}]);
-    setSelectedId(null);setTakeQty(1);saveNow();
+    toolOp({inc:{checkedOutCount:-1},set,returnBy:user.id,log:logEntry(action,1)},
+      t=>({...t,...set,checkedOutCount:Math.max(0,(t.checkedOutCount||0)-1),checkedOutBy:_removeOneCheckout(t.checkedOutBy||[])}));
+    setSelectedId(null);setTakeQty(1);
   };
   const doReturnDamaged=()=>{
     if(!selectedTool||!selectedTool.returnable) return;
     if((selectedTool.checkedOutCount||0)<1) return;
-    const now=Date.now();
-    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{
-      ...t,
-      checkedOutCount:Math.max(0,(t.checkedOutCount||0)-1),
-      damagedCount:(t.damagedCount||0)+1,
-      checkedOutBy:_removeOneCheckout(t.checkedOutBy||[])
-    }:t));
-    setToolLog(prev=>[...prev,{id:now,toolId:selectedTool.id,toolName:selectedTool.name,operatorId:user.id,operatorName:user.name,quantity:1,action:"return-damaged",timestamp:now}]);
-    setSelectedId(null);setTakeQty(1);saveNow();
+    toolOp({inc:{checkedOutCount:-1,damagedCount:1},returnBy:user.id,log:logEntry("return-damaged",1)},
+      t=>({...t,checkedOutCount:Math.max(0,(t.checkedOutCount||0)-1),damagedCount:(t.damagedCount||0)+1,checkedOutBy:_removeOneCheckout(t.checkedOutBy||[])}));
+    setSelectedId(null);setTakeQty(1);
   };
   const doReportBroken=()=>{
     if(!selectedTool) return;
-    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{
-      ...t,broken:true,quantity:0,
-      checkedOutCount:0,checkedOutBy:[],damagedCount:0
-    }:t));
-    saveNow();setSelectedId(null);setTakeQty(1);
+    const set={broken:true,quantity:0,checkedOutCount:0,checkedOutBy:[],damagedCount:0};
+    toolOp({set},t=>({...t,...set}));
+    setSelectedId(null);setTakeQty(1);
   };
   const setConditionStars=(stars)=>{
     if(!selectedTool) return;
-    setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,conditionStars:stars}:t));
-    saveNow();
+    toolOp({set:{conditionStars:stars}},t=>({...t,conditionStars:stars}));
   };
   const closeModal=()=>{setSelectedId(null);setTakeQty(1);};
 
@@ -4783,7 +4824,7 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
 // ═══════════════════════════════════════════════════════
 // MANAGE TOOLS — admin view
 // ═══════════════════════════════════════════════════════
-function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,focusToolId,setFocusToolId}){
+function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,machines,cabinets,focusToolId,setFocusToolId}){
   const [subview,setSubview]=useState("list");
   const [selectedCabinet,setSelectedCabinet]=useState(null);
   const [editId,setEditId]=useState(null);
@@ -4812,6 +4853,12 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
     setEditId(t.id);setErrs({});setSubview("form");
   };
 
+  // Set fields on one tool locally and on the server
+  const updateTool=(toolId,set,extra={})=>{
+    setTools(prev=>prev.map(t=>t.id===toolId?{...t,...set}:t));
+    sendToolOp({type:"update",toolId,set,...extra});
+  };
+
   const save=()=>{
     const e={};
     if(!form.name.trim()) e.name="Required";
@@ -4821,21 +4868,26 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
     if(Object.keys(e).length){setErrs(e);return;}
     const now=Date.now();
     if(editId){
-      setTools(prev=>prev.map(t=>t.id===editId?{...t,...form,quantity:parseInt(form.quantity),minQuantity:parseInt(form.minQuantity)||0}:t));
+      updateTool(editId,{...form,quantity:parseInt(form.quantity),minQuantity:parseInt(form.minQuantity)||0});
     } else {
-      setTools(prev=>[...prev,{id:now,...form,quantity:parseInt(form.quantity),minQuantity:parseInt(form.minQuantity)||0,active:true}]);
+      const tool={id:now,...form,quantity:parseInt(form.quantity),minQuantity:parseInt(form.minQuantity)||0,active:true};
+      setTools(prev=>[...prev,tool]);
+      sendToolOp({type:"add",tool});
     }
-    setSubview("list");saveNow&&saveNow();
+    setSubview("list");
   };
 
   const doRestock=tool=>{
     const qty=parseInt(restockQty)||0;
     if(qty<1) return;
-    const updates={quantity:tool.quantity+qty,ordered:tool.quantity+qty>(tool.minQuantity||0)?false:tool.ordered};
-    if(tool.conditionOrdered){updates.conditionOrdered=false;updates.conditionStars=5;}
-    setTools(prev=>prev.map(t=>t.id===tool.id?{...t,...updates}:t));
+    const set={ordered:tool.quantity+qty>(tool.minQuantity||0)?false:tool.ordered};
+    if(tool.conditionOrdered){set.conditionOrdered=false;set.conditionStars=5;}
+    const now=Date.now();
+    const log={id:now,toolId:tool.id,toolName:tool.name,operatorId:null,operatorName:"Admin",quantity:qty,action:"restock",timestamp:now};
+    setTools(prev=>prev.map(t=>t.id===tool.id?{...t,...set,quantity:t.quantity+qty}:t));
+    setToolLog&&setToolLog(prev=>[...prev,log]);
+    sendToolOp({type:"update",toolId:tool.id,set,inc:{quantity:qty},log});
     setRestockId(null);setRestockQty("");
-    saveNow&&saveNow();
   };
 
   const fi=k=>({...inp(errs[k])});
@@ -5012,9 +5064,9 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
             </button>
           </div>}
         <input type="file" ref={photoCamRef} accept="image/*" capture="environment" style={{display:"none"}}
-          onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setForm(p=>({...p,photoData:ev.target.result}));r.readAsDataURL(f);}}/>
+          onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>resizeImage(ev.target.result).then(d=>setForm(p=>({...p,photoData:d})));r.readAsDataURL(f);}}/>
         <input type="file" ref={photoRef} accept="image/*" style={{display:"none"}}
-          onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>setForm(p=>({...p,photoData:ev.target.result}));r.readAsDataURL(f);}}/>
+          onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>resizeImage(ev.target.result).then(d=>setForm(p=>({...p,photoData:d})));r.readAsDataURL(f);}}/>
       </div>
       <button style={btn("success",true)} onClick={save}><i className="ti ti-check"/> {editId?"Save Changes":"Add Tool"}</button>
     </div>
@@ -5257,7 +5309,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
                 <div style={{fontSize:8,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:8}}>Tool Condition</div>
                 <div style={{display:"flex",gap:6,alignItems:"center"}}>
                   {[1,2,3,4,5].map(s=>(
-                    <button key={s} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,conditionStars:s}:t));saveNow&&saveNow();}} style={{background:"none",border:"none",cursor:"pointer",padding:2,fontSize:22,color:(selectedTool.conditionStars||0)>=s?"#facc15":"rgba(255,255,255,.18)",lineHeight:1}}>★</button>
+                    <button key={s} onClick={()=>updateTool(selectedTool.id,{conditionStars:s})} style={{background:"none",border:"none",cursor:"pointer",padding:2,fontSize:22,color:(selectedTool.conditionStars||0)>=s?"#facc15":"rgba(255,255,255,.18)",lineHeight:1}}>★</button>
                   ))}
                   <span style={{fontSize:10,color:C.muted,marginLeft:4}}>
                     {!selectedTool.conditionStars?"Not rated yet":selectedTool.conditionStars===1?"⚠ Poor — consider buying new":selectedTool.conditionStars===2?"Fair":selectedTool.conditionStars===3?"Good":selectedTool.conditionStars===4?"Very good":"New / like new"}
@@ -5272,7 +5324,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
                   <div style={{fontSize:12,fontWeight:700,color:C.red,marginBottom:2}}>Reported Broken — Needs Reorder</div>
                   <div style={{fontSize:10,color:C.muted}}>An operator flagged this tool as broken.</div>
                 </div>
-                <button style={{...btn("outline",false,true),fontSize:10,padding:"4px 8px",borderColor:"rgba(231,76,60,.4)",color:C.red}} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,broken:false}:t));saveNow&&saveNow();}}>Clear</button>
+                <button style={{...btn("outline",false,true),fontSize:10,padding:"4px 8px",borderColor:"rgba(231,76,60,.4)",color:C.red}} onClick={()=>updateTool(selectedTool.id,{broken:false})}>Clear</button>
               </div>
             )}
             <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
@@ -5287,27 +5339,27 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
                 </div>
               ):<button style={btn("success",true)} onClick={()=>{setRestockId(selectedTool.id);setRestockQty("");}}><i className="ti ti-package-import"/> Restock</button>}
               {selectedTool.regrindable&&selectedTool.needsRegrinding&&(
-                <button style={{...btn("outline",true),borderColor:C.amber,color:C.amber}} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,needsRegrinding:false}:t));saveNow&&saveNow();}}>
+                <button style={{...btn("outline",true),borderColor:C.amber,color:C.amber}} onClick={()=>updateTool(selectedTool.id,{needsRegrinding:false})}>
                   <i className="ti ti-check"/> Mark as Regrinded
                 </button>
               )}
               {(selectedTool.damagedCount||0)>0&&(
-                <button style={{...btn("outline",true),borderColor:"rgba(231,76,60,.5)",color:C.red}} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,damagedCount:0}:t));saveNow&&saveNow();}}>
+                <button style={{...btn("outline",true),borderColor:"rgba(231,76,60,.5)",color:C.red}} onClick={()=>updateTool(selectedTool.id,{damagedCount:0})}>
                   <i className="ti ti-refresh"/> Mark as Replaced ({selectedTool.damagedCount} damaged)
                 </button>
               )}
               {selectedTool.quantity<=(selectedTool.minQuantity||0)&&(
-                <button style={btn(selectedTool.ordered?"blue":"outline",true)} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,ordered:!t.ordered}:t));saveNow&&saveNow();}}>
+                <button style={btn(selectedTool.ordered?"blue":"outline",true)} onClick={()=>updateTool(selectedTool.id,{ordered:!selectedTool.ordered})}>
                   <i className={`ti ti-${selectedTool.ordered?"checks":"shopping-cart"}`}/> {selectedTool.ordered?"Ordered — click to unmark":"Mark as Ordered"}
                 </button>
               )}
               {selectedTool.hasConditionRating&&(selectedTool.conditionStars||0)===1&&(
-                <button style={btn(selectedTool.conditionOrdered?"blue":"outline",true)} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,conditionOrdered:!t.conditionOrdered}:t));saveNow&&saveNow();}}>
+                <button style={btn(selectedTool.conditionOrdered?"blue":"outline",true)} onClick={()=>updateTool(selectedTool.id,{conditionOrdered:!selectedTool.conditionOrdered})}>
                   <i className={`ti ti-${selectedTool.conditionOrdered?"checks":"alert-triangle"}`}/> {selectedTool.conditionOrdered?"Condition order placed — click to unmark":"Order replacement (poor condition)"}
                 </button>
               )}
               <button style={btn("outline",true)} onClick={()=>{closeModal();openEdit(selectedTool);}}><i className="ti ti-edit"/> Edit Tool</button>
-              <button style={btn(selectedTool.active?"danger":"outline",true)} onClick={()=>{setTools(prev=>prev.map(t=>t.id===selectedTool.id?{...t,active:!t.active}:t));closeModal();saveNow&&saveNow();}}>
+              <button style={btn(selectedTool.active?"danger":"outline",true)} onClick={()=>{updateTool(selectedTool.id,{active:!selectedTool.active});closeModal();}}>
                 <i className={`ti ti-${selectedTool.active?"eye-off":"eye"}`}/> {selectedTool.active?"Hide from Operators":"Make Visible"}
               </button>
               {!deleteConfirm
@@ -5315,7 +5367,7 @@ function ManageTools({tools,setTools,toolLog,saveNow,users,machines,cabinets,foc
                 :<div style={{background:"rgba(231,76,60,.1)",border:`1px solid ${C.red}`,borderRadius:8,padding:"10px 12px"}}>
                   <div style={{fontSize:11,color:C.red,marginBottom:10,fontWeight:600}}>Delete "{selectedTool.name}" permanently?</div>
                   <div style={{display:"flex",gap:8}}>
-                    <button style={{...btn("danger",false,false),flex:1}} onClick={()=>{setTools(prev=>prev.filter(t=>t.id!==selectedTool.id));closeModal();saveNow&&saveNow();}}><i className="ti ti-trash"/> Yes, delete</button>
+                    <button style={{...btn("danger",false,false),flex:1}} onClick={()=>{setTools(prev=>prev.filter(t=>t.id!==selectedTool.id));sendToolOp({type:"delete",toolId:selectedTool.id});closeModal();}}><i className="ti ti-trash"/> Yes, delete</button>
                     <button style={btn("outline",false,true)} onClick={()=>setDeleteConfirm(false)}>Cancel</button>
                   </div>
                 </div>}
@@ -5533,6 +5585,9 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
   );
 }
 
+// Blank Eriks/150 setup values — used by both the detail view and the form
+const ERIKS_BLANK={mn:"",z:"",beta:"",dk:"",uo:"",df:"",fraeserDia:"",fraesLagerLinks:"",fraesLagerRechts:"",fraesLag3:"",fraesLag4:"",richtung:"Gegenlauf",differential:"ausgerastet",zahnzahl:"",zahnzahlRatio:"",zahnD:"",zahnZw:"",zahnC:"",zahnB:"",zahnA:"",steigung:"",steigA:"",steigZw:"",steigB:"",steigC:"",steigD:"",fraesDrehzahl:"",fraesA:"",fraesB:"",fraesC:"",fraesD:"",laengs:"",laengsA:"",laengsB:"",laengsC:"",laengsZw:"",laengsD:"",schalterA2:"",schalterA3:"",schalterA4:"",schalterA5:"",tauchsteuerung:"",eingang:"m. Zwischenrad",stckStd:"",stckSpannung:""};
+
 function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool,onDuplicate}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const [lightboxPhoto,setLightboxPhoto]=useState(null);
@@ -5541,7 +5596,7 @@ function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToToo
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
   const filledTools2=(sheet.tools2||[]).filter(t=>t.description||t.label);
   const filledTools3=(sheet.tools3||[]).filter(t=>t.description||t.label);
-  const findLoc=toolId=>{if(!toolId)return null;const t=(tools||[]).find(x=>String(x.id)===String(toolId));if(!t)return null;const cab=(cabinets||[]).find(c=>c.id===t.cabinetId);const drw=cab?.drawers?.find(d=>d.id===t.drawerId);if(!cab)return null;return{cab:cab.name,drw:drw?`Drawer ${drw.number}${drw.label?` — ${drw.label}`:""}`:null};};
+  const findLoc=toolId=>{if(!toolId)return null;const t=(tools||[]).find(x=>String(x.id)===String(toolId));if(!t)return null;const cab=(cabinets||[]).find(c=>String(c.id)===String(t.cabinetId));const drw=cab?.drawers?.find(d=>String(d.id)===String(t.drawerId));if(!cab)return null;return{cab:cab.name,drw:drw?`Drawer ${drw.number}${drw.label?` — ${drw.label}`:""}`:null};};
   const opColors={"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber};
   const opColor=opColors[sheet.operation]||C.muted;
   const renderToolList=(toolArr,accent)=>(
@@ -5905,7 +5960,6 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
   const MZ_BLANK={fraesForlaenger:"",fraesMn:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneUdhaeng:"",pinoldokUdhaeng:""};
-  const ERIKS_BLANK={mn:"",z:"",beta:"",dk:"",uo:"",df:"",fraeserDia:"",fraesLagerLinks:"",fraesLagerRechts:"",fraesLag3:"",fraesLag4:"",richtung:"Gegenlauf",differential:"ausgerastet",zahnzahl:"",zahnzahlRatio:"",zahnD:"",zahnZw:"",zahnC:"",zahnB:"",zahnA:"",steigung:"",steigA:"",steigZw:"",steigB:"",steigC:"",steigD:"",fraesDrehzahl:"",fraesA:"",fraesB:"",fraesC:"",fraesD:"",laengs:"",laengsA:"",laengsB:"",laengsC:"",laengsZw:"",laengsD:"",schalterA2:"",schalterA3:"",schalterA4:"",schalterA5:"",tauchsteuerung:"",eingang:"m. Zwischenrad",stckStd:"",stckSpannung:""};
   const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{},mzAdvanced:{schnecke:{},werkstuck:{},entgratenVorne:{},entgratenHinten:{}},eriksSetup:{}};
   const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}:blank);
   // Sub-depts available for current dept
@@ -5946,7 +6000,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
                 <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Tool description — required"/>
                 <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool(t.position,"toolId",e.target.value||null)}>
                   <option value="">— No cabinet tool —</option>
-                  {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
+                  {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
                 </select>
                 <input style={{...inp(),fontSize:11}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Notes — optional"/>
               </div>
@@ -5986,7 +6040,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
                 <input style={inp()} value={t.description||""} onChange={e=>setTool(pos,"description",e.target.value)} placeholder="Tool description — optional"/>
                 <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool(pos,"toolId",e.target.value||null)}>
                   <option value="">— No cabinet tool —</option>
-                  {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
+                  {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
                 </select>
                 <input style={{...inp(),fontSize:11}} value={t.label||""} onChange={e=>setTool(pos,"label",e.target.value)} placeholder="Notes — optional"/>
               </div>
@@ -6015,7 +6069,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
           <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Fräser description — optional"/>
           <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool("toolId",e.target.value||null)}>
             <option value="">— No cabinet tool —</option>
-            {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
+            {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
           </select>
           <input style={{...inp(),fontSize:11}} value={t.label||""} onChange={e=>setTool("label",e.target.value)} placeholder="Notes — optional"/>
         </div>
@@ -6229,7 +6283,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
           <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Tool description — optional"/>
           <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool("toolId",e.target.value||null)}>
             <option value="">— No cabinet tool —</option>
-            {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>c.id===ct.cabinetId);const ctDrw=ctCab?.drawers?.find(d=>d.id===ct.drawerId);return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
+            {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
           </select>
           <input style={{...inp(),fontSize:11}} value={t.label||""} onChange={e=>setTool("label",e.target.value)} placeholder="Notes — optional"/>
         </div>
