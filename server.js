@@ -296,7 +296,17 @@ let writeQueue = Promise.resolve();
 const enqueueWrite = (fn) => { writeQueue = writeQueue.then(fn).catch(() => {}); return writeQueue; };
 
 // ── GET  /api/health ─────────────────────────────────────
-app.get("/api/health", (_req, res) => res.json({ ok: true, ts: Date.now() }));
+app.get("/api/health", (_req, res) => res.json({ ok: true, ts: Date.now(), version: APP_VERSION }));
+
+// ── App version — tablets compare it to spot an update ───
+// dist/index.html points at the content-hashed JS/CSS, so it changes on every
+// build that changes the app. Sent as a header on every /api/data response.
+const APP_VERSION = (() => {
+  try {
+    return crypto.createHash("sha1").update(fs.readFileSync(path.join(__dirname, "dist", "index.html"))).digest("hex").slice(0, 12);
+  } catch { return "dev"; }
+})();
+app.use("/api/data", (_req, res, next) => { res.setHeader("X-App-Version", APP_VERSION); next(); });
 
 // ── GET  /api/data ────────────────────────────────────────
 // PINs are kept on disk but stripped from the response so no client can read them.

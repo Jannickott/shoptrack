@@ -248,10 +248,21 @@ export default function App(){
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
   const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{},hiddenMachines:[]});
 
+  // New version on the server? The first /api/data response tells us which build
+  // this page is; a different X-App-Version later means the server was updated.
+  const appVersionRef=useRef(null);
+  const [updateReady,setUpdateReady]=useState(false);
+  const checkVersion=r=>{
+    const v=r.headers.get("X-App-Version");
+    if(!v) return;
+    if(!appVersionRef.current) appVersionRef.current=v;
+    else if(v!==appVersionRef.current) setUpdateReady(true);
+  };
+
   // ── Load state from server on startup ─────────────────────
   useEffect(()=>{
     fetch("/api/data")
-      .then(r=>r.json())
+      .then(r=>{checkVersion(r);return r.json();})
       .then(data=>{
         if(data){
           if(data.jobs)         setJobs(data.jobs);
@@ -351,7 +362,7 @@ export default function App(){
   // so a local edit isn't overwritten before the 3 s save fires.
   useEffect(()=>{
     const t=setInterval(()=>{
-      fetch("/api/data").then(r=>r.json()).then(data=>{
+      fetch("/api/data").then(r=>{checkVersion(r);return r.json();}).then(data=>{
         setServerOnline(true);
         if(!data) return;
         const last=lastServerRef.current;
@@ -426,6 +437,11 @@ export default function App(){
   };
   // Most handlers call setX(...) and then saveNow() in the same click, before stateRef
   // has the new value — so save once now and again after the re-render has landed.
+  // Save, then load the new version. Jobs and timers live on the server, so nothing
+  // is lost — the operator just logs in again.
+  const reloadForUpdate=()=>{doSave().finally(()=>window.location.reload());};
+  // Nobody logged in on this tablet (login screen, or just logged out) → update right away
+  useEffect(()=>{if(updateReady&&!user) reloadForUpdate();},[updateReady,user]);
   const savePendingRef=useRef(false);
   const saveNow=()=>{savePendingRef.current=true;return doSave();};
   useEffect(()=>{
@@ -438,7 +454,7 @@ export default function App(){
   useEffect(()=>{
     const onVisible=()=>{
       if(document.visibilityState!=="visible") return;
-      fetch("/api/data").then(r=>r.json()).then(data=>{
+      fetch("/api/data").then(r=>{checkVersion(r);return r.json();}).then(data=>{
         if(!data) return;
         if(data.jobs) setJobs(local=>{
           const serverIds=new Set(data.jobs.map(j=>j.id));
@@ -617,6 +633,10 @@ export default function App(){
   return(
     <div style={{fontFamily:"'Share Tech Mono',monospace",background:C.bg,minHeight:"100vh",color:C.text}}>
       {/* OFFLINE BANNER */}
+      {updateReady&&<div style={{background:C.blue,color:"#fff",padding:"8px 12px",display:"flex",alignItems:"center",justifyContent:"center",gap:12,fontSize:12,fontWeight:700,letterSpacing:1}}>
+        <span><i className="ti ti-refresh"/> New version of ShopTrack available</span>
+        <button style={{...btn("outline",false,true),color:"#fff",borderColor:"rgba(255,255,255,.7)"}} onClick={reloadForUpdate}>Update now</button>
+      </div>}
       {!serverOnline&&<div style={{background:"rgba(231,76,60,.92)",color:"#fff",textAlign:"center",padding:"6px 12px",fontSize:11,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase"}}><i className="ti ti-wifi-off"/> No connection to server — changes will be saved automatically when reconnected</div>}
       {/* HEADER */}
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
