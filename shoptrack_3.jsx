@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 
 // ─── INITIAL DATA ─────────────────────────────────────────────────────────────
 const INIT_USERS = [
@@ -247,6 +247,7 @@ export default function App(){
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
   const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{},hiddenMachines:[]});
+  const [planOrders,setPlanOrders]=useState([]);
 
   // New version on the server? The first /api/data response tells us which build
   // this page is; a different X-App-Version later means the server was updated.
@@ -309,6 +310,7 @@ export default function App(){
             setSubDepartments(sd);
           }
           if(data.efficiencyGoals) setEfficiencyGoals(data.efficiencyGoals);
+          if(data.planOrders) setPlanOrders(data.planOrders);
           if(data.settingsVersion) settingsVersionRef.current=data.settingsVersion;
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
@@ -324,6 +326,7 @@ export default function App(){
             setupDeptParams:data.setupDeptParams,
             subDepartments:data.subDepartments,
             efficiencyGoals:data.efficiencyGoals,
+            planOrders:data.planOrders,
           };
         }
       })
@@ -340,8 +343,8 @@ export default function App(){
   const lastSavedHashRef=useRef('');    // hash of what we last successfully sent — skip identical saves
   const [serverOnline,setServerOnline]=useState(true);
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals]);
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders};
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders]);
 
   // Save to server every 3 seconds — only when data has changed, with retry on failure
   useEffect(()=>{
@@ -383,6 +386,12 @@ export default function App(){
         });
         if(data.machineIssues) setMachineIssues(local=>mergeIssues(local,data.machineIssues,stateRef.current.downtimeLog));
         if(data.efficiencyGoals&&JSON.stringify(data.efficiencyGoals)!==JSON.stringify(last.efficiencyGoals)) setEfficiencyGoals(data.efficiencyGoals);
+        // Planning orders are never removed (deleted:true), so merge by id, newest edit wins
+        if(data.planOrders&&JSON.stringify(data.planOrders)!==JSON.stringify(last.planOrders)) setPlanOrders(local=>{
+          const m=new Map(local.map(o=>[o.id,o]));
+          data.planOrders.forEach(o=>{const l=m.get(o.id);if(!l||(o.updatedAt||0)>=(l.updatedAt||0))m.set(o.id,o);});
+          return [...m.values()];
+        });
         // Settings: only apply if the server value actually changed (another device saved it)
         const s=JSON.stringify;
         if(data.workHours  &&s(data.workHours) !==s(last.workHours)) {setWorkHours(data.workHours);workHoursRef.current=data.workHours;}
@@ -420,7 +429,7 @@ export default function App(){
         // Keep settingsVersion in sync with server (take the max — never go backwards)
         if((data.settingsVersion||0)>settingsVersionRef.current) settingsVersionRef.current=data.settingsVersion;
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders};
       }).catch(()=>setServerOnline(false));
     },5000);
     return()=>clearInterval(t);
@@ -448,7 +457,7 @@ export default function App(){
     if(!savePendingRef.current) return;
     savePendingRef.current=false;
     doSave();
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals]);
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders]);
 
   // ── Refresh immediately when tab becomes visible again ────
   useEffect(()=>{
@@ -665,7 +674,7 @@ export default function App(){
       )}
       {user.role==="admin"&&(
         <div style={{display:"flex",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`,overflowX:"auto"}}>
-          {[["admin","layout-dashboard","Dashboard"],["alljobs","tool","All Jobs"],["machdata","cpu","Machines"],["admintools","package","Tools"],["setup","clipboard-list","Setup"],["reports","chart-bar","Reports"],["manage","settings","Manage"]].map(([t,ic,lb])=>{
+          {[["admin","layout-dashboard","Dashboard"],["planning","calendar-time","Planning β"],["alljobs","tool","All Jobs"],["machdata","cpu","Machines"],["admintools","package","Tools"],["setup","clipboard-list","Setup"],["reports","chart-bar","Reports"],["manage","settings","Manage"]].map(([t,ic,lb])=>{
             const lowCnt=t==="admintools"?tools.filter(tl=>tl.active&&((!tl.returnable&&tl.quantity<=(tl.minQuantity||0))||tl.broken||(tl.hasConditionRating&&(tl.conditionStars||5)<=2&&!tl.ordered))).length:0;
             return(
               <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
@@ -687,7 +696,8 @@ export default function App(){
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
-      {tab==="reports"  &&<ReportsTab        jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
+      {tab==="planning" &&<PlanningTab       jobs={visibleJobs} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} saveNow={saveNow}/>}
+      {tab==="reports"  &&<ReportsTab       jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
@@ -3570,6 +3580,416 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
           </div>
         ))}
       </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════
+// PLANNING (beta, admin) — orders with a route of steps (one per department),
+// timed from previous runs of the part, placed onto machines within work hours
+// ═══════════════════════════════════════════════════════
+const PLAN_COLORS=["#3b82f6","#27ae60","#f0a500","#8b5cf6","#06b6d4","#ec4899","#e67e22","#84cc16"];
+const normPart=s=>(s||"").trim().toLowerCase();
+function median(a){if(!a.length)return null;const s=[...a].sort((x,y)=>x-y);const m=Math.floor(s.length/2);return s.length%2?s[m]:(s[m-1]+s[m])/2;}
+function addDays(ms,n){const d=new Date(ms);d.setDate(d.getDate()+n);return d.getTime();}
+function dueTs(o){return o.dueDate?new Date(o.dueDate+"T00:00:00").getTime():9e15;}
+// Urgent first, then rank (defaults to due date; ▲▼ changes it), then oldest
+function orderCmp(a,b){return (b.urgent?1:0)-(a.urgent?1:0)||(a.rank??dueTs(a))-(b.rank??dueTs(b))||a.id-b.id;}
+
+// Finished runs of a part — one row per job, both sides together
+function partHistory(jobs,machines,part){
+  const p=normPart(part); if(!p) return [];
+  const dept=name=>(machines.find(m=>m.name===name)||{}).department||"";
+  return jobs.filter(j=>j.status==="done"&&!j.deleted&&normPart(j.job)===p).map(j=>({
+    machine:j.machine,department:dept(j.machine),setupSec:jSetupAll(j),runSec:jRunAll(j),
+    pieces:Math.max(j.pieces||0,j.pieces2||0),createdAt:j.createdAt||0,
+  }));
+}
+
+// Typical time for a step: runs on the same machine, else anywhere in the department.
+// Median, so one odd run doesn't throw it off.
+function estimateStep(hist,step){
+  let rows=step.machine?hist.filter(h=>h.machine===step.machine):[],basis="machine";
+  if(!rows.length){rows=hist.filter(h=>h.department&&h.department===step.department);basis="department";}
+  if(!rows.length) return null;
+  const perPc=rows.filter(h=>h.pieces>0).map(h=>h.runSec/h.pieces);
+  return {setupSec:Math.round(median(rows.map(h=>h.setupSec))),runPerPcSec:perPc.length?median(perPc):null,n:rows.length,basis};
+}
+
+// The route the part took before: departments in the order they were first done,
+// each with the machine it ran on most
+function suggestRoute(hist){
+  const steps=[];
+  [...hist].sort((a,b)=>a.createdAt-b.createdAt).forEach(h=>{
+    const key=h.department||h.machine;
+    if(!key||steps.some(s=>(s.department||s.machine)===key)) return;
+    const counts={};hist.filter(x=>(x.department||x.machine)===key).forEach(x=>{counts[x.machine]=(counts[x.machine]||0)+1;});
+    steps.push({id:Date.now()+steps.length,department:h.department,machine:Object.entries(counts).sort((a,b)=>b[1]-a[1])[0][0],setupMin:"",runMinPerPc:""});
+  });
+  return steps;
+}
+
+// Planned seconds for a step: typed minutes win, else the history estimate
+function stepDuration(step,qty,hist){
+  const est=estimateStep(hist,step);
+  const num=v=>v===""||v==null||isNaN(Number(v))?null:Number(v);
+  const setup=num(step.setupMin)!=null?num(step.setupMin)*60:est?.setupSec;
+  const perPc=num(step.runMinPerPc)!=null?num(step.runMinPerPc)*60:est?.runPerPcSec;
+  return {est,durationSec:setup==null||perPc==null?null:Math.round(setup+perPc*(qty||0))};
+}
+
+// Work window [start,end] of the day containing ms, or null on a day off
+function dayWindow(wh,ms){
+  const d=new Date(ms);d.setHours(0,0,0,0);
+  const dh=(wh||{})[DAYS_KEY[d.getDay()]]||(wh?.start?{start:wh.start,end:wh.end,enabled:true}:null);
+  if(!dh||!dh.enabled||!dh.start||!dh.end) return null;
+  const [sh,sm]=dh.start.split(":").map(Number),[eh,em]=dh.end.split(":").map(Number);
+  const s=new Date(d);s.setHours(sh,sm,0,0);const e=new Date(d);e.setHours(eh,em,0,0);
+  return e>s?[s.getTime(),e.getTime()]:null;
+}
+
+// Spend `sec` of work time from startMs on, skipping nights and days off.
+// Returns the end and the [from,to] pieces per day (for drawing).
+function addWorkTime(wh,startMs,sec){
+  const segs=[];let t=startMs,left=sec*1000;
+  for(let i=0;i<730&&left>0;i++){
+    const w=dayWindow(wh,t);
+    if(w&&t<w[1]){const s=Math.max(t,w[0]),take=Math.min(left,w[1]-s);segs.push([s,s+take]);left-=take;t=s+take;if(left<=0)break;}
+    const next=new Date(t);next.setHours(0,0,0,0);next.setDate(next.getDate()+1);t=next.getTime();
+  }
+  return {end:segs.length?segs[segs.length-1][1]:startMs,segs,ok:left<=0};
+}
+
+// Greedy forward plan: running jobs first (their estimated remaining time), then
+// orders in priority order; each step waits for the previous one and goes to the
+// machine in its department that can finish it first.
+function buildPlan({orders,jobs,allMachines,machines,workHours,now}){
+  const free={};machines.forEach(m=>{free[m.name]=now;});
+  const blocks=[];
+  jobs.filter(j=>j.status!=="done"&&j.status!=="deburring"&&free[j.machine]!=null).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).forEach(j=>{
+    const typical=median(partHistory(jobs,allMachines,j.job).filter(h=>h.machine===j.machine).map(h=>h.setupSec+h.runSec));
+    const lt=liveTime(j);
+    let r;
+    if(typical!=null) r=addWorkTime(workHours,free[j.machine],Math.max(0,typical-(lt.setup+lt.run+lt.setup2+lt.run2)));
+    else{const w=dayWindow(workHours,now);r=w&&now<w[1]?{end:w[1],segs:[[Math.max(now,w[0]),w[1]]]}:{end:now,segs:[]};} // unknown: assume it finishes today
+    blocks.push({live:true,guess:typical==null,machine:j.machine,end:r.end,segs:r.segs,label:[j.customer,j.job].filter(Boolean).join(" · "),operator:j.operatorName});
+    free[j.machine]=Math.max(free[j.machine],r.end);
+  });
+  const ordered=orders.filter(o=>!o.deleted&&!o.done).sort(orderCmp);
+  const results={};
+  ordered.forEach(o=>{
+    const hist=partHistory(jobs,allMachines,o.partNumber);
+    let prevEnd=now,problem=null;const steps=[];
+    for(const [i,st] of (o.steps||[]).entries()){
+      const {durationSec}=stepDuration(st,o.quantity,hist);
+      const name=st.machine||st.department||"?";
+      if(durationSec==null){problem=`Step ${i+1} (${name}) has no time — no history, enter minutes`;break;}
+      const cands=st.machine?machines.filter(m=>m.name===st.machine):machines.filter(m=>m.department===st.department);
+      if(!cands.length){problem=`No active machine for step ${i+1} (${name})`;break;}
+      let best=null;
+      cands.forEach(m=>{const r=addWorkTime(workHours,Math.max(free[m.name],prevEnd),durationSec);if(r.ok&&(!best||r.end<best.r.end))best={m,r};});
+      if(!best){problem=`No work hours set — can't plan step ${i+1}`;break;}
+      free[best.m.name]=best.r.end;
+      const b={orderId:o.id,stepIdx:i,machine:best.m.name,start:best.r.segs[0]?.[0]??prevEnd,end:best.r.end,segs:best.r.segs,durationSec,
+        label:[o.customer,o.partNumber].filter(Boolean).join(" · ")};
+      prevEnd=best.r.end;blocks.push(b);steps.push(b);
+    }
+    const end=!problem&&steps.length?prevEnd:null;
+    const dueEnd=o.dueDate?new Date(o.dueDate+"T23:59:59").getTime():null;
+    results[o.id]={steps,end,problem,late:!!(end&&dueEnd&&end>dueEnd)};
+  });
+  return {blocks,results,ordered};
+}
+
+function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrders,saveNow}){
+  const [view,setView]=useState("week");
+  const [weekOffset,setWeekOffset]=useState(0);
+  const [monthOffset,setMonthOffset]=useState(0);
+  const [editing,setEditing]=useState(null); // copy of the order being edited
+  const [selectedId,setSelectedId]=useState(null);
+  const minute=Math.floor(Date.now()/60000); // re-plan once a minute, not every second
+  const activeMachines=useMemo(()=>machines.filter(m=>m.active&&!m.removed).sort((a,b)=>(a.department||"~").localeCompare(b.department||"~")||a.name.localeCompare(b.name)),[machines]);
+  const plan=useMemo(()=>buildPlan({orders:planOrders||[],jobs,allMachines:machines,machines:activeMachines,workHours,now:minute*60000}),[planOrders,jobs,machines,activeMachines,workHours,minute]);
+  const colorOf=id=>PLAN_COLORS[Math.max(0,plan.ordered.findIndex(o=>o.id===id))%PLAN_COLORS.length];
+  const allDepts=[...new Set([...(departments||[]),...machines.map(m=>m.department).filter(Boolean)])].sort();
+
+  const saveOrders=fn=>{setPlanOrders(fn);saveNow&&saveNow();};
+  const upsert=o=>saveOrders(prev=>{const n={...o,updatedAt:Date.now()};return prev.some(x=>x.id===o.id)?prev.map(x=>x.id===o.id?n:x):[...prev,n];});
+  const patch=(o,p)=>upsert({...o,...p});
+  const move=(o,dir)=>{
+    const list=plan.ordered;const other=list[list.findIndex(x=>x.id===o.id)+dir];
+    if(!other||!!other.urgent!==!!o.urgent) return;
+    const rb=other.rank??dueTs(other),now=Date.now();
+    saveOrders(prev=>prev.map(x=>x.id===o.id?{...x,rank:rb+dir,updatedAt:now}:x));
+  };
+  const sortByDue=()=>{const now=Date.now();saveOrders(prev=>prev.map(o=>o.deleted||o.done?o:{...o,rank:dueTs(o),updatedAt:now}));};
+  const newOrder=()=>setEditing({id:Date.now(),customer:"",partNumber:"",quantity:"",dueDate:"",urgent:false,notes:"",steps:[],createdAt:Date.now(),isNew:true});
+
+  const problems=plan.ordered.filter(o=>plan.results[o.id]?.problem);
+  const lateCount=plan.ordered.filter(o=>plan.results[o.id]?.late).length;
+  const fmtDay=ms=>new Date(ms).toLocaleDateString("en-GB",{weekday:"short",day:"2-digit",month:"short"});
+
+  // Pieces of a machine's blocks inside one day's work window, as % positions
+  const daySegments=(machine,w)=>{
+    const out=[];
+    plan.blocks.filter(b=>b.machine===machine).forEach((b,bi)=>b.segs.forEach(([s,e],si)=>{
+      if(e<=w[0]||s>=w[1]) return;
+      const a=Math.max(s,w[0]),z=Math.min(e,w[1]);
+      out.push({b,key:`${bi}-${si}`,left:(a-w[0])/(w[1]-w[0])*100,width:(z-a)/(w[1]-w[0])*100,sec:(z-a)/1000});
+    }));
+    return out;
+  };
+
+  if(editing) return <PlanOrderForm order={editing} jobs={jobs} machines={machines} activeMachines={activeMachines} allDepts={allDepts}
+    onCancel={()=>setEditing(null)}
+    onSave={o=>{const {isNew,...clean}=o;upsert(isNew?{...clean,rank:dueTs(clean)}:clean);setEditing(null);setSelectedId(o.id);}}/>;
+
+  // ── Week view ──
+  const weekStart=(()=>{const d=new Date();d.setHours(0,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7)+weekOffset*7);return d.getTime();})();
+  const weekDays=[...Array(7)].map((_,i)=>addDays(weekStart,i));
+  const todayStart=new Date().setHours(0,0,0,0);
+  const weekNo=(()=>{const t=new Date(weekStart);t.setDate(t.getDate()+3);const w1=new Date(t.getFullYear(),0,4);return 1+Math.round(((t-w1)/86400000-3+((w1.getDay()+6)%7))/7);})();
+
+  const blockStyle=(b,selected)=>({position:"absolute",top:3,bottom:3,borderRadius:4,overflow:"hidden",whiteSpace:"nowrap",fontSize:9,lineHeight:"14px",padding:"1px 3px",cursor:b.live?"default":"pointer",
+    color:b.live?C.text:"#111",fontWeight:700,
+    background:b.live?"repeating-linear-gradient(45deg,#3a4a60,#3a4a60 4px,#2e3b4e 4px,#2e3b4e 8px)":colorOf(b.orderId),
+    opacity:selectedId&&!selected?0.3:1,border:selected?"2px solid #fff":"none",boxSizing:"border-box"});
+
+  const weekView=(
+    <div style={{...card(),padding:"10px 8px",overflowX:"auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <button style={btn("outline",false,true)} onClick={()=>setWeekOffset(w=>w-1)}><i className="ti ti-chevron-left"/></button>
+        <div style={{fontSize:12,color:C.text,fontWeight:700}}>Week {weekNo} · {fmtDay(weekDays[0])} – {fmtDay(weekDays[6])}</div>
+        <button style={btn("outline",false,true)} onClick={()=>setWeekOffset(w=>w+1)}><i className="ti ti-chevron-right"/></button>
+        {weekOffset!==0&&<button style={btn("outline",false,true)} onClick={()=>setWeekOffset(0)}>This week</button>}
+      </div>
+      <div style={{minWidth:760}}>
+        <div style={{display:"grid",gridTemplateColumns:"110px repeat(7,1fr)",gap:2,marginBottom:2}}>
+          <div/>
+          {weekDays.map(d=><div key={d} style={{fontSize:9,textAlign:"center",color:d===todayStart?C.amber:C.muted,fontWeight:d===todayStart?700:400,letterSpacing:1,textTransform:"uppercase"}}>{fmtDay(d)}</div>)}
+        </div>
+        {activeMachines.map(m=>(
+          <div key={m.id} style={{display:"grid",gridTemplateColumns:"110px repeat(7,1fr)",gap:2,marginBottom:2}}>
+            <div style={{fontSize:11,color:C.text,padding:"6px 4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+              {m.name}{m.department&&<div style={{fontSize:8,color:C.muted}}>{m.department}</div>}
+            </div>
+            {weekDays.map(d=>{
+              const w=dayWindow(workHours,d);
+              if(!w) return <div key={d} style={{background:"rgba(255,255,255,.02)",borderRadius:4,minHeight:34}}/>;
+              return(
+                <div key={d} style={{position:"relative",background:C.raised,borderRadius:4,minHeight:34,outline:d===todayStart?`1px solid ${C.amber}55`:"none"}}>
+                  {daySegments(m.name,w).map(({b,key,left,width})=>(
+                    <div key={key} title={`${b.live?"Running now: ":""}${b.label}${b.live?` (${b.operator||""})${b.guess?" — no history, assumed done today":""}`:` · step ${b.stepIdx+1}`}\n${fmtDate(b.segs[0]?.[0]??b.end)} → ${fmtDate(b.end)}`}
+                      onClick={()=>!b.live&&setSelectedId(id=>id===b.orderId?null:b.orderId)}
+                      style={{...blockStyle(b,b.orderId===selectedId),left:`${left}%`,width:`${width}%`}}>
+                      {width>12?b.label:""}
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div style={{fontSize:9,color:C.muted,marginTop:8}}>Each day shows its work hours. Striped = running now (estimated). Click a block to highlight its order.</div>
+    </div>
+  );
+
+  // ── Month view ──
+  const monthStart=(()=>{const d=new Date();d.setHours(0,0,0,0);d.setDate(1);d.setMonth(d.getMonth()+monthOffset);return d.getTime();})();
+  const monthDays=(()=>{const out=[];let t=monthStart;const m=new Date(monthStart).getMonth();while(new Date(t).getMonth()===m){out.push(t);t=addDays(t,1);}return out;})();
+  const monthLabel=new Date(monthStart).toLocaleDateString("en-GB",{month:"long",year:"numeric"});
+  const monthEnd=addDays(monthDays[monthDays.length-1],1);
+  const finishing=plan.ordered.filter(o=>{const r=plan.results[o.id];return r?.end&&r.end>=monthStart&&r.end<monthEnd;}).sort((a,b)=>plan.results[a.id].end-plan.results[b.id].end);
+
+  const monthView=(
+    <div style={{...card(),padding:"10px 8px",overflowX:"auto"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+        <button style={btn("outline",false,true)} onClick={()=>setMonthOffset(m=>m-1)}><i className="ti ti-chevron-left"/></button>
+        <div style={{fontSize:12,color:C.text,fontWeight:700,textTransform:"capitalize"}}>{monthLabel}</div>
+        <button style={btn("outline",false,true)} onClick={()=>setMonthOffset(m=>m+1)}><i className="ti ti-chevron-right"/></button>
+        {monthOffset!==0&&<button style={btn("outline",false,true)} onClick={()=>setMonthOffset(0)}>This month</button>}
+      </div>
+      <div style={{minWidth:760}}>
+        <div style={{display:"grid",gridTemplateColumns:`110px repeat(${monthDays.length},1fr)`,gap:1,marginBottom:2}}>
+          <div/>
+          {monthDays.map(d=><div key={d} style={{fontSize:8,textAlign:"center",color:d===todayStart?C.amber:C.muted,fontWeight:d===todayStart?700:400}}>{new Date(d).getDate()}<br/>{"SMTWTFS"[new Date(d).getDay()]}</div>)}
+        </div>
+        {activeMachines.map(m=>(
+          <div key={m.id} style={{display:"grid",gridTemplateColumns:`110px repeat(${monthDays.length},1fr)`,gap:1,marginBottom:1}}>
+            <div style={{fontSize:11,color:C.text,padding:"4px",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{m.name}</div>
+            {monthDays.map(d=>{
+              const w=dayWindow(workHours,d);
+              if(!w) return <div key={d} style={{background:"rgba(255,255,255,.02)",borderRadius:2,minHeight:24}}/>;
+              const segs=daySegments(m.name,w);
+              const load=Math.min(1,segs.reduce((s,x)=>s+x.sec,0)/((w[1]-w[0])/1000));
+              const sel=selectedId&&segs.some(x=>x.b.orderId===selectedId);
+              return <div key={d} title={`${m.name} · ${fmtDay(d)}\n${Math.round(load*100)}% planned${segs.length?"\n"+[...new Set(segs.map(x=>x.b.label))].join("\n"):""}`}
+                style={{background:load?`rgba(59,130,246,${0.15+load*0.75})`:C.raised,borderRadius:2,minHeight:24,fontSize:8,color:"#fff",textAlign:"center",lineHeight:"24px",outline:sel?"2px solid #fff":d===todayStart?`1px solid ${C.amber}88`:"none"}}>
+                {load>=0.05?Math.round(load*100):""}
+              </div>;
+            })}
+          </div>
+        ))}
+      </div>
+      <div style={{fontSize:9,color:C.muted,marginTop:8,marginBottom:12}}>Numbers = % of that day's work hours planned on the machine. Hover a day to see the jobs.</div>
+      <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Finishing in {monthLabel}</div>
+      {!finishing.length&&<div style={{fontSize:11,color:C.muted}}>No orders planned to finish this month.</div>}
+      {finishing.map(o=>{const r=plan.results[o.id];return(
+        <div key={o.id} onClick={()=>setSelectedId(id=>id===o.id?null:o.id)} style={{display:"flex",gap:10,alignItems:"center",padding:"6px 8px",borderBottom:`1px solid ${C.border}`,cursor:"pointer",background:o.id===selectedId?C.raised:"transparent"}}>
+          <span style={{width:10,height:10,borderRadius:2,background:colorOf(o.id),flexShrink:0}}/>
+          <span style={{flex:1,fontSize:12,color:C.text}}>{[o.customer,o.partNumber].filter(Boolean).join(" · ")} <span style={{color:C.muted}}>× {o.quantity}</span></span>
+          <span style={{fontSize:11,color:r.late?C.red:C.green}}>{fmtDay(r.end)}</span>
+          <span style={{fontSize:10,color:C.muted}}>due {o.dueDate?fmtDay(dueTs(o)):"—"}</span>
+        </div>
+      );})}
+    </div>
+  );
+
+  // ── Orders view ──
+  const ordersView=(
+    <div>
+      <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
+        <button style={btn("outline",false,true)} onClick={sortByDue} title="Undo manual ▲▼ moves"><i className="ti ti-sort-ascending"/> Sort by due date</button>
+      </div>
+      {!plan.ordered.length&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No orders yet. Press "New order" to add one.</div>}
+      {plan.ordered.map((o,i)=>{
+        const r=plan.results[o.id]||{};
+        return(
+          <div key={o.id} style={{...card(colorOf(o.id)),cursor:"pointer",outline:o.id===selectedId?"1px solid #fff":"none"}} onClick={()=>setSelectedId(id=>id===o.id?null:o.id)}>
+            <div style={{display:"flex",alignItems:"flex-start",gap:8}}>
+              <div style={{display:"flex",flexDirection:"column",gap:2}} onClick={e=>e.stopPropagation()}>
+                <button style={{...btn("outline",false,true),padding:"2px 6px"}} disabled={i===0} onClick={()=>move(o,-1)}><i className="ti ti-chevron-up"/></button>
+                <button style={{...btn("outline",false,true),padding:"2px 6px"}} disabled={i===plan.ordered.length-1} onClick={()=>move(o,1)}><i className="ti ti-chevron-down"/></button>
+              </div>
+              <div style={{flex:1,minWidth:0}}>
+                <div style={{fontSize:14,color:C.text,fontWeight:700}}>
+                  {o.urgent&&<span style={{...badge("down"),marginRight:6}}>Urgent</span>}
+                  {[o.customer,o.partNumber].filter(Boolean).join(" · ")} <span style={{color:C.muted,fontWeight:400}}>× {o.quantity}</span>
+                </div>
+                <div style={{fontSize:10,color:C.muted,marginTop:2}}>Due {o.dueDate?fmtDay(dueTs(o)):"— (no due date)"}{r.end&&<> · planned finish <span style={{color:r.late?C.red:C.green,fontWeight:700}}>{fmtDate(r.end)}</span></>}{r.late&&<span style={{color:C.red,fontWeight:700}}> · LATE</span>}</div>
+                {r.problem&&<div style={{fontSize:10,color:C.amber,marginTop:4}}><i className="ti ti-alert-triangle"/> {r.problem}</div>}
+                <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
+                  {(o.steps||[]).map((st,si)=>{const b=r.steps?.[si];return(
+                    <span key={st.id||si} style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:C.raised,color:C.text}}>
+                      {si+1}. {st.department||"—"} → {b?b.machine:(st.machine||"any")}{b&&<span style={{color:C.muted}}> · {fmtHM(b.durationSec)} · {fmtDay(b.start)}</span>}
+                    </span>
+                  );})}
+                </div>
+              </div>
+              <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
+                <button style={btn(o.urgent?"danger":"outline",false,true)} title="Urgent — plan before everything else" onClick={()=>patch(o,{urgent:!o.urgent})}><i className="ti ti-flame"/></button>
+                <button style={btn("outline",false,true)} title="Edit" onClick={()=>setEditing({...o})}><i className="ti ti-pencil"/></button>
+                <button style={btn("success",false,true)} title="Order finished — remove from plan" onClick={()=>patch(o,{done:true,doneAt:Date.now()})}><i className="ti ti-check"/></button>
+                <button style={btn("outline",false,true)} title="Delete" onClick={()=>{if(window.confirm(`Delete order ${o.partNumber}?`))patch(o,{deleted:true});}}><i className="ti ti-trash"/></button>
+              </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+
+  return(
+    <div style={{padding:"14px 16px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+        <div style={{fontSize:12,color:C.amber,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}><i className="ti ti-calendar-time"/> Planning <span style={{fontSize:9,background:C.blue,color:"#fff",borderRadius:4,padding:"1px 5px",letterSpacing:1}}>BETA</span></div>
+        <div style={{flex:1}}/>
+        {[["week","Week"],["month","Month"],["orders",`Orders (${plan.ordered.length})`]].map(([v,l])=><button key={v} style={tag(view===v)} onClick={()=>setView(v)}>{l}</button>)}
+        <button style={btn("primary",false,true)} onClick={newOrder}><i className="ti ti-plus"/> New order</button>
+      </div>
+      {(problems.length>0||lateCount>0)&&(
+        <div style={{background:"rgba(240,165,0,.08)",border:`1px solid rgba(240,165,0,.3)`,borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.amber}}>
+          {lateCount>0&&<div><i className="ti ti-clock-exclamation"/> {lateCount} order{lateCount!==1?"s":""} planned to finish after the due date</div>}
+          {problems.map(o=><div key={o.id}><i className="ti ti-alert-triangle"/> {o.partNumber}: {plan.results[o.id].problem}</div>)}
+        </div>
+      )}
+      {view==="week"&&weekView}
+      {view==="month"&&monthView}
+      {view==="orders"&&ordersView}
+      <div style={{fontSize:9,color:C.muted,marginTop:12,lineHeight:1.6}}>
+        Beta: times come from the median of earlier finished runs of the same part (same machine first, else same department), or the minutes you type.
+        Machines are planned within work hours only — no night or unattended running yet. Running jobs block their machine for their typical remaining time.
+      </div>
+    </div>
+  );
+}
+
+// New / edit planning order: customer, part, quantity, due date and the route
+function PlanOrderForm({order,jobs,machines,activeMachines,allDepts,onCancel,onSave}){
+  const [o,setO]=useState(order);
+  const [err,setErr]=useState("");
+  const set=(k,v)=>setO(p=>({...p,[k]:v}));
+  const hist=partHistory(jobs,machines,o.partNumber);
+  const suggested=suggestRoute(hist);
+  const knownParts=useMemo(()=>[...new Set(jobs.filter(j=>j.status==="done"&&j.job).map(j=>j.job.trim()))].sort(),[jobs]);
+  const setStep=(i,p)=>setO(x=>({...x,steps:x.steps.map((s,si)=>si===i?{...s,...p}:s)}));
+  const moveStep=(i,dir)=>setO(x=>{const s=[...x.steps];const j=i+dir;if(j<0||j>=s.length)return x;[s[i],s[j]]=[s[j],s[i]];return{...x,steps:s};});
+  // Fill the route from history the first time a known part is typed
+  const onPart=v=>setO(p=>{const n={...p,partNumber:v};if(!p.steps.length){const r=suggestRoute(partHistory(jobs,machines,v));if(r.length)n.steps=r;}return n;});
+  const save=()=>{
+    if(!o.partNumber.trim()) return setErr("Part number is required");
+    if(!(parseInt(o.quantity)>0)) return setErr("Quantity must be at least 1");
+    if(!o.steps.length) return setErr("Add at least one step");
+    if(o.steps.some(s=>!s.department&&!s.machine)) return setErr("Every step needs a department or a machine");
+    onSave({...o,partNumber:o.partNumber.trim(),customer:o.customer.trim(),quantity:parseInt(o.quantity)});
+  };
+  const qty=parseInt(o.quantity)||0;
+  return(
+    <div style={{padding:"14px 16px",maxWidth:760}}>
+      <button style={{...btn("outline",false,true),marginBottom:12}} onClick={onCancel}><i className="ti ti-arrow-left"/> Back</button>
+      <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>{order.isNew?"New order":"Edit order"}</div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:10}}>
+        <div><label style={label}>Customer</label><input style={inp()} value={o.customer} onChange={e=>set("customer",e.target.value)}/></div>
+        <div><label style={label}>Part number *</label><input style={inp()} list="plan-parts" value={o.partNumber} onChange={e=>onPart(e.target.value)}/>
+          <datalist id="plan-parts">{knownParts.map(p=><option key={p} value={p}/>)}</datalist>
+          <div style={{fontSize:9,color:hist.length?C.green:C.muted,marginTop:4}}>{hist.length?`${hist.length} earlier run${hist.length!==1?"s":""} found`:o.partNumber?"New part — no history, enter minutes per step":""}</div>
+        </div>
+        <div><label style={label}>Quantity *</label><input type="number" min="1" style={inp()} value={o.quantity} onChange={e=>set("quantity",e.target.value)}/></div>
+        <div><label style={label}>Due date</label><input type="date" style={inp()} value={o.dueDate} onChange={e=>set("dueDate",e.target.value)}/></div>
+      </div>
+      <label style={{display:"flex",alignItems:"center",gap:8,fontSize:12,color:o.urgent?C.red:C.muted,marginBottom:14,cursor:"pointer"}}>
+        <input type="checkbox" checked={!!o.urgent} onChange={e=>set("urgent",e.target.checked)}/> Urgent — plan before everything else
+      </label>
+
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+        <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",flex:1}}>Route — one step per department, in order</div>
+        {suggested.length>0&&<button style={btn("outline",false,true)} onClick={()=>set("steps",suggested)}><i className="ti ti-history"/> Use previous route ({suggested.length})</button>}
+      </div>
+      {o.steps.map((st,i)=>{
+        const {est,durationSec}=stepDuration(st,qty,hist);
+        const deptMachines=activeMachines.filter(m=>!st.department||m.department===st.department);
+        return(
+          <div key={st.id||i} style={{...card(),padding:"10px 12px"}}>
+            <div style={{display:"grid",gridTemplateColumns:"24px 1fr 1fr 90px 100px auto",gap:8,alignItems:"end"}}>
+              <div style={{fontSize:16,color:C.amber,fontWeight:700,paddingBottom:10}}>{i+1}</div>
+              <div><label style={label}>Department</label>
+                <select style={sel()} value={st.department} onChange={e=>setStep(i,{department:e.target.value,machine:""})}>
+                  <option value="">—</option>{allDepts.map(d=><option key={d}>{d}</option>)}
+                </select></div>
+              <div><label style={label}>Machine</label>
+                <select style={sel()} value={st.machine} onChange={e=>setStep(i,{machine:e.target.value})}>
+                  <option value="">{st.department?`Any in ${st.department}`:"—"}</option>{deptMachines.map(m=><option key={m.id}>{m.name}</option>)}
+                </select></div>
+              <div><label style={label}>Setup min</label><input type="number" min="0" style={inp()} value={st.setupMin} placeholder={est?String(Math.round(est.setupSec/60)):"?"} onChange={e=>setStep(i,{setupMin:e.target.value})}/></div>
+              <div><label style={label}>Run min / pc</label><input type="number" min="0" step="0.1" style={inp()} value={st.runMinPerPc} placeholder={est?.runPerPcSec!=null?(est.runPerPcSec/60).toFixed(1):"?"} onChange={e=>setStep(i,{runMinPerPc:e.target.value})}/></div>
+              <div style={{display:"flex",gap:2,paddingBottom:4}}>
+                <button style={{...btn("outline",false,true),padding:"4px 6px"}} onClick={()=>moveStep(i,-1)}><i className="ti ti-chevron-up"/></button>
+                <button style={{...btn("outline",false,true),padding:"4px 6px"}} onClick={()=>moveStep(i,1)}><i className="ti ti-chevron-down"/></button>
+                <button style={{...btn("outline",false,true),padding:"4px 6px"}} onClick={()=>set("steps",o.steps.filter((_,si)=>si!==i))}><i className="ti ti-x"/></button>
+              </div>
+            </div>
+            <div style={{fontSize:10,color:C.muted,marginTop:6,paddingLeft:32}}>
+              {est?<>History: {Math.round(est.setupSec/60)} min setup{est.runPerPcSec!=null?` + ${(est.runPerPcSec/60).toFixed(1)} min/pc`:" (no piece counts)"} · median of {est.n} run{est.n!==1?"s":""} {est.basis==="machine"?`on ${st.machine}`:`in ${st.department}`}</>:"No history for this step — type the minutes"}
+              {durationSec!=null&&<span style={{color:C.text}}> · planned {fmtHM(durationSec)} for {qty} pcs</span>}
+            </div>
+          </div>
+        );
+      })}
+      <button style={{...btn("outline",false,true),marginBottom:14}} onClick={()=>set("steps",[...o.steps,{id:Date.now(),department:"",machine:"",setupMin:"",runMinPerPc:""}])}><i className="ti ti-plus"/> Add step</button>
+      <div><label style={label}>Notes</label><input style={inp()} value={o.notes||""} onChange={e=>set("notes",e.target.value)}/></div>
+      {err&&<div style={{...errMsg,marginTop:10}}>{err}</div>}
+      <button style={{...btn("success",true),marginTop:14}} onClick={save}><i className="ti ti-check"/> {order.isNew?"Add to plan":"Save"}</button>
     </div>
   );
 }

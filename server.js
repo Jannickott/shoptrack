@@ -444,6 +444,8 @@ function mergeAndWrite(incoming) {
 
   merged.downtimeLog   = unionById(server.downtimeLog, incoming.downtimeLog);
   merged.toolLog       = unionById(server.toolLog, incoming.toolLog);
+  // Planning orders: per order, newest updatedAt wins (deleting sets deleted:true)
+  merged.planOrders    = unionById(server.planOrders, incoming.planOrders);
   merged.machineIssues = mergeIssues(server.machineIssues, incoming.machineIssues, merged.downtimeLog);
 
   merged.settingsVersion = Math.max(serverSV, incomingSV);
