@@ -3,7 +3,6 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import { fileURLToPath } from "url";
-import cors from "cors";
 import PDFDocument from "pdfkit";
 import crypto from "crypto";
 
@@ -51,6 +50,7 @@ function runBackup(label) {
     fs.copyFileSync(DATA_FILE, dest);
     console.log(`  ✓ ${label.charAt(0).toUpperCase()+label.slice(1)} backup saved: shoptrack-data-${stamp}-${label}.json`);
     pruneBackups();
+    copyBackupElsewhere();
   } catch(e) {
     console.error(`  ✗ ${label} backup failed:`, e.message);
   }
@@ -67,6 +67,53 @@ function pruneBackups() {
     });
   }
 }
+
+// ── Second backup location (another disk, OneDrive, network drive, USB) ───────
+// Backups next to the data file die with the same disk. If shoptrack-config.json
+// has "backupCopyDir", every backup is also copied there, along with any new
+// photos. The config file is per server and not in git.
+const CONFIG_FILE = path.join(__dirname, "shoptrack-config.json");
+
+function backupCopyDir() {
+  // Strip a BOM — Notepad and PowerShell like to add one
+  try { return JSON.parse(fs.readFileSync(CONFIG_FILE, "utf8").replace(/^﻿/, "")).backupCopyDir || null; }
+  catch { return null; }
+}
+
+// Copy files that are new or changed size — photos never change once written
+function mirrorDir(src, dst) {
+  let copied = 0;
+  if (!fs.existsSync(src)) return 0;
+  fs.mkdirSync(dst, { recursive: true });
+  for (const e of fs.readdirSync(src, { withFileTypes: true })) {
+    const s = path.join(src, e.name), d = path.join(dst, e.name);
+    if (e.isDirectory()) copied += mirrorDir(s, d);
+    else if (!fs.existsSync(d) || fs.statSync(d).size !== fs.statSync(s).size) { fs.copyFileSync(s, d); copied++; }
+  }
+  return copied;
+}
+
+// Copies the whole backups folder, so a backup missed while the second location
+// was unreachable (USB unplugged, network down) is caught up next time
+function copyBackupElsewhere() {
+  const dir = backupCopyDir();
+  if (!dir) return;
+  try {
+    const bdir = path.join(dir, "backups");
+    const files = mirrorDir(BACKUPS_DIR, bdir);
+    // Keep more history here than locally (≈ 3 months)
+    const all = fs.readdirSync(bdir).filter(f => f.startsWith("shoptrack-data-") && f.endsWith(".json")).sort();
+    all.slice(0, Math.max(0, all.length - 180)).forEach(f => fs.unlinkSync(path.join(bdir, f)));
+    const photos = mirrorDir(PHOTOS_DIR, path.join(dir, "photos"));
+    console.log(`  ✓ Copied to ${dir}: ${files} backup file${files === 1 ? "" : "s"}, ${photos} photo file${photos === 1 ? "" : "s"}`);
+  } catch (e) {
+    console.error(`  ✗ Could not copy backups to ${dir}:`, e.message);
+  }
+}
+
+console.log(backupCopyDir()
+  ? `  ℹ Second backup location: ${backupCopyDir()}`
+  : `  ⚠ No second backup location — set "backupCopyDir" in shoptrack-config.json`);
 
 // Check every minute whether a backup slot is due
 let lastBackupSlot = "";
@@ -85,6 +132,7 @@ function checkBackupSchedule() {
 
 // Run a startup backup (labelled "startup") so there's always one on server restart
 runBackup("startup");
+copyBackupElsewhere(); // catch up even if today's startup backup already existed
 setInterval(checkBackupSchedule, 60 * 1000);
 
 // Move any inline photos out of the data file (runs after the startup backup)
@@ -219,7 +267,20 @@ function runDowntimeTick() {
 
 setInterval(runDowntimeTick, 30 * 1000);
 
-app.use(cors());
+// The app is served by this server, so it never needs cross-origin access.
+// No CORS headers means other websites can't read the data; and changes coming
+// from a page on another site (Origin doesn't match) are refused outright —
+// otherwise any web page opened on a shop tablet could talk to ShopTrack.
+app.use((req, res, next) => {
+  if (req.method === "GET" || req.method === "HEAD") return next();
+  const origin = req.headers.origin;
+  if (origin) {
+    let host = null;
+    try { host = new URL(origin).host; } catch { /* bad header */ }
+    if (host !== req.headers.host) return res.status(403).json({ error: "Cross-site request refused" });
+  }
+  next();
+});
 app.use(express.json({ limit: "25mb" }));
 
 // ── Serve photos ──────────────────────────────────────────
@@ -251,14 +312,31 @@ app.get("/api/data", (_req, res) => {
 });
 
 // ── POST /api/verify-pin ──────────────────────────────────
+// A 4-digit PIN has only 10,000 combinations, so limit wrong guesses:
+// after 5 wrong PINs for a user from one device, that user is locked there for 1 minute.
+const PIN_MAX_FAILS = 5, PIN_LOCK_MS = 60 * 1000;
+const pinFails = new Map(); // `${ip}|${userId}` -> { count, lockedUntil }
+
 app.post("/api/verify-pin", (req, res) => {
   try {
     const { userId, pin } = req.body;
     if (!userId || !pin) return res.status(400).json({ ok: false });
+    const key = `${req.ip}|${userId}`;
+    const f = pinFails.get(key);
+    if (f && f.lockedUntil > Date.now()) {
+      return res.status(429).json({ ok: false, locked: true, retryInSec: Math.ceil((f.lockedUntil - Date.now()) / 1000) });
+    }
     if (!fs.existsSync(DATA_FILE)) return res.json({ ok: false });
     const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
     const user = (data.users || []).find(u => u.id === userId);
-    res.json({ ok: !!(user && user.pin === pin) });
+    const ok = !!(user && user.pin === pin);
+    if (ok) {
+      pinFails.delete(key);
+    } else {
+      const count = (f && f.lockedUntil <= Date.now() && f.count >= PIN_MAX_FAILS ? 0 : (f?.count || 0)) + 1;
+      pinFails.set(key, { count, lockedUntil: count >= PIN_MAX_FAILS ? Date.now() + PIN_LOCK_MS : 0 });
+    }
+    res.json({ ok });
   } catch { res.status(500).json({ ok: false }); }
 });
 
@@ -650,20 +728,6 @@ app.post("/api/photo", (req, res) => {
       return res.status(400).json({ error: "Invalid filename" });
     }
     const base64 = data.replace(/^data:image\/\w+;base64,/, "");
-    fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
-    res.json({ url: `/photos/${filename}` });
-  } catch (e) { res.status(500).json({ error: e.message }); }
-});
-
-// ── POST /api/setup-photo ─────────────────────────────────
-app.post("/api/setup-photo", (req, res) => {
-  try {
-    const { sheetId, data } = req.body;
-    const base64 = data.replace(/^data:image\/\w+;base64,/, "");
-    const ts = Date.now();
-    const filename = `setup/${sheetId}_${ts}.jpg`;
-    const filePath = path.join(PHOTOS_DIR, filename);
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
     fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
     res.json({ url: `/photos/${filename}` });

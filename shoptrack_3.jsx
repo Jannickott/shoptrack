@@ -419,7 +419,9 @@ export default function App(){
     const state=stateRef.current;
     // Detect settings changes — bump version so server knows this save has authoritative settings
     const hash=JSON.stringify([state.users,state.machines,state.departments,state.cabinets,state.workHours,state.setupDeptParams,state.subDepartments,state.efficiencyGoals]);
-    if(hash!==prevSettingsHashRef.current){prevSettingsHashRef.current=hash;settingsVersionRef.current=Date.now();}
+    // Always newer than anything seen — the server's version can be ahead of this clock
+    // (another device's clock, or the stress test), and a lower number would be rejected
+    if(hash!==prevSettingsHashRef.current){prevSettingsHashRef.current=hash;settingsVersionRef.current=Math.max(Date.now(),settingsVersionRef.current+1);}
     return fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...state,settingsVersion:settingsVersionRef.current})}).catch(()=>{});
   };
   // Most handlers call setX(...) and then saveNow() in the same click, before stateRef
@@ -690,7 +692,7 @@ function LoginScreen({users,onLogin}){
     if(np.length===4&&sel){
       fetch("/api/verify-pin",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({userId:sel.id,pin:np})})
         .then(r=>r.json())
-        .then(d=>{if(d.ok){onLogin(sel);setPin("");setSel(null);}else{setErr("Wrong PIN");setPin("");setTimeout(()=>setErr(""),1500);}})
+        .then(d=>{if(d.ok){onLogin(sel);setPin("");setSel(null);}else{setErr(d.locked?`Too many wrong PINs — wait ${d.retryInSec}s`:"Wrong PIN");setPin("");setTimeout(()=>setErr(""),d.locked?3000:1500);}})
         .catch(()=>{setErr("Server error — try again");setPin("");setTimeout(()=>setErr(""),2000);});
     }
   };
