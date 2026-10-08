@@ -1652,7 +1652,8 @@ function StartRunModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
     const photoUrl=await uploadPhoto(photoData,filename);
     const lt=liveTime(j);
     const newStatus=isSide2?"side2_run":"run";
-    const timePatch=isSide2?{setupSec2:lt.setup2}:{setupSec:lt.setup};
+    // runStartedAt: when Start Run was pressed — lets admin correct it later
+    const timePatch=isSide2?{setupSec2:lt.setup2,run2StartedAt:now}:{setupSec:lt.setup,runStartedAt:now};
     const photoPatch=isSide2?{photoData2:photoUrl}:{photoData:photoUrl};
     const updatedJobs=(stateRef?stateRef.current.jobs:jobs).map(x=>x.id===jobId?{
       ...x,...timePatch,...photoPatch,status:newStatus,phaseStartedAt:now,lastModifiedAt:now,
@@ -2160,6 +2161,92 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
 // ═══════════════════════════════════════════════════════
 // ALL JOBS (ADMIN)
 // ═══════════════════════════════════════════════════════
+// <input type="datetime-local"> works in local time without seconds
+function toLocalInput(ms){const d=new Date(ms);const p=n=>String(n).padStart(2,"0");return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;}
+function fromLocalInput(v){const t=new Date(v).getTime();return isNaN(t)?null:t;}
+
+// Admin: an operator forgot to press Start Job or Start Run — set when it really
+// happened. Job start adds/removes setup time; run start moves time between
+// setup and run. Each fix is recorded in job.corrections.
+function StartTimeFix({j,onApply}){
+  const anyPaused=j.paused||j.logoutPaused||j.operatorPaused;
+  const lt=liveTime(j);
+  const now=Date.now();
+  const nightRunning=j.nightMode&&j.nightModeEndsAt&&!j.nightModeDone;
+  const reached1=["run","side2_setup","side2_run","deburring","done"].includes(j.status);
+  const reached2=j.status==="side2_run"||(j.twoSided&&["deburring","done"].includes(j.status)&&j.run2StartedAt);
+  // When Start Run was pressed: recorded since this feature; for older jobs only
+  // known if the run hasn't been paused since (phaseStartedAt is reset on resume)
+  const pressed=(key,status)=>j[key]??(j.status===status&&j.phaseStartedAt&&!anyPaused?j.phaseStartedAt:null);
+  const fixes=[
+    {key:"job",label:"Job actually started at",pressedAt:j.createdAt,show:!j.quickEntry,minT:null},
+    {key:"run1",label:j.twoSided?"Side 1 run actually started at":"Run actually started at",pressedAt:pressed("runStartedAt","run"),show:reached1&&!j.quickEntry,setupKey:"setupSec",runKey:"runSec",lt:["setup","run"],pressedKey:"runStartedAt",minT:j.createdAt},
+    {key:"run2",label:"Side 2 run actually started at",pressedAt:pressed("run2StartedAt","side2_run"),show:!!reached2,setupKey:"setupSec2",runKey:"runSec2",lt:["setup2","run2"],pressedKey:"run2StartedAt",minT:j.side1CompletedAt||j.createdAt},
+  ].filter(f=>f.show);
+  const [values,setValues]=useState({});
+  if(!fixes.length) return null;
+  // Untouched fields show when the button was actually pressed
+  const valueOf=f=>values[f.key]??(f.pressedAt?toLocalInput(f.pressedAt):"");
+
+  // Work out the result of one fix (null if nothing to do)
+  const plan=f=>{
+    const T=fromLocalInput(valueOf(f));
+    if(!T||!f.pressedAt) return null;
+    if(T>now) return {err:"That time is in the future"};
+    if(f.minT&&T<f.minT) return {err:`Can't be before the job started (${fmtDate(f.minT)})`};
+    const delta=Math.round((f.pressedAt-T)/1000); // + = really started earlier than pressed
+    if(Math.abs(delta)<60) return null;
+    if(f.key==="job"){
+      const setup=Math.max(0,lt.setup+delta);
+      return {T,delta,moved:setup-lt.setup,before:{setup:lt.setup},after:{setup},
+        patch:{setupSec:setup,createdAt:T}};
+    }
+    const [sk,rk]=f.lt;
+    const move=delta>0?Math.min(delta,lt[sk]):-Math.min(-delta,lt[rk]);
+    const setup=lt[sk]-move, run=lt[rk]+move;
+    return {T,delta,moved:move,before:{setup:lt[sk],run:lt[rk]},after:{setup,run},
+      patch:{[f.setupKey]:setup,[f.runKey]:run,[f.pressedKey]:T}};
+  };
+
+  const apply=(f,p)=>{
+    // Freeze the live timers into the stored values, then apply the fix
+    const frozen={setupSec:lt.setup,runSec:lt.run,setupSec2:lt.setup2,runSec2:lt.run2,deburSec:lt.debur,
+      ...(j.phaseStartedAt?{phaseStartedAt:Date.now()}:{})};
+    onApply({...frozen,...p.patch,
+      corrections:[...(j.corrections||[]),{at:Date.now(),what:f.key,from:f.pressedAt,to:p.T,movedSec:p.moved}]});
+  };
+
+  return(
+    <div style={{marginTop:6,paddingTop:10,borderTop:`1px solid ${C.border}`,display:"flex",flexDirection:"column",gap:10}}>
+      <div style={{...label,marginBottom:0}}><i className="ti ti-clock-edit"/> Correct start times</div>
+      {nightRunning?<div style={{fontSize:10,color:C.muted}}>Not available while night mode is running.</div>:fixes.map(f=>{
+        const p=plan(f);
+        return(
+          <div key={f.key}>
+            <div style={{fontSize:10,color:C.muted,marginBottom:4}}>{f.label}</div>
+            {!f.pressedAt
+              ?<div style={{fontSize:10,color:C.muted}}>The time Start Run was pressed wasn't recorded for this job (it was paused since) — adjust the hours above instead.</div>
+              :<>
+                <input type="datetime-local" style={{...inp(p?.err),fontSize:13,padding:"8px 10px"}} value={valueOf(f)} max={toLocalInput(now)}
+                  onChange={e=>setValues(v=>({...v,[f.key]:e.target.value}))}/>
+                {p?.err&&<div style={errMsg}>{p.err}</div>}
+                {p&&!p.err&&(
+                  <div style={{fontSize:10,color:C.text,background:C.raised,borderRadius:6,padding:"6px 8px",marginTop:6,lineHeight:1.6}}>
+                    {f.key==="job"
+                      ?<>{p.moved>=0?"Adds":"Removes"} <b>{fmtHM(Math.abs(p.moved))}</b> setup · Setup {fmtHM(p.before.setup)} → <span style={{color:C.amber}}>{fmtHM(p.after.setup)}</span></>
+                      :<>Moves <b>{fmtHM(Math.abs(p.moved))}</b> from {p.moved>=0?"setup to run":"run to setup"} · Setup <span style={{color:C.amber}}>{fmtHM(p.after.setup)}</span> · Run <span style={{color:C.green}}>{fmtHM(p.after.run)}</span></>}
+                    {Math.abs(p.moved)<Math.abs(p.delta)-60&&<div style={{color:C.muted}}>Only {fmtHM(Math.abs(p.moved))} of {fmtHM(Math.abs(p.delta))} — the timer wasn't counting all of that time (e.g. paused overnight).</div>}
+                    <button style={{...btn("primary",true,true),marginTop:6}} onClick={()=>apply(f,p)}><i className="ti ti-check"/> Apply</button>
+                  </div>
+                )}
+              </>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef,selected,onToggleSelect}){
   const [editing,setEditing]=useState(false);
   const [confirmDelete,setConfirmDelete]=useState(false);
@@ -2227,11 +2314,19 @@ function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef,s
     const n=Date.now();
     const newStatus=j.status==="side2_setup"?"side2_run":"run";
     const lt=liveTime(j);
-    const patch=j.status==="side2_setup"?{setupSec2:lt.setup2}:{setupSec:lt.setup};
+    const patch=j.status==="side2_setup"?{setupSec2:lt.setup2,run2StartedAt:n}:{setupSec:lt.setup,runStartedAt:n};
     const updatedJobs=(stateRef.current.jobs||[]).map(x=>x.id===j.id?{...x,...patch,status:newStatus,phaseStartedAt:n,lastModifiedAt:n}:x);
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     saveNow&&saveNow();
+  };
+  // Start-time correction from StartTimeFix
+  const applyFix=patch=>{
+    const updatedJobs=(stateRef.current.jobs||[]).map(x=>x.id===j.id?{...x,...patch,lastModifiedAt:Date.now()}:x);
+    stateRef.current={...stateRef.current,jobs:updatedJobs};
+    setJobs(updatedJobs);
+    saveNow&&saveNow();
+    setEditing(false);
   };
   const deleteJob=()=>{
     // Soft-delete: mark as deleted rather than removing from the array.
@@ -2339,6 +2434,7 @@ function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef,s
             </div>
           </div>
           <button style={btn("primary",true,true)} onClick={saveEdit}><i className="ti ti-check"/> Save</button>
+          <StartTimeFix j={j} onApply={applyFix}/>
         </div>
       )}
 

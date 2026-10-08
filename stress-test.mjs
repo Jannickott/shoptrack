@@ -105,7 +105,9 @@ const testJob = {
 };
 
 // Write with a very high settingsVersion so it won't be rejected
-const svHigh = now() + 1_000_000;
+// Just above the current version — never in the future, or real tablets' settings
+// edits would be refused until the clock catches up
+const svHigh = (baseline.settingsVersion || 0) + 1;
 await post(`${BASE}/api/data`, {
   ...baseline,
   jobs: [...(baseline.jobs || []), testJob],
@@ -165,7 +167,7 @@ const raceJobs = Array.from({ length: DEVICES }, (_, i) => ({
   createdAt: now(),
 }));
 
-const raceSV = now() + 2_000_000;
+const raceSV = svHigh + 1;
 const errors = [];
 const timings = [];
 
@@ -267,7 +269,7 @@ const bulkStart = now();
 const bulkRes = await post(`${BASE}/api/data`, {
   ...bigSnap,
   jobs: [...(bigSnap.jobs || []), ...bigJobs],
-  settingsVersion: now() + 3_000_000,
+  settingsVersion: (bigSnap.settingsVersion || 0) + 1,
 });
 const bulkMs = now() - bulkStart;
 record("500-job payload accepted", bulkRes.ok === true);
@@ -352,14 +354,17 @@ try {
   if (testJobIds.length === 0) {
     record("Test data cleaned up", true, "no test jobs found");
   } else {
+    // Soft-delete like the app does: a hard delete would be undone by any open
+    // tablet that still holds the test jobs and saves its copy back
+    const t = now();
     await post(`${BASE}/api/data`, {
       ...cleanSnap,
-      _deleteJobIds: testJobIds,
-      settingsVersion: now() + 4_000_000,
+      jobs: (cleanSnap.jobs || []).map(j => isTestJob(j) ? { ...j, deleted: true, status: "done", phaseStartedAt: null, lastModifiedAt: t } : j),
+      settingsVersion: cleanSnap.settingsVersion || 0,
     });
     await sleep(300);
     const afterClean = await get(`${BASE}/api/data`);
-    const remaining = (afterClean.jobs || []).filter(isTestJob).length;
+    const remaining = (afterClean.jobs || []).filter(j => isTestJob(j) && !j.deleted).length;
     record("Test data cleaned up", remaining === 0,
       `${remaining} of ${testJobIds.length} test jobs remain`);
   }
