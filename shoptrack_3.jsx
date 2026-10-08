@@ -248,6 +248,7 @@ export default function App(){
   const [subDepartments,setSubDepartments]=useState(DEFAULT_SUB_DEPTS);
   const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{},hiddenMachines:[]});
   const [planOrders,setPlanOrders]=useState([]);
+  const [planSettings,setPlanSettings]=useState({deptOrder:[],groupSameParts:false});
 
   // New version on the server? The first /api/data response tells us which build
   // this page is; a different X-App-Version later means the server was updated.
@@ -311,6 +312,7 @@ export default function App(){
           }
           if(data.efficiencyGoals) setEfficiencyGoals(data.efficiencyGoals);
           if(data.planOrders) setPlanOrders(data.planOrders);
+          if(data.planSettings) setPlanSettings(data.planSettings);
           if(data.settingsVersion) settingsVersionRef.current=data.settingsVersion;
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
@@ -327,6 +329,7 @@ export default function App(){
             subDepartments:data.subDepartments,
             efficiencyGoals:data.efficiencyGoals,
             planOrders:data.planOrders,
+            planSettings:data.planSettings,
           };
         }
       })
@@ -343,8 +346,8 @@ export default function App(){
   const lastSavedHashRef=useRef('');    // hash of what we last successfully sent — skip identical saves
   const [serverOnline,setServerOnline]=useState(true);
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders]);
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings};
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings]);
 
   // Save to server every 3 seconds — only when data has changed, with retry on failure
   useEffect(()=>{
@@ -386,6 +389,7 @@ export default function App(){
         });
         if(data.machineIssues) setMachineIssues(local=>mergeIssues(local,data.machineIssues,stateRef.current.downtimeLog));
         if(data.efficiencyGoals&&JSON.stringify(data.efficiencyGoals)!==JSON.stringify(last.efficiencyGoals)) setEfficiencyGoals(data.efficiencyGoals);
+        if(data.planSettings&&JSON.stringify(data.planSettings)!==JSON.stringify(last.planSettings)) setPlanSettings(data.planSettings);
         // Planning orders are never removed (deleted:true), so merge by id, newest edit wins
         if(data.planOrders&&JSON.stringify(data.planOrders)!==JSON.stringify(last.planOrders)) setPlanOrders(local=>{
           const m=new Map(local.map(o=>[o.id,o]));
@@ -429,7 +433,7 @@ export default function App(){
         // Keep settingsVersion in sync with server (take the max — never go backwards)
         if((data.settingsVersion||0)>settingsVersionRef.current) settingsVersionRef.current=data.settingsVersion;
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders,planSettings:data.planSettings};
       }).catch(()=>setServerOnline(false));
     },5000);
     return()=>clearInterval(t);
@@ -438,7 +442,7 @@ export default function App(){
   const doSave=()=>{
     const state=stateRef.current;
     // Detect settings changes — bump version so server knows this save has authoritative settings
-    const hash=JSON.stringify([state.users,state.machines,state.departments,state.cabinets,state.workHours,state.setupDeptParams,state.subDepartments,state.efficiencyGoals]);
+    const hash=JSON.stringify([state.users,state.machines,state.departments,state.cabinets,state.workHours,state.setupDeptParams,state.subDepartments,state.efficiencyGoals,state.planSettings]);
     // Always newer than anything seen — the server's version can be ahead of this clock
     // (another device's clock, or the stress test), and a lower number would be rejected
     if(hash!==prevSettingsHashRef.current){prevSettingsHashRef.current=hash;settingsVersionRef.current=Math.max(Date.now(),settingsVersionRef.current+1);}
@@ -457,7 +461,7 @@ export default function App(){
     if(!savePendingRef.current) return;
     savePendingRef.current=false;
     doSave();
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders]);
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings]);
 
   // ── Refresh immediately when tab becomes visible again ────
   useEffect(()=>{
@@ -696,7 +700,7 @@ export default function App(){
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
-      {tab==="planning" &&<PlanningTab       jobs={visibleJobs} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} saveNow={saveNow}/>}
+      {tab==="planning" &&<PlanningTab       jobs={visibleJobs} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} planSettings={planSettings} setPlanSettings={setPlanSettings} saveNow={saveNow}/>}
       {tab==="reports"  &&<ReportsTab       jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
@@ -3670,15 +3674,62 @@ function addWorkTime(wh,startMs,sec){
   return {end:segs.length?segs[segs.length-1][1]:startMs,segs,ok:left<=0};
 }
 
-// Greedy forward plan: running jobs first (their estimated remaining time), then
-// orders in priority order; each step waits for the previous one and goes to the
-// machine in its department that can finish it first. A machine that is already
-// set up for the same part and step needs no new setup.
-function buildPlan({orders,jobs,allMachines,machines,workHours,now}){
-  const free={};machines.forEach(m=>{free[m.name]=now;});
-  const last={}; // machine → what it is set up for: {part,stepIdx,orderId,live}
+// Department order for routes (e.g. Turning → Fortanding → Milling): the saved
+// order first, then any departments not in it yet, alphabetically
+function effectiveDeptOrder(saved,allDepts){
+  const s=(saved||[]).filter(d=>allDepts.includes(d));
+  return [...s,...allDepts.filter(d=>!s.includes(d)).sort()];
+}
+// Put steps in department order; steps without a known department keep their place at the end
+function sortSteps(steps,deptOrder){
+  const rank=s=>{const i=deptOrder.indexOf(s.department);return i<0?999:i;};
+  return steps.map((s,i)=>[s,i]).sort((a,b)=>rank(a[0])-rank(b[0])||a[1]-b[1]).map(x=>x[0]);
+}
+
+// Priority order, optionally pulling the same part (due within 7 days) right
+// behind it so the machine stays set up
+function orderQueue(orders,groupSameParts){
+  const ordered=orders.filter(o=>!o.deleted&&!o.done).sort(orderCmp);
+  if(!groupSameParts) return ordered;
+  const out=[],rest=[...ordered];
+  while(rest.length){
+    const o=rest.shift();out.push(o);
+    const p=normPart(o.partNumber);
+    for(let i=0;i<rest.length;){
+      const q=rest[i];
+      if(normPart(q.partNumber)===p&&!!q.urgent===!!o.urgent&&dueTs(q)-dueTs(o)<=7*86400000){out.push(q);rest.splice(i,1);}else i++;
+    }
+  }
+  return out;
+}
+
+// Forward plan with a busy list per machine:
+// 1. running jobs block their machine for their estimated remaining time
+// 2. pinned steps (dragged or given a fixed start) are placed where they were put
+// 3. the other steps, orders in priority order: each step waits for the previous
+//    one and goes to the machine in its department that can finish it first, in
+//    the first gap long enough. A machine already set up for the same part and
+//    step (the block right before) needs no new setup.
+function buildPlan({orders,jobs,allMachines,machines,workHours,now,groupSameParts}){
+  const busy={};machines.forEach(m=>{busy[m.name]=[];}); // [{s,e,part,stepIdx,orderId,live}]
+  const reserve=(m,iv)=>{busy[m].push(iv);busy[m].sort((a,b)=>a.s-b.s);};
+  // Earliest placement of `sec` work seconds on machine m, not before `from`, that doesn't overlap a busy block
+  const findSlot=(m,from,sec)=>{
+    let start=from;
+    for(let k=0;k<500;k++){
+      const r=addWorkTime(workHours,start,sec);
+      if(!r.ok) return null;
+      const s0=r.segs[0]?.[0]??start;
+      const clash=busy[m].find(b=>b.s<r.end&&b.e>s0);
+      if(!clash) return r;
+      start=clash.e;
+    }
+    return null;
+  };
+  const before=(m,t)=>busy[m].filter(b=>b.e<=t).sort((a,b)=>b.e-a.e)[0]; // block just before time t
   const blocks=[];
-  jobs.filter(j=>j.status!=="done"&&j.status!=="deburring"&&free[j.machine]!=null).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).forEach(j=>{
+  const liveFree={};machines.forEach(m=>{liveFree[m.name]=now;});
+  jobs.filter(j=>j.status!=="done"&&j.status!=="deburring"&&busy[j.machine]).sort((a,b)=>(a.createdAt||0)-(b.createdAt||0)).forEach(j=>{
     const h=partHistory(jobs,allMachines,j.job).filter(x=>x.machine===j.machine);
     const typSetup=median(h.map(x=>x.setupSec)),typRun=median(h.map(x=>x.runSec));
     const lt=liveTime(j);
@@ -3687,63 +3738,149 @@ function buildPlan({orders,jobs,allMachines,machines,workHours,now}){
     if(typSetup!=null&&typRun!=null){
       const remaining=Math.max(0,typSetup+typRun-(lt.setup+lt.run+lt.setup2+lt.run2));
       if(inSetup) setupLeft=Math.min(remaining,Math.max(0,typSetup-(j.status==="setup"?lt.setup:lt.setup2)));
-      r=addWorkTime(workHours,free[j.machine],remaining);
+      r=addWorkTime(workHours,liveFree[j.machine],remaining);
     }else{const w=dayWindow(workHours,now);r=w&&now<w[1]?{end:w[1],segs:[[Math.max(now,w[0]),w[1]]]}:{end:now,segs:[]};} // unknown: assume it finishes today
     blocks.push({live:true,guess:typSetup==null,inSetup,machine:j.machine,end:r.end,segs:r.segs,setupEnd:workPoint(r.segs,setupLeft),
       label:[j.customer,j.job].filter(Boolean).join(" · "),operator:j.operatorName});
-    free[j.machine]=Math.max(free[j.machine],r.end);
-    last[j.machine]={part:normPart(j.job),live:true};
+    liveFree[j.machine]=Math.max(liveFree[j.machine],r.end);
+    reserve(j.machine,{s:now,e:r.end,part:normPart(j.job),live:true});
   });
-  const ordered=orders.filter(o=>!o.deleted&&!o.done).sort(orderCmp);
+
+  const ordered=orderQueue(orders,groupSameParts);
   const results={};
+  const mk=(o,i,m,r,setupSec,sd,extra)=>({orderId:o.id,stepIdx:i,machine:m,start:r.segs[0]?.[0]??r.end,end:r.end,segs:r.segs,
+    setupSec,runSec:sd.runSec,durationSec:setupSec+sd.runSec,setupEnd:workPoint(r.segs,setupSec),
+    label:[o.customer,o.partNumber].filter(Boolean).join(" · "),...extra});
+
+  // Pass 1 — pinned steps go exactly where they were put
+  const pinned={}; // `${orderId}|${stepIdx}` → block
   ordered.forEach(o=>{
     const hist=partHistory(jobs,allMachines,o.partNumber);
-    let prevEnd=now,problem=null;const steps=[];
+    (o.steps||[]).forEach((st,i)=>{
+      if(!st.pin||!busy[st.pin.machine]) return;
+      const sd=stepDuration(st,o.quantity,hist);
+      if(sd.durationSec==null) return;
+      const r=addWorkTime(workHours,st.pin.start,sd.durationSec);
+      if(!r.ok) return;
+      const b=mk(o,i,st.pin.machine,r,sd.setupSec,sd,{pinned:true,setupSaved:0});
+      b.overlap=busy[st.pin.machine].some(x=>x.s<b.end&&x.e>b.start); // pinned on top of something else
+      pinned[`${o.id}|${i}`]=b;blocks.push(b);
+      reserve(st.pin.machine,{s:b.start,e:b.end,part:normPart(o.partNumber),stepIdx:i,orderId:o.id});
+    });
+  });
+
+  // Pass 2 — everything else, in priority order
+  ordered.forEach(o=>{
+    const hist=partHistory(jobs,allMachines,o.partNumber);
+    let prevEnd=now,problem=null,warning=null;const steps=[];
     const part=normPart(o.partNumber);
     for(const [i,st] of (o.steps||[]).entries()){
-      const sd=stepDuration(st,o.quantity,hist);
       const name=st.machine||st.department||"?";
+      const pb=pinned[`${o.id}|${i}`];
+      if(pb){
+        if(pb.overlap) warning=`Step ${i+1} is pinned on top of other work on ${pb.machine}`;
+        if(pb.start<prevEnd-60000) warning=`Step ${i+1} is pinned to start before step ${i} is finished`;
+        prevEnd=Math.max(prevEnd,pb.end);steps.push(pb);continue;
+      }
+      const sd=stepDuration(st,o.quantity,hist);
       if(sd.durationSec==null){problem=`Step ${i+1} (${name}) has no time — no history, enter minutes`;break;}
       const cands=st.machine?machines.filter(m=>m.name===st.machine):machines.filter(m=>m.department===st.department);
       if(!cands.length){problem=`No active machine for step ${i+1} (${name})`;break;}
       let best=null;
       cands.forEach(m=>{
-        // Same part and same step of the route right before on this machine (another
-        // order, or the job running now) → it's already set up
-        const p=last[m.name];
+        let r=findSlot(m.name,prevEnd,sd.durationSec);
+        if(!r) return;
+        // Same part and same step right before on this machine (another order, or
+        // the job running now) → already set up, the step is shorter
+        const p=before(m.name,(r.segs[0]?.[0]??r.end)+1);
         const setUp=!!p&&p.part===part&&p.orderId!==o.id&&(p.live||p.stepIdx===i);
-        const setupSec=setUp?0:sd.setupSec;
-        const r=addWorkTime(workHours,Math.max(free[m.name],prevEnd),setupSec+sd.runSec);
-        if(r.ok&&(!best||r.end<best.r.end))best={m,r,setupSec,setUp};
+        let setupSec=sd.setupSec;
+        if(setUp&&sd.setupSec>0){const r2=findSlot(m.name,r.segs[0]?.[0]??prevEnd,sd.runSec);if(r2){r=r2;setupSec=0;}}
+        if(!best||r.end<best.r.end) best={m,r,setupSec,setUp:setupSec===0&&sd.setupSec>0};
       });
-      if(!best){problem=`No work hours set — can't plan step ${i+1}`;break;}
-      free[best.m.name]=best.r.end;
-      last[best.m.name]={part,stepIdx:i,orderId:o.id};
-      const b={orderId:o.id,stepIdx:i,machine:best.m.name,start:best.r.segs[0]?.[0]??prevEnd,end:best.r.end,segs:best.r.segs,
-        setupSec:best.setupSec,runSec:sd.runSec,durationSec:best.setupSec+sd.runSec,setupSaved:best.setUp?sd.setupSec:0,
-        setupEnd:workPoint(best.r.segs,best.setupSec),label:[o.customer,o.partNumber].filter(Boolean).join(" · ")};
-      prevEnd=best.r.end;blocks.push(b);steps.push(b);
+      if(!best){problem=`No room to plan step ${i+1} (${name}) — check work hours`;break;}
+      const b=mk(o,i,best.m.name,best.r,best.setupSec,sd,{setupSaved:best.setUp?sd.setupSec:0});
+      reserve(best.m.name,{s:b.start,e:b.end,part,stepIdx:i,orderId:o.id});
+      prevEnd=b.end;blocks.push(b);steps.push(b);
     }
     const end=!problem&&steps.length?prevEnd:null;
     const dueEnd=o.dueDate?new Date(o.dueDate+"T23:59:59").getTime():null;
-    results[o.id]={steps,end,problem,late:!!(end&&dueEnd&&end>dueEnd)};
+    results[o.id]={steps,end,problem,warning,late:!!(end&&dueEnd&&end>dueEnd)};
   });
   return {blocks,results,ordered};
 }
 
-function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrders,saveNow}){
+// ── Import: paste rows from Excel/ERP ──
+// Columns: customer, part number, quantity, due date, departments (optional).
+// Tab (Excel), ; or , separated. A header row is skipped (its quantity isn't a number).
+function parseDate(s){
+  s=(s||"").trim();if(!s) return "";
+  let y,mo,d,m=s.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
+  if(m) [y,mo,d]=[m[1],m[2],m[3]];
+  else if((m=s.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2,4})$/))) [d,mo,y]=[m[1],m[2],m[3].length===2?"20"+m[3]:m[3]]; // Danish day.month.year
+  else return null;
+  const iso=`${y}-${mo.padStart(2,"0")}-${d.padStart(2,"0")}`;
+  const t=new Date(iso+"T00:00:00");
+  return !isNaN(t)&&t.getDate()===Number(d)&&t.getMonth()+1===Number(mo)?iso:null; // rejects 31-02, 32-13…
+}
+function parseImport(text,allDepts){
+  return text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map((line,n)=>{
+    const sep=line.includes("\t")?"\t":line.includes(";")?";":",";
+    const [customer="",part="",qtyS="",dueS="",deptS=""]=line.split(sep).map(c=>c.trim());
+    const qty=parseInt(qtyS);
+    if(isNaN(qty)) return n===0?null:{line,error:`Quantity "${qtyS}" is not a number`};
+    const dueDate=parseDate(dueS);
+    if(dueDate===null) return {line,error:`Can't read the date "${dueS}" (use 2026-10-31 or 31-10-2026)`};
+    const depts=[],unknown=[];
+    deptS.split(/[+,/>|]+|\s+/).map(t=>t.trim()).filter(Boolean).forEach(t=>{
+      const lt=t.toLowerCase();
+      const d=allDepts.find(x=>x.toLowerCase()===lt)||(allDepts.filter(x=>x.toLowerCase().startsWith(lt)).length===1?allDepts.find(x=>x.toLowerCase().startsWith(lt)):null);
+      if(d){if(!depts.includes(d))depts.push(d);}else unknown.push(t);
+    });
+    if(unknown.length) return {line,error:`Unknown department: ${unknown.join(", ")}`};
+    if(!part) return {line,error:"No part number"};
+    if(qty<1) return {line,error:"Quantity must be at least 1"};
+    return {line,customer,partNumber:part,quantity:qty,dueDate,depts};
+  }).filter(Boolean);
+}
+
+function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrders,planSettings,setPlanSettings,saveNow}){
   const [view,setView]=useState("week");
   const [weekOffset,setWeekOffset]=useState(0);
   const [monthOffset,setMonthOffset]=useState(0);
   const [editing,setEditing]=useState(null); // copy of the order being edited
   const [selectedId,setSelectedId]=useState(null);
   const minute=Math.floor(Date.now()/60000); // re-plan once a minute, not every second
-  const activeMachines=useMemo(()=>machines.filter(m=>m.active&&!m.removed).sort((a,b)=>(a.department||"~").localeCompare(b.department||"~")||a.name.localeCompare(b.name)),[machines]);
-  const plan=useMemo(()=>buildPlan({orders:planOrders||[],jobs,allMachines:machines,machines:activeMachines,workHours,now:minute*60000}),[planOrders,jobs,machines,activeMachines,workHours,minute]);
+  const allDepts=useMemo(()=>[...new Set([...(departments||[]),...machines.map(m=>m.department).filter(Boolean)])].sort(),[departments,machines]);
+  const deptOrder=useMemo(()=>effectiveDeptOrder(planSettings?.deptOrder,allDepts),[planSettings,allDepts]);
+  const groupSameParts=!!planSettings?.groupSameParts;
+  // Machines listed by department in route order, then by name
+  const activeMachines=useMemo(()=>{
+    const di=d=>{const i=deptOrder.indexOf(d);return i<0?999:i;};
+    return machines.filter(m=>m.active&&!m.removed).sort((a,b)=>di(a.department)-di(b.department)||a.name.localeCompare(b.name));
+  },[machines,deptOrder]);
+  const plan=useMemo(()=>buildPlan({orders:planOrders||[],jobs,allMachines:machines,machines:activeMachines,workHours,now:minute*60000,groupSameParts}),[planOrders,jobs,machines,activeMachines,workHours,minute,groupSameParts]);
   const colorOf=id=>PLAN_COLORS[Math.max(0,plan.ordered.findIndex(o=>o.id===id))%PLAN_COLORS.length];
-  const allDepts=[...new Set([...(departments||[]),...machines.map(m=>m.department).filter(Boolean)])].sort();
 
+  const saveSettings=p=>{setPlanSettings(prev=>({...(prev||{}),...p}));saveNow&&saveNow();};
   const saveOrders=fn=>{setPlanOrders(fn);saveNow&&saveNow();};
+  // Pin one step to a machine and start time (null = unpin)
+  const setPin=(orderId,stepIdx,pin)=>{const now=Date.now();saveOrders(prev=>prev.map(o=>o.id===orderId?{...o,updatedAt:now,steps:o.steps.map((s,i)=>i===stepIdx?{...s,pin}:s)}:o));};
+  const pinnedCount=plan.ordered.reduce((n,o)=>n+(o.steps||[]).filter(s=>s.pin).length,0);
+  const unpinAll=()=>{const now=Date.now();saveOrders(prev=>prev.map(o=>(o.steps||[]).some(s=>s.pin)?{...o,updatedAt:now,steps:o.steps.map(s=>({...s,pin:null}))}:o));};
+  // Drop a dragged block on a machine's day: it's pinned to start there (15-minute steps)
+  const dropOn=(e,m,w)=>{
+    e.preventDefault();
+    let d;try{d=JSON.parse(e.dataTransfer.getData("text/plain"));}catch{return;}
+    const o=plan.ordered.find(x=>x.id===d.orderId);const st=o?.steps?.[d.stepIdx];
+    if(!st) return;
+    if(st.department&&m.department!==st.department&&st.machine!==m.name){window.alert(`${m.name} is not in ${st.department} — step ${d.stepIdx+1} must stay in ${st.department}.`);return;}
+    const rect=e.currentTarget.getBoundingClientRect();
+    const frac=Math.min(1,Math.max(0,(e.clientX-rect.left)/rect.width));
+    const t=Math.round((w[0]+frac*(w[1]-w[0]))/900000)*900000;
+    setPin(o.id,d.stepIdx,{machine:m.name,start:Math.min(Math.max(t,w[0]),w[1]-900000)});
+    setSelectedId(o.id);
+  };
   const upsert=o=>saveOrders(prev=>{const n={...o,updatedAt:Date.now()};return prev.some(x=>x.id===o.id)?prev.map(x=>x.id===o.id?n:x):[...prev,n];});
   const patch=(o,p)=>upsert({...o,...p});
   const move=(o,dir)=>{
@@ -3755,7 +3892,7 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
   const sortByDue=()=>{const now=Date.now();saveOrders(prev=>prev.map(o=>o.deleted||o.done?o:{...o,rank:dueTs(o),updatedAt:now}));};
   const newOrder=()=>setEditing({id:Date.now(),customer:"",partNumber:"",quantity:"",dueDate:"",urgent:false,notes:"",steps:[],createdAt:Date.now(),isNew:true});
 
-  const problems=plan.ordered.filter(o=>plan.results[o.id]?.problem);
+  const problems=plan.ordered.filter(o=>plan.results[o.id]?.problem||plan.results[o.id]?.warning);
   const lateCount=plan.ordered.filter(o=>plan.results[o.id]?.late).length;
   const fmtDay=ms=>new Date(ms).toLocaleDateString("en-GB",{weekday:"short",day:"2-digit",month:"short"});
 
@@ -3775,9 +3912,11 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
   };
   const blockInfo=b=>b.live
     ?`Running now: ${b.label} (${b.operator||""})${b.guess?" — no history, assumed done today":b.inSetup?" — in setup":""}`
-    :`${b.label} · step ${b.stepIdx+1}\nSetup ${b.setupSaved?`skipped (${b.machine} already set up for this part, saves ${fmtHM(b.setupSaved)})`:fmtHM(b.setupSec)} + run ${fmtHM(b.runSec)}`;
+    :`${b.pinned?"📌 Pinned — drag again to move, unpin in Orders\n":"Drag to move and pin it\n"}${b.label} · step ${b.stepIdx+1}\nSetup ${b.setupSaved?`skipped (${b.machine} already set up for this part, saves ${fmtHM(b.setupSaved)})`:fmtHM(b.setupSec)} + run ${fmtHM(b.runSec)}`;
 
-  if(editing) return <PlanOrderForm order={editing} jobs={jobs} machines={machines} activeMachines={activeMachines} allDepts={allDepts}
+  if(view==="import") return <PlanImport jobs={jobs} machines={machines} allDepts={allDepts} deptOrder={deptOrder} onCancel={()=>setView("orders")}
+    onAdd={list=>{saveOrders(prev=>[...prev,...list.map(o=>({...o,rank:dueTs(o),updatedAt:Date.now()}))]);setView("month");}}/>;
+  if(editing) return <PlanOrderForm order={editing} jobs={jobs} machines={machines} activeMachines={activeMachines} allDepts={allDepts} deptOrder={deptOrder}
     onCancel={()=>setEditing(null)}
     onSave={o=>{const {isNew,...clean}=o;upsert(isNew?{...clean,rank:dueTs(clean)}:clean);setEditing(null);setSelectedId(o.id);}}/>;
 
@@ -3793,7 +3932,8 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
     background:b.live
       ?(setup?"repeating-linear-gradient(45deg,#2a3546,#2a3546 4px,#202a38 4px,#202a38 8px)":"repeating-linear-gradient(45deg,#3a4a60,#3a4a60 4px,#2e3b4e 4px,#2e3b4e 8px)")
       :setup?`linear-gradient(rgba(0,0,0,.5),rgba(0,0,0,.5)),${colorOf(b.orderId)}`:colorOf(b.orderId),
-    opacity:selectedId&&!selected?0.3:1,border:selected?"2px solid #fff":"none",boxSizing:"border-box"});
+    opacity:selectedId&&!selected?0.3:1,boxSizing:"border-box",
+    border:b.overlap?`2px solid ${C.red}`:selected?"2px solid #fff":b.pinned?"1px dashed #fff":"none"});
 
   const weekView=(
     <div style={{...card(),padding:"10px 8px",overflowX:"auto"}}>
@@ -3817,12 +3957,15 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
               const w=dayWindow(workHours,d);
               if(!w) return <div key={d} style={{background:"rgba(255,255,255,.02)",borderRadius:4,minHeight:34}}/>;
               return(
-                <div key={d} style={{position:"relative",background:C.raised,borderRadius:4,minHeight:34,outline:d===todayStart?`1px solid ${C.amber}55`:"none"}}>
+                <div key={d} onDragOver={e=>e.preventDefault()} onDrop={e=>dropOn(e,m,w)}
+                  style={{position:"relative",background:C.raised,borderRadius:4,minHeight:34,outline:d===todayStart?`1px solid ${C.amber}55`:"none"}}>
                   {daySegments(m.name,w).map(({b,key,left,width,setup})=>(
                     <div key={key} title={`${setup?"SETUP — ":""}${blockInfo(b)}\n${fmtDate(b.segs[0]?.[0]??b.end)} → ${fmtDate(b.end)}`}
+                      draggable={!b.live}
+                      onDragStart={e=>{e.dataTransfer.setData("text/plain",JSON.stringify({orderId:b.orderId,stepIdx:b.stepIdx}));e.dataTransfer.effectAllowed="move";}}
                       onClick={()=>!b.live&&setSelectedId(id=>id===b.orderId?null:b.orderId)}
-                      style={{...blockStyle(b,b.orderId===selectedId,setup),left:`${left}%`,width:`${width}%`}}>
-                      {width>12?(setup?"Setup":b.label):""}
+                      style={{...blockStyle(b,b.orderId===selectedId,setup),left:`${left}%`,width:`${width}%`,cursor:b.live?"default":"grab"}}>
+                      {width>12?(setup?"Setup":(b.pinned?"📌 ":"")+b.label):""}
                     </div>
                   ))}
                 </div>
@@ -3831,7 +3974,7 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
           </div>
         ))}
       </div>
-      <div style={{fontSize:9,color:C.muted,marginTop:8}}>Each day shows its work hours. Dark part = setup, bright part = run. Striped = running now (estimated). Click a block to highlight its order; hover for times.</div>
+      <div style={{fontSize:9,color:C.muted,marginTop:8}}>Each day shows its work hours. Dark part = setup, bright part = run. Striped = running now (estimated). <b style={{color:C.text}}>Drag a block</b> to another day, time or machine (same department) to pin it there 📌 — everything else is planned around it. Click a block to highlight its order; hover for times.</div>
     </div>
   );
 
@@ -3894,6 +4037,8 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
     <div>
       <div style={{display:"flex",gap:8,marginBottom:10,flexWrap:"wrap"}}>
         <button style={btn("outline",false,true)} onClick={sortByDue} title="Undo manual ▲▼ moves"><i className="ti ti-sort-ascending"/> Sort by due date</button>
+        {pinnedCount>0&&<button style={btn("outline",false,true)} onClick={unpinAll} title="Let the planner place everything again"><i className="ti ti-pinned-off"/> Unpin all ({pinnedCount})</button>}
+        <button style={btn("outline",false,true)} onClick={()=>setView("import")}><i className="ti ti-file-import"/> Import orders</button>
       </div>
       {!plan.ordered.length&&<div style={{textAlign:"center",padding:"30px",color:C.muted,fontSize:12}}>No orders yet. Press "New order" to add one.</div>}
       {plan.ordered.map((o,i)=>{
@@ -3912,10 +4057,12 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
                 </div>
                 <div style={{fontSize:10,color:C.muted,marginTop:2}}>Due {o.dueDate?fmtDay(dueTs(o)):"— (no due date)"}{r.end&&<> · planned finish <span style={{color:r.late?C.red:C.green,fontWeight:700}}>{fmtDate(r.end)}</span></>}{r.late&&<span style={{color:C.red,fontWeight:700}}> · LATE</span>}</div>
                 {r.problem&&<div style={{fontSize:10,color:C.amber,marginTop:4}}><i className="ti ti-alert-triangle"/> {r.problem}</div>}
+                {r.warning&&<div style={{fontSize:10,color:C.amber,marginTop:4}}><i className="ti ti-pin"/> {r.warning}</div>}
                 <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
                   {(o.steps||[]).map((st,si)=>{const b=r.steps?.[si];return(
-                    <span key={st.id||si} style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:C.raised,color:C.text}}>
-                      {si+1}. {st.department||"—"} → {b?b.machine:(st.machine||"any")}{b&&<span style={{color:C.muted}}> · <span style={{color:C.amber}}>{b.setupSaved?"no setup":`${fmtHM(b.setupSec)} setup`}</span> + <span style={{color:C.green}}>{fmtHM(b.runSec)} run</span> · {fmtDay(b.start)}</span>}
+                    <span key={st.id||si} style={{fontSize:9,padding:"2px 6px",borderRadius:4,background:C.raised,color:C.text,border:st.pin?"1px dashed #fff":"none",display:"inline-flex",alignItems:"center",gap:4}}>
+                      {st.pin&&"📌"}{si+1}. {st.department||"—"} → {b?b.machine:(st.machine||"any")}{b&&<span style={{color:C.muted}}> · <span style={{color:C.amber}}>{b.setupSaved?"no setup":`${fmtHM(b.setupSec)} setup`}</span> + <span style={{color:C.green}}>{fmtHM(b.runSec)} run</span> · {st.pin?fmtDate(b.start):fmtDay(b.start)}</span>}
+                      {st.pin&&<button title="Unpin — let the planner place it" onClick={e=>{e.stopPropagation();setPin(o.id,si,null);}} style={{background:"none",border:"none",color:C.muted,cursor:"pointer",padding:0,fontSize:11}}><i className="ti ti-x"/></button>}
                     </span>
                   );})}
                 </div>
@@ -3938,18 +4085,39 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
         <div style={{fontSize:12,color:C.amber,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}><i className="ti ti-calendar-time"/> Planning <span style={{fontSize:9,background:C.blue,color:"#fff",borderRadius:4,padding:"1px 5px",letterSpacing:1}}>BETA</span></div>
         <div style={{flex:1}}/>
-        {[["week","Week"],["month","Month"],["orders",`Orders (${plan.ordered.length})`]].map(([v,l])=><button key={v} style={tag(view===v)} onClick={()=>setView(v)}>{l}</button>)}
+        {[["week","Week"],["month","Month"],["orders",`Orders (${plan.ordered.length})`],["settings","Settings"]].map(([v,l])=><button key={v} style={tag(view===v)} onClick={()=>setView(v)}>{l}</button>)}
+        <button style={btn("outline",false,true)} onClick={()=>setView("import")}><i className="ti ti-file-import"/> Import</button>
         <button style={btn("primary",false,true)} onClick={newOrder}><i className="ti ti-plus"/> New order</button>
       </div>
       {(problems.length>0||lateCount>0)&&(
         <div style={{background:"rgba(240,165,0,.08)",border:`1px solid rgba(240,165,0,.3)`,borderRadius:8,padding:"8px 12px",marginBottom:12,fontSize:11,color:C.amber}}>
           {lateCount>0&&<div><i className="ti ti-clock-exclamation"/> {lateCount} order{lateCount!==1?"s":""} planned to finish after the due date</div>}
-          {problems.map(o=><div key={o.id}><i className="ti ti-alert-triangle"/> {o.partNumber}: {plan.results[o.id].problem}</div>)}
+          {problems.map(o=><div key={o.id}><i className="ti ti-alert-triangle"/> {o.partNumber}: {plan.results[o.id].problem||plan.results[o.id].warning}</div>)}
         </div>
       )}
       {view==="week"&&weekView}
       {view==="month"&&monthView}
       {view==="orders"&&ordersView}
+      {view==="settings"&&(
+        <div style={{...card(),maxWidth:520}}>
+          <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Department order</div>
+          <div style={{fontSize:11,color:C.muted,marginBottom:10}}>The order a job goes through the departments. A route always follows this order — a job that only needs some departments skips the others (e.g. Turning → Milling).</div>
+          {deptOrder.length===0&&<div style={{fontSize:11,color:C.muted}}>No departments yet — add them in Manage → Departments and give each machine its department.</div>}
+          {deptOrder.map((d,i)=>(
+            <div key={d} style={{display:"flex",alignItems:"center",gap:8,padding:"6px 8px",background:C.raised,borderRadius:6,marginBottom:4}}>
+              <span style={{fontSize:14,color:C.amber,fontWeight:700,width:20}}>{i+1}</span>
+              <span style={{flex:1,fontSize:13,color:C.text}}>{d} <span style={{fontSize:10,color:C.muted}}>· {machines.filter(m=>m.active&&m.department===d).map(m=>m.name).join(", ")||"no machines"}</span></span>
+              <button style={{...btn("outline",false,true),padding:"2px 6px"}} disabled={i===0} onClick={()=>{const n=[...deptOrder];[n[i-1],n[i]]=[n[i],n[i-1]];saveSettings({deptOrder:n});}}><i className="ti ti-chevron-up"/></button>
+              <button style={{...btn("outline",false,true),padding:"2px 6px"}} disabled={i===deptOrder.length-1} onClick={()=>{const n=[...deptOrder];[n[i+1],n[i]]=[n[i],n[i+1]];saveSettings({deptOrder:n});}}><i className="ti ti-chevron-down"/></button>
+            </div>
+          ))}
+          <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",margin:"16px 0 6px"}}>Setups</div>
+          <label style={{display:"flex",alignItems:"flex-start",gap:8,fontSize:12,color:C.text,cursor:"pointer"}}>
+            <input type="checkbox" checked={groupSameParts} onChange={e=>saveSettings({groupSameParts:e.target.checked})} style={{marginTop:2}}/>
+            <span>Group the same parts to save setups<div style={{fontSize:10,color:C.muted,marginTop:2}}>Orders for the same part due within 7 days of each other are planned right after one another, so the machine stays set up.</div></span>
+          </label>
+        </div>
+      )}
       <div style={{fontSize:9,color:C.muted,marginTop:12,lineHeight:1.6}}>
         Beta: times come from the median of earlier finished runs of the same part (same machine first, else same department), or the minutes you type.
         Machines are planned within work hours only — no night or unattended running yet. Running jobs block their machine for their typical remaining time.
@@ -3959,17 +4127,23 @@ function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrde
 }
 
 // New / edit planning order: customer, part, quantity, due date and the route
-function PlanOrderForm({order,jobs,machines,activeMachines,allDepts,onCancel,onSave}){
+function PlanOrderForm({order,jobs,machines,activeMachines,allDepts,deptOrder,onCancel,onSave}){
   const [o,setO]=useState(order);
   const [err,setErr]=useState("");
   const set=(k,v)=>setO(p=>({...p,[k]:v}));
   const hist=partHistory(jobs,machines,o.partNumber);
-  const suggested=suggestRoute(hist);
+  const suggested=sortSteps(suggestRoute(hist),deptOrder);
+  // Tick a department to add/remove its step; steps stay in department order
+  const toggleDept=d=>setO(p=>{
+    const has=p.steps.some(s=>s.department===d);
+    const steps=has?p.steps.filter(s=>s.department!==d):sortSteps([...p.steps,{id:Date.now(),department:d,machine:"",setupMin:"",runMinPerPc:""}],deptOrder);
+    return {...p,steps};
+  });
   const knownParts=useMemo(()=>[...new Set(jobs.filter(j=>j.status==="done"&&j.job).map(j=>j.job.trim()))].sort(),[jobs]);
   const setStep=(i,p)=>setO(x=>({...x,steps:x.steps.map((s,si)=>si===i?{...s,...p}:s)}));
   const moveStep=(i,dir)=>setO(x=>{const s=[...x.steps];const j=i+dir;if(j<0||j>=s.length)return x;[s[i],s[j]]=[s[j],s[i]];return{...x,steps:s};});
   // Fill the route from history the first time a known part is typed
-  const onPart=v=>setO(p=>{const n={...p,partNumber:v};if(!p.steps.length){const r=suggestRoute(partHistory(jobs,machines,v));if(r.length)n.steps=r;}return n;});
+  const onPart=v=>setO(p=>{const n={...p,partNumber:v};if(!p.steps.length){const r=sortSteps(suggestRoute(partHistory(jobs,machines,v)),deptOrder);if(r.length)n.steps=r;}return n;});
   const save=()=>{
     if(!o.partNumber.trim()) return setErr("Part number is required");
     if(!(parseInt(o.quantity)>0)) return setErr("Quantity must be at least 1");
@@ -3996,8 +4170,16 @@ function PlanOrderForm({order,jobs,machines,activeMachines,allDepts,onCancel,onS
       </label>
 
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
-        <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",flex:1}}>Route — one step per department, in order</div>
+        <div style={{fontSize:10,color:C.muted,letterSpacing:2,textTransform:"uppercase",flex:1}}>Route — tick the departments the job goes through</div>
         {suggested.length>0&&<button style={btn("outline",false,true)} onClick={()=>set("steps",suggested)}><i className="ti ti-history"/> Use previous route ({suggested.length})</button>}
+      </div>
+      <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center",marginBottom:10}}>
+        {deptOrder.map((d,i)=>{const on=o.steps.some(s=>s.department===d);return(
+          <span key={d} style={{display:"inline-flex",alignItems:"center",gap:6}}>
+            {i>0&&<i className="ti ti-arrow-right" style={{color:C.muted,fontSize:12}}/>}
+            <button type="button" onClick={()=>toggleDept(d)} style={{...tag(on),fontSize:11,padding:"6px 12px"}}>{on&&<i className="ti ti-check"/>} {d}</button>
+          </span>
+        );})}
       </div>
       {o.steps.map((st,i)=>{
         const {est,durationSec,setupSec,runSec}=stepDuration(st,qty,hist);
@@ -4026,6 +4208,18 @@ function PlanOrderForm({order,jobs,machines,activeMachines,allDepts,onCancel,onS
               {est?<>History: {Math.round(est.setupSec/60)} min setup{est.runPerPcSec!=null?` + ${(est.runPerPcSec/60).toFixed(1)} min/pc`:" (no piece counts)"} · median of {est.n} run{est.n!==1?"s":""} {est.basis==="machine"?`on ${st.machine}`:`in ${st.department}`}</>:"No history for this step — type the minutes"}
               {durationSec!=null&&<span style={{color:C.text}}> · planned {fmtHM(durationSec)} for {qty} pcs (<span style={{color:C.amber}}>{fmtHM(setupSec)} setup</span> + <span style={{color:C.green}}>{fmtHM(runSec)} run</span>)</span>}
             </div>
+            {/* Fixed start = pin this step to a machine and time (same as dragging it in the week view) */}
+            <div style={{display:"flex",alignItems:"center",gap:8,marginTop:6,paddingLeft:32,flexWrap:"wrap"}}>
+              <span style={{fontSize:10,color:st.pin?C.text:C.muted}}>📌 Fixed start</span>
+              {st.pin?<>
+                <input type="datetime-local" style={{...inp(),width:"auto",fontSize:12,padding:"4px 8px"}} value={toLocalInput(st.pin.start)}
+                  onChange={e=>{const t=fromLocalInput(e.target.value);if(t)setStep(i,{pin:{...st.pin,start:t}});}}/>
+                <span style={{fontSize:10,color:C.muted}}>on {st.pin.machine}</span>
+                <button style={{...btn("outline",false,true),padding:"3px 8px"}} onClick={()=>setStep(i,{pin:null})}>Unpin</button>
+              </>:st.machine
+                ?<button style={{...btn("outline",false,true),padding:"3px 8px"}} onClick={()=>setStep(i,{pin:{machine:st.machine,start:Math.ceil(Date.now()/900000)*900000}})}>Set start time</button>
+                :<span style={{fontSize:10,color:C.muted}}>pick a machine first — or drag the block in the week view</span>}
+            </div>
           </div>
         );
       })}
@@ -4033,6 +4227,60 @@ function PlanOrderForm({order,jobs,machines,activeMachines,allDepts,onCancel,onS
       <div><label style={label}>Notes</label><input style={inp()} value={o.notes||""} onChange={e=>set("notes",e.target.value)}/></div>
       {err&&<div style={{...errMsg,marginTop:10}}>{err}</div>}
       <button style={{...btn("success",true),marginTop:14}} onClick={save}><i className="ti ti-check"/> {order.isNew?"Add to plan":"Save"}</button>
+    </div>
+  );
+}
+
+// Paste many orders at once (from Excel or the ERP), check them, add them all
+function PlanImport({jobs,machines,allDepts,deptOrder,onAdd,onCancel}){
+  const [text,setText]=useState("");
+  const rows=useMemo(()=>parseImport(text,allDepts).map(r=>{
+    if(r.error) return r;
+    const hist=partHistory(jobs,machines,r.partNumber);
+    const steps=r.depts.length
+      ?sortSteps(r.depts.map((d,k)=>({id:Date.now()+k,department:d,machine:"",setupMin:"",runMinPerPc:""})),deptOrder)
+      :sortSteps(suggestRoute(hist),deptOrder);
+    if(!steps.length) return {...r,error:"New part and no departments given — add them in column 5 (e.g. Turning+Milling)"};
+    const missing=steps.filter(s=>stepDuration(s,r.quantity,hist).durationSec==null).map(s=>s.department||s.machine);
+    return {...r,steps,histN:hist.length,missing,routeFrom:r.depts.length?"list":"history"};
+  }),[text,jobs,machines,allDepts,deptOrder]);
+  const good=rows.filter(r=>!r.error);
+  const add=()=>{
+    const now=Date.now();
+    onAdd(good.map((r,k)=>({id:now+k,customer:r.customer,partNumber:r.partNumber,quantity:r.quantity,dueDate:r.dueDate||"",
+      urgent:false,notes:"Imported",steps:r.steps,createdAt:now})));
+  };
+  return(
+    <div style={{padding:"14px 16px"}}>
+      <button style={{...btn("outline",false,true),marginBottom:12}} onClick={onCancel}><i className="ti ti-arrow-left"/> Back</button>
+      <div style={{fontSize:10,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}><i className="ti ti-file-import"/> Import orders</div>
+      <div style={{fontSize:11,color:C.muted,marginBottom:10,lineHeight:1.6}}>
+        Paste one order per line — straight from Excel works. Columns: <b style={{color:C.text}}>Customer · Part number · Quantity · Due date · Departments</b> (departments are optional).<br/>
+        Without departments the route comes from the part's history. Departments can be short and in any order: <code>Turning+Milling</code>, <code>T, F, M</code> — they're always put in the department order ({deptOrder.join(" → ")||"set in Settings"}).
+      </div>
+      <textarea value={text} onChange={e=>setText(e.target.value)} rows={8} spellCheck={false}
+        placeholder={"Acme\tTEST-100\t200\t31-10-2026\nBeta Co\t5521-3\t50\t2026-11-05\tTurning+Milling"}
+        style={{...inp(),fontFamily:"'Share Tech Mono',monospace",fontSize:12,resize:"vertical"}}/>
+      {rows.length>0&&(
+        <div style={{overflowX:"auto",marginTop:12}}>
+          <table style={{width:"100%",borderCollapse:"collapse",fontSize:11}}>
+            <thead><tr>{["","Customer","Part","Qty","Due","Route","Times"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+            <tbody>{rows.map((r,i)=>r.error
+              ?<tr key={i}><td style={{...td,color:C.red}}><i className="ti ti-x"/></td><td colSpan={6} style={{...td,color:C.red}}>{r.error} <span style={{color:C.muted}}>— “{r.line}”</span></td></tr>
+              :<tr key={i}>
+                <td style={{...td,color:r.missing.length?C.amber:C.green}}><i className={`ti ti-${r.missing.length?"alert-triangle":"check"}`}/></td>
+                <td style={td}>{r.customer}</td><td style={td}>{r.partNumber}</td><td style={td}>{r.quantity}</td>
+                <td style={td}>{r.dueDate||"—"}</td>
+                <td style={td}>{r.steps.map(s=>s.department||s.machine).join(" → ")} <span style={{color:C.muted,fontSize:9}}>({r.routeFrom==="history"?"from history":"from list"})</span></td>
+                <td style={{...td,color:r.missing.length?C.amber:C.muted,fontSize:10}}>{r.missing.length?`No history for ${r.missing.join(", ")} — enter minutes after import`:`from ${r.histN} earlier run${r.histN!==1?"s":""}`}</td>
+              </tr>)}</tbody>
+          </table>
+        </div>
+      )}
+      <div style={{display:"flex",gap:8,alignItems:"center",marginTop:14}}>
+        <button style={btn("success",false)} disabled={!good.length} onClick={add}><i className="ti ti-check"/> Add {good.length} order{good.length!==1?"s":""} to the plan</button>
+        {rows.length>good.length&&<span style={{fontSize:11,color:C.red}}>{rows.length-good.length} line{rows.length-good.length!==1?"s":""} with errors will be skipped</span>}
+      </div>
     </div>
   );
 }

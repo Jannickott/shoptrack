@@ -353,7 +353,7 @@ app.post("/api/verify-pin", (req, res) => {
 // ── POST /api/data — queued safe merge, then atomic write ─
 // tools are not in here: the server owns them and they only change through /api/tool-op
 const ARRAY_KEYS  = ["users","machines","departments","cabinets","setupSheets","workShifts"];
-const OBJECT_KEYS = ["workHours","efficiencyGoals"];
+const OBJECT_KEYS = ["workHours","efficiencyGoals","planSettings"];
 
 // Logs are append-only, so merge by id instead of letting the last tablet to save
 // replace the whole list. An edited entry carries updatedAt — newest edit wins.
