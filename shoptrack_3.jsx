@@ -712,7 +712,7 @@ export default function App(){
       {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
-      {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
+      {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} jobs={visibleJobs} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
       {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
@@ -1748,7 +1748,19 @@ function StartRunModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
 // ═══════════════════════════════════════════════════════
 // MACHINE STATUS (operator)
 // ═══════════════════════════════════════════════════════
-function MachineStatusTab({user,machines,machineIssues,reportIssue,resolveIssue}){
+// What a job is doing right now, for a one-line summary
+function jobPhase(j){
+  const lt=liveTime(j);
+  if(j.paused) return {label:"Maskine nede",color:C.red,sec:null};
+  if(j.operatorPaused||j.logoutPaused) return {label:"På pause",color:C.muted,sec:null};
+  if(j.status==="deburring") return {label:"Afgratning",color:C.deburr,sec:lt.debur};
+  if(j.status==="setup") return {label:j.twoSided?"Opstilling side 1":"Opstilling",color:C.amber,sec:lt.setup};
+  if(j.status==="side2_setup") return {label:"Opstilling side 2",color:C.amber,sec:lt.setup2};
+  if(j.status==="side2_run") return {label:"Produktion side 2",color:C.blue,sec:lt.run2};
+  return {label:j.twoSided?"Produktion side 1":"Produktion",color:j.nightMode?"#7c5cbf":C.green,sec:lt.run};
+}
+
+function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,resolveIssue}){
   const [reporting,setReporting]=useState(null);
   const [issueType,setIssueType]=useState("repair");
   const [note,setNote]=useState("");
@@ -1769,15 +1781,32 @@ function MachineStatusTab({user,machines,machineIssues,reportIssue,resolveIssue}
       }).map(m=>{
         const issue=machineIssues[m.name];
         const isReporting=reporting===m.name;
+        const onMachine=(jobs||[]).filter(j=>j.machine===m.name&&j.status!=="done");
         return(
           <div key={m.id} style={card(issue?(issue.status==="down"?C.red:C.amber):C.green)}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               <div style={{width:38,height:38,borderRadius:8,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <i className="ti ti-robot" style={{fontSize:20,color:issue?(issue.status==="down"?C.red:C.amber):C.green}}/>
               </div>
-              <div style={{flex:1}}>
+              <div style={{width:150,flexShrink:0}}>
                 <div style={{fontSize:16,color:C.text,fontWeight:700}}>{m.name}</div>
                 <span style={badge(issue?issue.status:"run")}>{issue?(issue.status==="down"?"Nede":"Skal repareres"):"Kører"}</span>
+              </div>
+              {/* The job(s) on this machine right now */}
+              <div style={{flex:1,minWidth:0,display:"flex",flexDirection:"column",gap:6}}>
+                {!onMachine.length&&<div style={{fontSize:14,color:C.muted}}>Ingen job</div>}
+                {onMachine.map(j=>{const ph=jobPhase(j);return(
+                  <div key={j.id} style={{display:"flex",alignItems:"center",gap:10,minWidth:0}}>
+                    <span style={{width:10,height:10,borderRadius:"50%",background:ph.color,flexShrink:0}}/>
+                    <div style={{minWidth:0,flex:1}}>
+                      <div style={{fontSize:15,color:C.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{[j.customer,j.job].filter(Boolean).join(" · ")}</div>
+                      <div style={{fontSize:13,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+                        <span style={{color:ph.color,fontWeight:700}}>{ph.label}</span> · <i className="ti ti-user"/> {j.operatorName}
+                      </div>
+                    </div>
+                    {ph.sec!=null&&<div style={{fontSize:18,color:ph.color,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{fmtHM(ph.sec)}</div>}
+                  </div>
+                );})}
               </div>
               {!issue&&!isReporting&&(
                 <button style={btn("outline",false,true)} onClick={()=>{setReporting(m.name);setIssueType("repair");setNote("");}}>
