@@ -238,6 +238,7 @@ export default function App(){
   const [tab,   setTab]      =useState("new");
   const [focusToolId,setFocusToolId]=useState(null);
   const [focusSheetId,setFocusSheetId]=useState(null);
+  const [newSheetFor,setNewSheetFor]=useState(null); // {partNumber,machine,customer} — open a new sheet for this
   const [jobs,  setJobs]     =useState([]);
   const [users, setUsers]    =useState(INIT_USERS);
   const [machines,setMachines]=useState(INIT_MACHINES);
@@ -708,7 +709,7 @@ export default function App(){
       )}
 
       {/* CONTENT */}
-      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId}/>}
+      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
@@ -720,7 +721,7 @@ export default function App(){
       {tab==="planning" &&<PlanningTab       jobs={visibleJobs} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} planSettings={planSettings} setPlanSettings={setPlanSettings} saveNow={saveNow}/>}
       {tab==="reports"  &&<ReportsTab       jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
 
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
@@ -804,7 +805,7 @@ function LoginScreen({users,onLogin}){
 // ═══════════════════════════════════════════════════════
 // NEW JOB
 // ═══════════════════════════════════════════════════════
-function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetId}){
+function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetId,setNewSheetFor}){
   const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const [machine,setMachine]=useState(""); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
   const [twoSided,setTwoSided]=useState(false);
   const [showSuggestions,setShowSuggestions]=useState(true);
@@ -852,6 +853,8 @@ function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetI
     setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);
   };
   const goToSheet=(sheetId)=>{setFocusSheetId&&setFocusSheetId(sheetId);setTab&&setTab("setup");};
+  // No sheet yet: open a new one so it can be filled in while setting up
+  const goToNewSheet=()=>{setNewSheetFor&&setNewSheetFor({partNumber:job.trim(),machine,customer:customer.trim()});setTab&&setTab("setup");};
   const start=(chosenSheetId)=>{
     const e={};if(!customer.trim())e.customer="Skal udfyldes";if(!job.trim())e.job="Skal udfyldes";if(!machine)e.machine="Skal udfyldes";
     if(Object.keys(e).length){setErrs(e);return;}
@@ -859,6 +862,7 @@ function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetI
     createJob();
     const sheetId=chosenSheetId!=null?chosenSheetId:matchingSheets.length===1?matchingSheets[0].id:null;
     if(sheetId) goToSheet(sheetId);
+    else if(!matchingSheets.length) goToNewSheet();
   };
   return(
     <div style={{padding:"14px 16px"}}>
@@ -975,7 +979,7 @@ function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetI
             <div style={{fontSize:15,fontWeight:700,color:C.amber}}>Intet opstillingsark</div>
             <div style={{fontSize:13,color:C.muted,marginTop:1}}>Intet ark for {job.trim()} på {machine}</div>
           </div>
-          <button style={{background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.4)",borderRadius:7,color:C.amber,cursor:"pointer",fontSize:14,padding:"5px 12px",fontWeight:600}} onClick={()=>setTab&&setTab("setup")}>Opret</button>
+          <button style={{background:"rgba(240,165,0,.12)",border:"1px solid rgba(240,165,0,.4)",borderRadius:7,color:C.amber,cursor:"pointer",fontSize:14,padding:"5px 12px",fontWeight:600}} onClick={goToNewSheet}>Opret</button>
         </div>
       ):null}
       <button style={btn("primary",true)} onClick={()=>start(undefined)}><i className="ti ti-player-play"/> &nbsp;Start opstilling</button>
@@ -6229,10 +6233,13 @@ function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,machines,c
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,subDepartments,setSubDepartments,tools,cabinets,setTab,setFocusToolId,focusSheetId,setFocusSheetId}){
+function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,subDepartments,setSubDepartments,tools,cabinets,setTab,setFocusToolId,focusSheetId,setFocusSheetId,newSheetFor,setNewSheetFor}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
   useEffect(()=>{if(focusSheetId){setSelectedId(focusSheetId);setView("detail");setFocusSheetId&&setFocusSheetId(null);}},[focusSheetId]);
+  // Started a job with no sheet → open a new sheet with the job filled in
+  const [prefill,setPrefill]=useState(null);
+  useEffect(()=>{if(newSheetFor){setSelectedId(null);setPrefill(newSheetFor);setView("edit");setNewSheetFor&&setNewSheetFor(null);}},[newSheetFor]);
   const [search,setSearch]=useState("");
   const [deptFilt,setDeptFilt]=useState("all");
   const [subDeptFilt,setSubDeptFilt]=useState("all");
@@ -6322,7 +6329,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
   // Compute dept-specific params for the form
   const sheetDept=selected?(machines||[]).find(m=>m.name===selected.machine)?.department||"":"";
   const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
-  if(view==="edit") return(<SetupSheetForm sheet={selected} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView(selected?"detail":"list")} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setSelectedId(sheet.id);setView("detail");}}/>);
+  if(view==="edit") return(<SetupSheetForm sheet={selected} prefill={selected?null:prefill} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setPrefill(null);setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
   if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
@@ -6333,7 +6340,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
           <input style={{...inp(),paddingLeft:32}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Søg tegningsnr. eller kunde…"/>
         </div>
         {user?.role==="admin"&&<button style={{...btn("outline",false,true),padding:"8px 12px",background:showParamAdmin?C.amber+"22":"none",borderColor:showParamAdmin?C.amber:C.border,color:showParamAdmin?C.amber:C.muted}} onClick={()=>setShowParamAdmin(p=>!p)} title="Administrer parametre"><i className="ti ti-settings"/></button>}
-        <button style={btn("primary",false,true)} onClick={()=>{setSelectedId(null);setView("edit");}}><i className="ti ti-plus"/></button>
+        <button style={btn("primary",false,true)} onClick={()=>{setSelectedId(null);setPrefill(null);setView("edit");}}><i className="ti ti-plus"/></button>
       </div>
       {showParamAdmin&&user?.role==="admin"&&(
         <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,padding:"14px",marginBottom:12}}>
@@ -6407,7 +6414,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
       )}
       {/* Machine sub-filter */}
       {machineNames.length>1&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>{["all",...machineNames].map(m=><button key={m} style={{fontSize:13,padding:"3px 10px",borderRadius:20,border:`1px solid ${machineFilt===m?C.amber:C.border}`,background:machineFilt===m?C.amber+"22":C.raised,color:machineFilt===m?C.amber:C.muted,cursor:"pointer",fontWeight:machineFilt===m?700:400}} onClick={()=>setMachineFilt(m)}>{m==="all"?"Alle maskiner":m}</button>)}</div>}
-      {filtered.length===0&&<div style={{textAlign:"center",padding:"50px 20px",color:C.muted}}><i className="ti ti-clipboard-list" style={{fontSize:40,display:"block",marginBottom:12,opacity:.25}}/><div style={{fontSize:16,marginBottom:6}}>Ingen opstillingsark endnu.</div><div style={{fontSize:14,color:C.amber,cursor:"pointer"}} onClick={()=>{setSelectedId(null);setView("edit");}}>+ Opret dit første opstillingsark</div></div>}
+      {filtered.length===0&&<div style={{textAlign:"center",padding:"50px 20px",color:C.muted}}><i className="ti ti-clipboard-list" style={{fontSize:40,display:"block",marginBottom:12,opacity:.25}}/><div style={{fontSize:16,marginBottom:6}}>Ingen opstillingsark endnu.</div><div style={{fontSize:14,color:C.amber,cursor:"pointer"}} onClick={()=>{setSelectedId(null);setPrefill(null);setView("edit");}}>+ Opret dit første opstillingsark</div></div>}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {filtered.map(s=>(
           <div key={s.id} onClick={()=>{setSelectedId(s.id);setView("detail");}} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",cursor:"pointer"}}>
@@ -6626,7 +6633,7 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
           <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Opstillingsparametre</div>
           <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"14px"}}>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
-              {params.map(p=>(<div key={p.key}><div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>{p.key}</div><div style={{fontSize:22,fontWeight:700,color:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{p.value}</div></div>))}
+              {params.map((p,pi)=>(<div key={pi}><div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>{p.key}</div><div style={{fontSize:22,fontWeight:700,color:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{p.value}</div></div>))}
             </div>
           </div>
         </div>
@@ -6802,12 +6809,14 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
   );
 }
 
-function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
+function SetupSheetForm({sheet,prefill,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
   const MZ_BLANK={fraesForlaenger:"",fraesMn:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneUdhaeng:"",pinoldokUdhaeng:""};
   const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{},mzAdvanced:{schnecke:{},werkstuck:{},entgratenVorne:{},entgratenHinten:{}},eriksSetup:{}};
-  const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}:blank);
+  const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}
+    :prefill?{...blank,partNumber:prefill.partNumber||"",machine:prefill.machine||"",customer:prefill.customer||"",department:getDept(prefill.machine||"")}
+    :blank);
   // Sub-depts available for current dept
   const deptSubDepts=(subDepartments||{})[form.department]||[];
   // Param options: use sub-dept key if available, else dept key
@@ -6817,6 +6826,7 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
   const [showList2,setShowList2]=useState(!!(sheet?.tools2?.length));
   const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
   const [uploading,setUploading]=useState(false);
+  const [lastPos,setLastPos]=useState({}); // per tool list: position of the tool made last
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   const rc=pos=>{if(!pos)return"";return(form.restartPrefix||"NAT")+String(pos).padStart(form.restartPad||2,"0");};
   const allPos=[...Array(99)].map((_,i)=>i+1);
@@ -6830,8 +6840,16 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
     const avail=allPos.filter(n=>!used.has(n));
     const setTool=(pos,fld,val)=>setForm(p=>{const arr=[...(p[listKey]||[])];const idx=arr.findIndex(t=>t.position===pos);if(idx>=0)arr[idx]={...arr[idx],[fld]:val};return{...p,[listKey]:arr};});
     const removeTool=pos=>setForm(p=>({...p,[listKey]:(p[listKey]||[]).filter(t=>t.position!==pos)}));
-    const addEmpty=()=>{const pos=avail[0];if(!pos)return;setForm(p=>({...p,[listKey]:[...(p[listKey]||[]),{position:pos,description:"",label:"",toolId:null}].sort((a,b)=>a.position-b.position)}));};
-    const changePos=(old,nv)=>{const n=parseInt(nv);if(!n||used.has(n))return;setForm(p=>({...p,[listKey]:p[listKey].map(t=>t.position===old?{...t,position:n}:t).sort((a,b)=>a.position-b.position)}));};
+    // New tool goes to the first free position after the one made last (or after the highest),
+    // so it lands right below — only wraps to the lowest free position when nothing is free above
+    const addEmpty=()=>{
+      const after=lastPos[listKey]??Math.max(0,...listTools.map(t=>t.position));
+      const pos=avail.find(n=>n>after)??avail[0];
+      if(!pos)return;
+      setLastPos(p=>({...p,[listKey]:pos}));
+      setForm(p=>({...p,[listKey]:[...(p[listKey]||[]),{position:pos,description:"",label:"",toolId:null}].sort((a,b)=>a.position-b.position)}));
+    };
+    const changePos=(old,nv)=>{const n=parseInt(nv);if(!n||used.has(n))return;setLastPos(p=>({...p,[listKey]:n}));setForm(p=>({...p,[listKey]:p[listKey].map(t=>t.position===old?{...t,position:n}:t).sort((a,b)=>a.position-b.position)}));};
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${accent}`,overflow:"hidden",marginBottom:14}}>
         {listTools.length===0&&<div style={{padding:"14px",textAlign:"center",color:C.muted,fontSize:14}}>Intet værktøj tilføjet endnu</div>}
@@ -7295,6 +7313,12 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
         <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onBack}><i className="ti ti-arrow-left"/></button>
         <div style={{fontSize:15,color:C.amber,letterSpacing:2,textTransform:"uppercase"}}>{sheet?"Rediger opstillingsark":"Nyt opstillingsark"}</div>
       </div>
+      {!sheet&&prefill&&(
+        <div style={{background:"rgba(240,165,0,.08)",border:"1px solid rgba(240,165,0,.35)",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:15,color:C.text,lineHeight:1.5}}>
+          <i className="ti ti-clipboard-plus" style={{color:C.amber}}/> Der er intet opstillingsark for <b>{prefill.partNumber}</b> på <b>{prefill.machine}</b> endnu.
+          <div style={{fontSize:14,color:C.muted,marginTop:4}}>Jobbet er startet. Udfyld arket mens du stiller op, og tryk Gem nederst — så er det klar næste gang.</div>
+        </div>
+      )}
       <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Identifikation</div>
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",marginBottom:14}}>
         <div style={{marginBottom:10}}><label style={label}>Tegningsnr. *</label><input style={inp(errs.partNumber)} value={form.partNumber} onChange={e=>setF("partNumber",e.target.value)} placeholder="f.eks. CV-155"/>{errs.partNumber&&<div style={errMsg}>{errs.partNumber}</div>}</div>
@@ -7367,9 +7391,9 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
           </div>
         ))}
         <div style={{padding:"10px 12px",display:"flex",gap:8,alignItems:"center"}}>
-          <select style={{...sel(),flex:1}} defaultValue="" onChange={e=>{const v=e.target.value;if(!v)return;if((form.params||[]).find(p=>p.key===v))return;setForm(pr=>({...pr,params:[...(pr.params||[]),{key:v,value:""}]}));e.target.value="";}}>
+          <select style={{...sel(),flex:1}} defaultValue="" onChange={e=>{const v=e.target.value;if(!v)return;setForm(pr=>({...pr,params:[...(pr.params||[]),{key:v,value:""}]}));e.target.value="";}}>
             <option value="">+ Tilføj parameter…</option>
-            {(setupParamOptions||[]).filter(name=>!(form.params||[]).find(p=>p.key===name)).map(name=><option key={name} value={name}>{name}</option>)}
+            {(setupParamOptions||[]).map(name=><option key={name} value={name}>{name}</option>)}
           </select>
         </div>
       </div>}
@@ -7386,9 +7410,9 @@ function SetupSheetForm({sheet,machines,user,setupDeptParams,subDepartments,tool
           </div>
         ))}
         <div style={{padding:"10px 12px",display:"flex",gap:8,alignItems:"center"}}>
-          <select style={{...sel(),flex:1}} defaultValue="" onChange={e=>{const v=e.target.value;if(!v)return;if((form.params||[]).find(p=>p.key===v))return;setForm(pr=>({...pr,params:[...(pr.params||[]),{key:v,value:""}]}));e.target.value="";}} >
+          <select style={{...sel(),flex:1}} defaultValue="" onChange={e=>{const v=e.target.value;if(!v)return;setForm(pr=>({...pr,params:[...(pr.params||[]),{key:v,value:""}]}));e.target.value="";}} >
             <option value="">+ Tilføj parameter…</option>
-            {(setupParamOptions||[]).filter(name=>!(form.params||[]).find(p=>p.key===name)).map(name=><option key={name} value={name}>{name}</option>)}
+            {(setupParamOptions||[]).map(name=><option key={name} value={name}>{name}</option>)}
           </select>
         </div>
       </div>}
