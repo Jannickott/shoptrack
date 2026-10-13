@@ -135,6 +135,25 @@ runBackup("startup");
 copyBackupElsewhere(); // catch up even if today's startup backup already existed
 setInterval(checkBackupSchedule, 60 * 1000);
 
+// Tool types from the old English preset list → the Danish names the app now offers
+// (only exact preset names; types someone typed themselves are left alone)
+const TOOL_TYPE_DA = { "Endmill": "Endefræser", "Drill": "Bor", "Insert": "Skær", "Turning Tool": "Drejestål",
+  "Boring Bar": "Borestang", "Reamer": "Rival", "Tap": "Gevindtap", "Thread Mill": "Gevindfræser",
+  "Face Mill": "Planfræser", "Grooving Tool": "Stikstål", "Countersink": "Undersænker", "Center Drill": "Centerbor" };
+if (fs.existsSync(DATA_FILE)) {
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    let renamed = 0;
+    (data.tools || []).forEach(t => { if (TOOL_TYPE_DA[t.toolType]) { t.toolType = TOOL_TYPE_DA[t.toolType]; renamed++; } });
+    if (renamed) {
+      const tmp = DATA_FILE + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+      fs.renameSync(tmp, DATA_FILE);
+      console.log(`  ✓ Renamed ${renamed} tool type${renamed === 1 ? "" : "s"} to Danish`);
+    }
+  } catch (e) { console.error("  ✗ Tool type rename failed:", e.message); }
+}
+
 // Move any inline photos out of the data file (runs after the startup backup)
 if (fs.existsSync(DATA_FILE)) {
   try {

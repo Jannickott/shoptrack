@@ -27,6 +27,8 @@ function toDateInput(ts){ const d=new Date(ts); return isNaN(d)?"":d.toISOString
 // Saved times for a job, both sides together (two-sided jobs keep side 2 in setupSec2/runSec2)
 function jRunAll(j){ return (j.runSec||0)+(j.runSec2||0); }
 function jSetupAll(j){ return (j.setupSec||0)+(j.setupSec2||0); }
+// Job efficiency = production ÷ (production + setup), both sides; null if no time
+function jobEfficiency(j){ const t=jRunAll(j)+jSetupAll(j); return t>0?jRunAll(j)/t*100:null; }
 // Tool log actions as shown on screen
 const TOOL_ACTION_NAME={take:"Taget",checkout:"Lånt",return:"Afleveret","return-regrinded":"Afleveret omslebet","return-needs-regrind":"Afleveret — skal omslibes","return-damaged":"Afleveret beskadiget",restock:"Fyldt op"};
 // Role as shown on screen (stored as "admin" / "operator")
@@ -2007,7 +2009,7 @@ function DonutChart({title,segments}){
 function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,machines,tools,efficiencyGoals,workHours}){
   const done=jobs.filter(j=>j.status==="done"); const active=sortActive(jobs.filter(j=>j.status!=="done"));
   // Efficiency helpers
-  const jobEff=j=>{const t=(j.setupSec||0)+(j.runSec||0);return t>0?(j.runSec||0)/t*100:null;};
+  const jobEff=jobEfficiency;
   const targetEff=efficiencyGoals?.overall??80;
   // YTD real efficiency: total run time / (available work hours × active machines) — includes work hours + downtime losses
   const yearStart=new Date(); yearStart.setMonth(0,1); yearStart.setHours(0,0,0,0);
@@ -2023,9 +2025,9 @@ function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,m
   const realEff=totalAvailSec>0?Math.round(yearRunSec/totalAvailSec*100):null;
   // Below-target jobs use job-level efficiency (run vs setup ratio)
   const belowTarget=done.filter(j=>{const e=jobEff(j);return e!==null&&e<targetEff;});
-  const machMap={};done.forEach(j=>{if(!machMap[j.machine])machMap[j.machine]={run:0,setup:0,jobs:0};machMap[j.machine].run+=j.runSec;machMap[j.machine].setup+=j.setupSec;machMap[j.machine].jobs++;});
+  const machMap={};done.forEach(j=>{if(!machMap[j.machine])machMap[j.machine]={run:0,setup:0,jobs:0};machMap[j.machine].run+=jRunAll(j);machMap[j.machine].setup+=jSetupAll(j);machMap[j.machine].jobs++;});
   const maxRun=Math.max(...Object.values(machMap).map(m=>m.run),1);
-  const opMap={};done.forEach(j=>{if(!opMap[j.operatorName])opMap[j.operatorName]={jobs:0,pieces:0,run:0};opMap[j.operatorName].jobs++;opMap[j.operatorName].pieces+=j.pieces;opMap[j.operatorName].run+=j.runSec;});
+  const opMap={};done.forEach(j=>{if(!opMap[j.operatorName])opMap[j.operatorName]={jobs:0,pieces:0,run:0};opMap[j.operatorName].jobs++;opMap[j.operatorName].pieces+=j.pieces||0;opMap[j.operatorName].run+=jRunAll(j);});
   const issueEntries=Object.entries(machineIssues);
   // Chart data
   const todayStr=toDateInput(nowMs);
@@ -2673,7 +2675,8 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
   const showIssues=statusFilt==="all"||statusFilt==="issues";
   const showJobs=statusFilt!=="issues";
   const filtered=showJobs?jobs.filter(j=>
-    (statusFilt==="all"||j.status===statusFilt)&&
+    // "Opstilling"/"Kører" include side 2 (and deburring counts as running)
+    (statusFilt==="all"||j.status===statusFilt||(statusFilt==="setup"&&j.status==="side2_setup")||(statusFilt==="run"&&(j.status==="side2_run"||j.status==="deburring")))&&
     (machineFilt==="all"||j.machine===machineFilt)
   ):[];
   const active=sortActive(filtered.filter(j=>j.status!=="done"));
@@ -3433,7 +3436,7 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
       {/* Below-target efficiency section */}
       {!selected&&!search&&(()=>{
         const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
-        const jobEff=j=>{const t=(j.setupSec||0)+(j.runSec||0);return t>0?(j.runSec||0)/t*100:null;};
+        const jobEff=jobEfficiency;
         // Per-machine efficiency = run / (run + setup + downtime) — uses machStats which already has downtimeSec
         const machEffs=allMachineNames.map(name=>{
           const s=machStats[name];
@@ -3486,8 +3489,8 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
                         <div style={{fontSize:15,color:C.text,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.customer||j.job} <span style={{fontSize:13,color:C.muted,fontWeight:400}}>#{j.job}</span></div>
                         <div style={{fontSize:13,color:C.muted}}><i className="ti ti-robot"/> {j.machine} · <i className="ti ti-user"/> {j.operatorName}</div>
                         <div style={{display:"flex",gap:6,marginTop:3}}>
-                          <span style={{fontSize:13,color:C.amber}}><i className="ti ti-settings"/> {fmtHM(j.setupSec)}</span>
-                          <span style={{fontSize:13,color:C.green}}><i className="ti ti-player-play"/> {fmtHM(j.runSec)}</span>
+                          <span style={{fontSize:13,color:C.amber}}><i className="ti ti-settings"/> {fmtHM(jSetupAll(j))}</span>
+                          <span style={{fontSize:13,color:C.green}}><i className="ti ti-player-play"/> {fmtHM(jRunAll(j))}</span>
                         </div>
                       </div>
                       <div style={{textAlign:"right",flexShrink:0}}>
@@ -3626,9 +3629,9 @@ function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficiencyGoals
               {j.twoSided&&<span style={{fontSize:12,color:C.blue,letterSpacing:1}}><i className="ti ti-layers-intersect"/> 2 SIDER</span>}
               {j.completedAt&&<span style={{fontSize:13,color:C.muted,whiteSpace:"nowrap"}}>{fmtDate(j.completedAt)}</span>}
               {(()=>{
-                const t=(j.setupSec||0)+(j.runSec||0);
-                if(t===0||j.status!=="done") return null;
-                const e=Math.round((j.runSec||0)/t*100);
+                const ef=jobEfficiency(j);
+                if(ef===null||j.status!=="done") return null;
+                const e=Math.round(ef);
                 const goals=efficiencyGoals||{overall:80,machines:{},departments:{}};
                 const tgt=goals.machines[j.machine]!==undefined?goals.machines[j.machine]:goals.overall;
                 const ec=e>=tgt?C.green:e>=tgt-10?C.amber:C.red;
