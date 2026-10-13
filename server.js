@@ -492,6 +492,163 @@ app.post("/api/data", (req, res) => {
   });
 });
 
+// ── Weekly report (PDF) ───────────────────────────────────
+// Made automatically every Monday 06:05 for last week (saved in reports/ and copied
+// to the second backup location), and on request: GET /api/report/week?start=YYYY-MM-DD
+const REPORTS_DIR = path.join(__dirname, "reports");
+if (!fs.existsSync(REPORTS_DIR)) fs.mkdirSync(REPORTS_DIR);
+
+const DAY_KEYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"];
+function mondayOf(d) { const m = new Date(d); m.setHours(0, 0, 0, 0); m.setDate(m.getDate() - ((m.getDay() + 6) % 7)); return m; }
+function isoWeek(d) { const t = new Date(d); t.setHours(0, 0, 0, 0); t.setDate(t.getDate() + 3 - ((t.getDay() + 6) % 7)); const w1 = new Date(t.getFullYear(), 0, 4); return 1 + Math.round(((t - w1) / 864e5 - 3 + ((w1.getDay() + 6) % 7)) / 7); }
+// Work seconds between two times (same rules as the app: per-day hours, or the old single start/end)
+function workSecBetween(wh, from, to) {
+  let total = 0; const cur = new Date(from); cur.setHours(0, 0, 0, 0);
+  while (cur < to) {
+    const dh = (wh || {})[DAY_KEYS[cur.getDay()]] || (wh && wh.start ? { start: wh.start, end: wh.end, enabled: true } : null);
+    if (dh && dh.enabled && dh.start && dh.end) {
+      const [sh, sm] = dh.start.split(":").map(Number), [eh, em] = dh.end.split(":").map(Number);
+      const s = new Date(cur); s.setHours(sh, sm, 0, 0); const e = new Date(cur); e.setHours(eh, em, 0, 0);
+      const a = Math.max(s, from), b = Math.min(e, to); if (b > a) total += (b - a) / 1000;
+    }
+    cur.setDate(cur.getDate() + 1);
+  }
+  return total;
+}
+const hm = s => { s = Math.round(s || 0); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return h ? `${h}t ${m}m` : `${m}m`; };
+const runAll = j => (j.runSec || 0) + (j.runSec2 || 0);
+const setupAll = j => (j.setupSec || 0) + (j.setupSec2 || 0);
+
+// The numbers for one week (Monday 00:00 → next Monday)
+function weekReportData(data, monday) {
+  const start = monday.getTime(), endD = new Date(monday); endD.setDate(endD.getDate() + 7); const end = endD.getTime();
+  const hidden = (data.efficiencyGoals && data.efficiencyGoals.hiddenMachines) || [];
+  const machines = (data.machines || []).filter(m => m.active && !m.removed && !hidden.includes(m.name));
+  const jobs = (data.jobs || []).filter(j => !j.deleted && (j.createdAt || 0) >= start && (j.createdAt || 0) < end);
+  const availPerMachine = workSecBetween(data.workHours, new Date(start), new Date(end));
+  const downtime = (data.downtimeLog || []).filter(d => (d.resolvedAt || 0) >= start && (d.resolvedAt || 0) < end);
+  const perMachine = machines.map(m => {
+    const mj = jobs.filter(j => j.machine === m.name);
+    const run = mj.reduce((s, j) => s + runAll(j), 0), setup = mj.reduce((s, j) => s + setupAll(j), 0);
+    const down = downtime.filter(d => d.machineName === m.name).reduce((s, d) => s + (d.downtimeSec || 0), 0);
+    return { name: m.name, department: m.department || "", run, setup, down, jobs: mj.length,
+      eff: availPerMachine > 0 ? Math.round(run / availPerMachine * 100) : null };
+  });
+  const run = perMachine.reduce((s, m) => s + m.run, 0), setup = perMachine.reduce((s, m) => s + m.setup, 0);
+  const totalAvail = availPerMachine * Math.max(machines.length, 1);
+  const ops = {};
+  jobs.filter(j => j.status === "done").forEach(j => {
+    const o = ops[j.operatorName || "?"] = ops[j.operatorName || "?"] || { name: j.operatorName || "?", jobs: 0, pieces: 0, run: 0 };
+    o.jobs++; o.pieces += Math.max(j.pieces || 0, j.pieces2 || 0); o.run += runAll(j);
+  });
+  const target = (data.efficiencyGoals && data.efficiencyGoals.week) ?? 75;
+  const lowTools = (data.tools || []).filter(t => t.active && !t.returnable && t.quantity <= (t.minQuantity || 0) && !t.ordered);
+  return {
+    week: isoWeek(monday), year: mondayOf(monday).getFullYear(), start, end, target,
+    eff: totalAvail > 0 ? Math.round(run / totalAvail * 100) : null, run, setup,
+    downtime: downtime.reduce((s, d) => s + (d.downtimeSec || 0), 0), downtimeList: downtime,
+    finished: jobs.filter(j => j.status === "done"), started: jobs.length,
+    perMachine, operators: Object.values(ops).sort((a, b) => b.run - a.run), lowTools,
+  };
+}
+
+// Draw the report into a PDFKit document
+function writeWeekReport(doc, r) {
+  const W = doc.page.width - 90, AMBER = "#b07d00", DARK = "#1a1a1a", GREY = "#555555", LINE = "#dddddd";
+  const dk = t => new Date(t).toLocaleDateString("da-DK", { day: "numeric", month: "short" });
+  doc.rect(45, 40, W, 58).fill("#1a2233");
+  doc.fillColor("#f0a500").fontSize(20).font("Helvetica-Bold").text(`Ugerapport — uge ${r.week} ${r.year}`, 56, 50);
+  doc.fillColor("#aaaacc").fontSize(10).font("Helvetica").text(`${dk(r.start)} – ${dk(r.end - 1)}  ·  ShopTrack`, 56, 76);
+  let y = 115;
+  const section = t => { if (y > 740) { doc.addPage(); y = 50; } doc.moveTo(45, y).lineTo(45 + W, y).strokeColor(LINE).lineWidth(1).stroke(); doc.fillColor(AMBER).fontSize(9).font("Helvetica-Bold").text(t, 45, y + 6, { characterSpacing: 1.5 }); y += 24; };
+  const row = (cols, xs, bold) => { if (y > 770) { doc.addPage(); y = 50; } doc.fillColor(bold ? GREY : DARK).fontSize(bold ? 8 : 9.5).font(bold ? "Helvetica-Bold" : "Helvetica"); cols.forEach((c, i) => doc.text(String(c), xs[i], y, { width: (xs[i + 1] || 45 + W) - xs[i] - 6, lineBreak: false, ellipsis: true })); y += bold ? 14 : 15; };
+
+  // Key numbers
+  const boxes = [
+    [r.eff == null ? "–" : `${r.eff}%`, `Effektivitet (mål ${r.target}%)`, r.eff == null ? GREY : r.eff >= r.target ? "#1e8449" : "#c0392b"],
+    [hm(r.run), "Produktion", DARK], [hm(r.setup), "Opstilling", DARK], [hm(r.downtime), "Nedetid", r.downtime ? "#c0392b" : DARK],
+    [String(r.finished.length), `Job afsluttet (${r.started} startet)`, DARK],
+  ];
+  const bw = W / boxes.length;
+  boxes.forEach(([v, l, c], i) => {
+    doc.rect(45 + i * bw + 2, y, bw - 4, 50).fill("#f4f4f4");
+    doc.fillColor(c).fontSize(16).font("Helvetica-Bold").text(v, 45 + i * bw + 8, y + 8, { width: bw - 16 });
+    doc.fillColor(GREY).fontSize(7.5).font("Helvetica").text(l, 45 + i * bw + 8, y + 32, { width: bw - 16 });
+  });
+  y += 66;
+
+  section("MASKINER");
+  const mx = [45, 150, 250, 320, 390, 460, 510];
+  row(["Maskine", "Afdeling", "Produktion", "Opstilling", "Nedetid", "Job", "Eff."], mx, true);
+  r.perMachine.forEach(m => row([m.name, m.department, hm(m.run), hm(m.setup), hm(m.down), m.jobs, m.eff == null ? "–" : m.eff + "%"], mx));
+  y += 6;
+
+  section("OPERATØRER");
+  const ox = [45, 220, 300, 380];
+  row(["Operatør", "Job afsluttet", "Stk.", "Produktion"], ox, true);
+  if (!r.operators.length) row(["Ingen afsluttede job denne uge"], ox);
+  r.operators.forEach(o => row([o.name, o.jobs, o.pieces, hm(o.run)], ox));
+  y += 6;
+
+  section("MASKINFEJL");
+  const fx = [45, 130, 330, 420, 480];
+  if (!r.downtimeList.length) row(["Ingen fejl løst denne uge"], fx);
+  else { row(["Maskine", "Fejl", "Meldt af", "Løst", "Nedetid"], fx, true); r.downtimeList.forEach(d => row([d.machineName, d.reason || (d.status === "down" ? "Maskine nede" : "Reparation"), d.reportedBy || "", dk(d.resolvedAt), hm(d.downtimeSec)], fx)); }
+  y += 6;
+
+  section("AFSLUTTEDE JOB");
+  const jx = [45, 160, 260, 330, 400, 450, 510];
+  if (!r.finished.length) row(["Ingen"], jx);
+  else { row(["Kunde", "Tegningsnr.", "Maskine", "Operatør", "Stk.", "Tid", "Eff."], jx, true);
+    r.finished.sort((a, b) => (a.completedAt || 0) - (b.completedAt || 0)).forEach(j => { const t = runAll(j) + setupAll(j); row([j.customer || "", j.job || "", j.machine || "", j.operatorName || "", Math.max(j.pieces || 0, j.pieces2 || 0), hm(t), t ? Math.round(runAll(j) / t * 100) + "%" : "–"], jx); }); }
+  y += 6;
+
+  if (r.lowTools.length) {
+    section("VÆRKTØJ DER SKAL BESTILLES");
+    const tx = [45, 300, 380];
+    row(["Værktøj", "På lager", "Genbestil under"], tx, true);
+    r.lowTools.forEach(t => row([t.name, t.quantity, t.minQuantity || 0], tx));
+  }
+  // Footer below the normal text area — lift the bottom margin so it doesn't start a new page
+  const bottom = doc.page.margins.bottom; doc.page.margins.bottom = 0;
+  doc.fillColor(GREY).fontSize(7).font("Helvetica").text(`Lavet ${new Date().toLocaleString("da-DK")} · Effektivitet = produktionstid ÷ arbejdstid × maskiner`, 45, doc.page.height - 32, { width: W, align: "center", lineBreak: false });
+  doc.page.margins.bottom = bottom;
+}
+
+app.get("/api/report/week", (req, res) => {
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    const monday = mondayOf(req.query.start ? new Date(req.query.start + "T12:00:00") : new Date(Date.now() - 7 * 864e5));
+    const r = weekReportData(data, monday);
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader("Content-Disposition", `inline; filename="ShopTrack uge ${r.week} ${r.year}.pdf"`);
+    const doc = new PDFDocument({ margin: 45, size: "A4" });
+    doc.pipe(res); writeWeekReport(doc, r); doc.end();
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// Every Monday 06:05: last week's report → reports/ (+ second backup location, e.g. OneDrive)
+let lastWeeklyKey = "";
+function saveWeeklyReport(monday) {
+  const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  const r = weekReportData(data, monday);
+  const name = `ShopTrack uge ${r.week} ${r.year}.pdf`, file = path.join(REPORTS_DIR, name);
+  const doc = new PDFDocument({ margin: 45, size: "A4" });
+  const out = fs.createWriteStream(file);
+  doc.pipe(out); writeWeekReport(doc, r); doc.end();
+  out.on("finish", () => {
+    console.log(`  ✓ Weekly report saved: ${name}`);
+    const dir = backupCopyDir();
+    if (dir) { try { fs.mkdirSync(path.join(dir, "reports"), { recursive: true }); fs.copyFileSync(file, path.join(dir, "reports", name)); console.log(`  ✓ Weekly report copied to ${dir}`); } catch (e) { console.error("  ✗ Could not copy weekly report:", e.message); } }
+  });
+}
+setInterval(() => {
+  const now = new Date();
+  if (now.getDay() !== 1 || now.getHours() !== 6 || now.getMinutes() !== 5) return;
+  const key = now.toDateString(); if (key === lastWeeklyKey) return; lastWeeklyKey = key;
+  try { saveWeeklyReport(mondayOf(new Date(now.getTime() - 7 * 864e5))); } catch (e) { console.error("  ✗ Weekly report failed:", e.message); }
+}, 60 * 1000);
+
 // ── Photos: keep them as files, not inside the data file ──
 // Inline base64 photos make every save send megabytes and eventually hit the
 // 25 MB request limit. Any inline photo that reaches the server is written to

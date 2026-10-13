@@ -409,6 +409,7 @@ export default function App(){
   const prevSettingsHashRef=useRef(''); // tracks last-saved settings hash
   const lastSavedHashRef=useRef('');    // hash of what we last successfully sent — skip identical saves
   const saveFailedRef=useRef(false);    // last full save failed → retried by the 3 s loop
+  const doSaveRef=useRef(null);         // doSave, for the 3 s loop (defined further down)
   const [serverOnline,setServerOnline]=useState(true);
   useEffect(()=>{
     stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings};
@@ -418,7 +419,7 @@ export default function App(){
   useEffect(()=>{
     const t=setInterval(()=>{
       if(!dataLoadedRef.current) return;
-      if(saveFailedRef.current){doSave();return;} // an earlier save failed — retry it (sends everything)
+      if(saveFailedRef.current){doSaveRef.current&&doSaveRef.current();return;} // an earlier save failed — retry it (sends everything)
       const state=stateRef.current;
       const hash=JSON.stringify([state.jobs,settingsVersionRef.current]);
       if(hash===lastSavedHashRef.current) return; // nothing changed — skip
@@ -517,6 +518,7 @@ export default function App(){
     return fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...state,settingsVersion:settingsVersionRef.current})})
       .then(r=>{saveFailedRef.current=!r.ok;setSync(r.ok?"saved":"offline");}).catch(()=>{saveFailedRef.current=true;setSync("offline");});
   };
+  useEffect(()=>{doSaveRef.current=doSave;});
   // Most handlers call setX(...) and then saveNow() in the same click, before stateRef
   // has the new value — so save once now and again after the re-render has landed.
   // Save, then load the new version. Jobs and timers live on the server, so nothing
@@ -3109,8 +3111,23 @@ function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,downtim
     );
   };
 
+  // Weekly PDF report: last 12 weeks to choose from (the server builds the PDF)
+  const reportWeeks=[...Array(12)].map((_,i)=>{const d=new Date();d.setHours(12,0,0,0);d.setDate(d.getDate()-((d.getDay()+6)%7)-7*i);return{start:`${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`,week:getISOWeek(d),label:d.toLocaleDateString('da-DK',{day:'numeric',month:'short'})};});
+  const [reportStart,setReportStart]=useState(reportWeeks[1].start);
+
   return(
     <div style={{padding:'14px 16px'}}>
+      <div style={{...card(),display:'flex',alignItems:'center',gap:10,flexWrap:'wrap'}}>
+        <i className="ti ti-file-type-pdf" style={{fontSize:24,color:C.amber}}/>
+        <div style={{flex:1,minWidth:180}}>
+          <div style={{fontSize:15,color:C.text,fontWeight:700}}>Ugerapport</div>
+          <div style={{fontSize:13,color:C.muted}}>Laves også automatisk hver mandag morgen for sidste uge</div>
+        </div>
+        <select style={{...sel(),width:'auto',minWidth:200}} value={reportStart} onChange={e=>setReportStart(e.target.value)}>
+          {reportWeeks.map((w,i)=><option key={w.start} value={w.start}>Uge {w.week} · fra {w.label}{i===0?' (denne uge)':i===1?' (sidste uge)':''}</option>)}
+        </select>
+        <button style={btn('primary',false,true)} onClick={()=>window.open(`/api/report/week?start=${reportStart}`,'_blank')}><i className="ti ti-download"/> Hent PDF</button>
+      </div>
       {/* Mode + period controls */}
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         {[['machine','ti-robot','Maskine'],['department','ti-tag','Afdeling'],['job','ti-search','Job / tegningsnr.']].map(([m,ic,lb])=>(
