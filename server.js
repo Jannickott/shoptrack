@@ -577,7 +577,7 @@ app.post("/api/setupsheet-pdf", (req, res) => {
     doc.fillColor("#f0a500").fontSize(20).font("Helvetica-Bold")
        .text(sheet.partNumber || "—", 56, 48, { width: W - 12 });
     const sub = [sheet.customer, sheet.machine, sheet.material,
-                 sheet.operation && `Op ${sheet.operation}`].filter(Boolean).join("  ·  ");
+                 sheet.operation && `Op. ${sheet.operation}`].filter(Boolean).join("  ·  ");
     doc.fillColor("#aaaacc").fontSize(10).font("Helvetica")
        .text(sub, 56, 72, { width: W - 12 });
     doc.fillColor(DARK);
@@ -599,17 +599,17 @@ app.post("/api/setupsheet-pdf", (req, res) => {
     if (sheet.subProgram) {
       doc.rect(45, y, W, 46).fill("#fffbea").stroke("#b07d00");
       doc.fillColor("#888888").fontSize(7.5).font("Helvetica")
-         .text("PROGRAM NAME", 56, y + 7, { characterSpacing: 1.5 });
+         .text("PROGRAMNAVN", 56, y + 7, { characterSpacing: 1.5 });
       doc.fillColor("#b07d00").fontSize(22).font("Helvetica-Bold")
          .text(sheet.subProgram, 56, y + 18, { width: W - 20, characterSpacing: 2 });
       y += 56;
     }
 
     // ── Identity ───────────────────────────────────────────
-    sectionTitle("IDENTITY");
-    [["Machine", sheet.machine], ["Customer", sheet.customer],
-     ["Material", sheet.material], ["Revision", sheet.revision],
-     ["Operation", sheet.operation], ["Plan Program", sheet.planProgram]]
+    sectionTitle("IDENTIFIKATION");
+    [["Maskine", sheet.machine], ["Kunde", sheet.customer],
+     ["Materiale", sheet.material], ["Revision", sheet.revision],
+     ["Operation", sheet.operation], ["Planprogram", sheet.planProgram]]
       .filter(([, v]) => v)
       .forEach(([k, v]) => field(k, v));
     y += 6;
@@ -617,10 +617,10 @@ app.post("/api/setupsheet-pdf", (req, res) => {
     // ── Tool list ──────────────────────────────────────────
     const tools = (sheet.tools || []).filter(t => t.description);
     if (tools.length) {
-      sectionTitle("TOOL LIST");
+      sectionTitle("VÆRKTØJSLISTE");
       // header row
       doc.fillColor(GREY).fontSize(7.5).font("Helvetica");
-      ["Pos", "Description", "Label", "Restart"].forEach((h, i) => {
+      ["Pos.", "Beskrivelse", "Mærkat", "Genstart"].forEach((h, i) => {
         doc.text(h, [45, 80, 280, 430][i], y, { characterSpacing: 1 });
       });
       y += 14;
@@ -641,9 +641,9 @@ app.post("/api/setupsheet-pdf", (req, res) => {
     // ── Sub tool list ──────────────────────────────────────
     const tools2 = (sheet.tools2 || []).filter(t => t.description);
     if (tools2.length) {
-      sectionTitle("TOOL LIST — SUB");
+      sectionTitle("VÆRKTØJSLISTE — UNDER");
       doc.fillColor(GREY).fontSize(7.5).font("Helvetica");
-      ["Pos", "Description", "Label", "Restart"].forEach((h, i) => {
+      ["Pos.", "Beskrivelse", "Mærkat", "Genstart"].forEach((h, i) => {
         doc.text(h, [45, 80, 280, 430][i], y, { characterSpacing: 1 });
       });
       y += 14;
@@ -664,9 +664,9 @@ app.post("/api/setupsheet-pdf", (req, res) => {
     // ── Third tool list ────────────────────────────────────
     const tools3 = (sheet.tools3 || []).filter(t => t.description);
     if (tools3.length) {
-      sectionTitle("TOOL LIST — 3RD");
+      sectionTitle("VÆRKTØJSLISTE — 3.");
       doc.fillColor(GREY).fontSize(7.5).font("Helvetica");
-      ["Pos", "Description", "Label", "Restart"].forEach((h, i) => {
+      ["Pos.", "Beskrivelse", "Mærkat", "Genstart"].forEach((h, i) => {
         doc.text(h, [45, 80, 280, 430][i], y, { characterSpacing: 1 });
       });
       y += 14;
@@ -694,7 +694,7 @@ app.post("/api/setupsheet-pdf", (req, res) => {
         .filter(([, v]) => v)
         .map(([k, v]) => ({ key: k, value: v }));
     if (rawParams.length) {
-      sectionTitle("SETUP PARAMETERS");
+      sectionTitle("OPSTILLINGSPARAMETRE");
       const cols = 2;
       const colW = (W - 10) / cols;
       rawParams.forEach((p, i) => {
@@ -709,7 +709,7 @@ app.post("/api/setupsheet-pdf", (req, res) => {
 
     // ── Notes ──────────────────────────────────────────────
     if (sheet.notes) {
-      sectionTitle("NOTES");
+      sectionTitle("NOTER");
       doc.fillColor(DARK).fontSize(9).font("Helvetica").text(sheet.notes, 45, y, { width: W, lineGap: 3 });
       y += doc.heightOfString(sheet.notes, { width: W, lineGap: 3 }) + 10;
     }
@@ -717,9 +717,9 @@ app.post("/api/setupsheet-pdf", (req, res) => {
     // ── Footer ─────────────────────────────────────────────
     const footerY = doc.page.height - 30;
     doc.moveTo(45, footerY - 6).lineTo(45 + W, footerY - 6).strokeColor(LINE).stroke();
-    const stamp = new Date().toLocaleDateString("en-GB", { day: "2-digit", month: "short", year: "numeric" });
+    const stamp = new Date().toLocaleDateString("da-DK", { day: "2-digit", month: "short", year: "numeric" });
     doc.fillColor(GREY).fontSize(7).font("Helvetica")
-       .text(`ShopTrack Setup Sheet  ·  Generated ${stamp}  ·  ${sheet.partNumber || ""} / ${sheet.machine || ""}`,
+       .text(`ShopTrack opstillingsark  ·  Lavet ${stamp}  ·  ${sheet.partNumber || ""} / ${sheet.machine || ""}`,
              45, footerY, { width: W, align: "center" });
 
     doc.end();
