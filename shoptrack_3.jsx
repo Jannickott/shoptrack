@@ -150,6 +150,47 @@ const meta  ={display:"flex",flexWrap:"wrap",gap:12,fontSize:14,color:C.muted,ma
 const th    ={textAlign:"left",padding:"10px 10px",borderBottom:`1px solid rgba(255,255,255,.08)`,color:C.muted,fontSize:13,letterSpacing:2,textTransform:"uppercase"};
 const td    ={padding:"10px 10px",fontSize:15,borderBottom:`1px solid rgba(255,255,255,.04)`,color:C.text,verticalAlign:"middle"};
 
+// ─── FEEDBACK ─────────────────────────────────────────────────────────────────
+// notify("Job afsluttet") shows a short message at the bottom (and a tiny vibration
+// on tablets that support it); setSync() drives the "Gemt / Gemmer… / Ikke gemt"
+// indicator in the header.
+const feedbackBus=new EventTarget();
+function notify(text,kind="ok"){
+  feedbackBus.dispatchEvent(new CustomEvent("toast",{detail:{text,kind,id:Date.now()+Math.random()}}));
+  try{navigator.vibrate&&navigator.vibrate(kind==="error"?[60,40,60]:30);}catch{/* not supported */}
+}
+function setSync(state){feedbackBus.dispatchEvent(new CustomEvent("sync",{detail:state}));}
+
+function Toasts(){
+  const [list,setList]=useState([]);
+  useEffect(()=>{
+    const on=e=>{const t=e.detail;setList(l=>[...l.slice(-2),t]);setTimeout(()=>setList(l=>l.filter(x=>x.id!==t.id)),2600);};
+    feedbackBus.addEventListener("toast",on);
+    return()=>feedbackBus.removeEventListener("toast",on);
+  },[]);
+  return(
+    <div style={{position:"fixed",left:0,right:0,bottom:24,display:"flex",flexDirection:"column",alignItems:"center",gap:8,zIndex:2000,pointerEvents:"none"}}>
+      {list.map(t=>(
+        <div key={t.id} style={{background:t.kind==="error"?C.red:t.kind==="warn"?C.amber:C.green,color:t.kind==="warn"?"#1a1a1a":"#fff",
+          padding:"14px 22px",borderRadius:12,fontSize:17,fontWeight:700,boxShadow:"0 6px 24px rgba(0,0,0,.45)",display:"flex",alignItems:"center",gap:10,maxWidth:"90vw"}}>
+          <i className={`ti ti-${t.kind==="error"?"alert-triangle":t.kind==="warn"?"info-circle":"circle-check"}`} style={{fontSize:22}}/>{t.text}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function SyncIndicator(){
+  const [s,setS]=useState("saved");
+  useEffect(()=>{const on=e=>setS(e.detail);feedbackBus.addEventListener("sync",on);return()=>feedbackBus.removeEventListener("sync",on);},[]);
+  const [color,text,icon,tip]={
+    saved:[C.green,"Gemt","ti-cloud-check","Alt er gemt på serveren"],
+    saving:[C.amber,"Gemmer…","ti-cloud-upload","Gemmer på serveren…"],
+    offline:[C.red,"Ikke gemt","ti-cloud-off","Ingen forbindelse — ændringer gemmes, når forbindelsen er tilbage"],
+  }[s]||[];
+  return <div title={tip} style={{display:"flex",alignItems:"center",gap:6,fontSize:13,color,letterSpacing:1,textTransform:"uppercase",fontWeight:700}}><i className={`ti ${icon}`} style={{fontSize:20}}/>{text}</div>;
+}
+
 // ─── SERVER SYNC ──────────────────────────────────────────────────────────────
 async function uploadPhoto(photoData, filename) {
   try {
@@ -170,7 +211,10 @@ async function uploadPhoto(photoData, filename) {
 // so the screen changes at once; the next poll brings the server's result.
 // op: {type:"add",tool} | {type:"delete",toolId} | {type:"update",toolId,set,inc,checkout,returnBy} + optional log
 function sendToolOp(op){
-  return fetch("/api/tool-op",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(op)}).catch(()=>{});
+  setSync("saving");
+  return fetch("/api/tool-op",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(op)})
+    .then(r=>{setSync(r.ok?"saved":"offline");if(!r.ok)notify("Værktøjsændringen blev ikke gemt — prøv igen","error");})
+    .catch(()=>{setSync("offline");notify("Ingen forbindelse — værktøjsændringen blev ikke gemt","error");});
 }
 
 // Shrink a photo before it's stored — phone camera shots are several MB
@@ -364,6 +408,7 @@ export default function App(){
   const settingsVersionRef=useRef(0);   // bumped whenever settings change locally
   const prevSettingsHashRef=useRef(''); // tracks last-saved settings hash
   const lastSavedHashRef=useRef('');    // hash of what we last successfully sent — skip identical saves
+  const saveFailedRef=useRef(false);    // last full save failed → retried by the 3 s loop
   const [serverOnline,setServerOnline]=useState(true);
   useEffect(()=>{
     stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings};
@@ -373,12 +418,14 @@ export default function App(){
   useEffect(()=>{
     const t=setInterval(()=>{
       if(!dataLoadedRef.current) return;
+      if(saveFailedRef.current){doSave();return;} // an earlier save failed — retry it (sends everything)
       const state=stateRef.current;
       const hash=JSON.stringify([state.jobs,settingsVersionRef.current]);
       if(hash===lastSavedHashRef.current) return; // nothing changed — skip
+      setSync("saving");
       fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...state,settingsVersion:settingsVersionRef.current})})
-        .then(r=>{if(r.ok){lastSavedHashRef.current=hash;setServerOnline(true);}else setServerOnline(false);})
-        .catch(()=>setServerOnline(false)); // will retry next tick
+        .then(r=>{if(r.ok){lastSavedHashRef.current=hash;setServerOnline(true);setSync("saved");}else{setServerOnline(false);setSync("offline");}})
+        .catch(()=>{setServerOnline(false);setSync("offline");}); // will retry next tick
     },3000);
     return()=>clearInterval(t);
   },[]);
@@ -466,7 +513,9 @@ export default function App(){
     // Always newer than anything seen — the server's version can be ahead of this clock
     // (another device's clock, or the stress test), and a lower number would be rejected
     if(hash!==prevSettingsHashRef.current){prevSettingsHashRef.current=hash;settingsVersionRef.current=Math.max(Date.now(),settingsVersionRef.current+1);}
-    return fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...state,settingsVersion:settingsVersionRef.current})}).catch(()=>{});
+    setSync("saving");
+    return fetch("/api/data",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...state,settingsVersion:settingsVersionRef.current})})
+      .then(r=>{saveFailedRef.current=!r.ok;setSync(r.ok?"saved":"offline");}).catch(()=>{saveFailedRef.current=true;setSync("offline");});
   };
   // Most handlers call setX(...) and then saveNow() in the same click, before stateRef
   // has the new value — so save once now and again after the re-render has landed.
@@ -587,12 +636,37 @@ export default function App(){
     return()=>clearInterval(t);
   },[]);
 
+  // ── Tablet: full screen (remembered per tablet) and keep the screen on ──
+  const [isFull,setIsFull]=useState(()=>!!document.fullscreenElement);
+  const installedApp=window.matchMedia&&(matchMedia("(display-mode: fullscreen)").matches||matchMedia("(display-mode: standalone)").matches);
+  useEffect(()=>{
+    const onChange=()=>setIsFull(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange",onChange);
+    // Browsers only allow full screen after a tap — re-enter on the first tap if this tablet wants it
+    const wantFull=()=>{try{return localStorage.getItem("st-fullscreen")==="1";}catch{return false;}};
+    const onTap=()=>{if(wantFull()&&!document.fullscreenElement&&document.fullscreenEnabled)document.documentElement.requestFullscreen().catch(()=>{});};
+    document.addEventListener("pointerdown",onTap,true);
+    // Keep the screen on while ShopTrack is open (only where the browser allows it)
+    let lock=null;
+    const keepAwake=()=>{if(document.visibilityState==="visible"&&navigator.wakeLock)navigator.wakeLock.request("screen").then(l=>{lock=l;}).catch(()=>{});};
+    keepAwake();
+    document.addEventListener("visibilitychange",keepAwake);
+    return()=>{document.removeEventListener("fullscreenchange",onChange);document.removeEventListener("pointerdown",onTap,true);document.removeEventListener("visibilitychange",keepAwake);if(lock)lock.release().catch(()=>{});};
+  },[]);
+  const toggleFull=()=>{
+    try{
+      if(document.fullscreenElement){localStorage.setItem("st-fullscreen","0");document.exitFullscreen();}
+      else{localStorage.setItem("st-fullscreen","1");document.documentElement.requestFullscreen().catch(()=>{});}
+    }catch{/* storage or full screen not available */}
+  };
+
   const reportIssue=(machineName,status,reason)=>{
     const now=new Date();
     const hhmm=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
     const dhR=todayWorkHours(workHours);
     const counting=!!(dhR&&dhR.enabled&&hhmm>=dhR.start&&hhmm<dhR.end);
     setMachineIssues(prev=>({...prev,[machineName]:{status,reason,reportedBy:user.name,reportedAt:Date.now(),downtimeSec:0,counting}}));
+    notify(`Fejl meldt på ${machineName} — job på maskinen er sat på pause`,"warn");
     setJobs(prev=>prev.map(j=>{
       if(j.machine!==machineName||j.status==="done") return j;
       const lt=liveTime(j);
@@ -605,6 +679,7 @@ export default function App(){
     const resolvedAt=Date.now();
     const downtimeSec=issue.downtimeSec||0; // work-hours-only counter
     setDowntimeLog(prev=>[...prev,{id:resolvedAt,machineName,...issue,resolvedBy:user.name,resolvedAt,downtimeSec}]);
+    notify(`${machineName} kører igen`);
     setMachineIssues(prev=>{const n={...prev};delete n[machineName];return n;});
     setJobs(prev=>prev.map(j=>j.machine===machineName&&j.paused?{...j,paused:false,phaseStartedAt:Date.now(),lastModifiedAt:Date.now()}:j));
     saveNow();
@@ -675,11 +750,17 @@ export default function App(){
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <div style={{fontSize:16,letterSpacing:3,textTransform:"uppercase",color:C.amber,fontWeight:700,cursor:"pointer",userSelect:"none"}} onClick={()=>{setUser(null);setTab("new");}}>⚙ ShopTrack</div>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
+          <SyncIndicator/>
           <div style={{fontSize:21,letterSpacing:3}}>{clock}</div>
           <div style={{fontSize:14,textAlign:"right"}}>
             <div style={{color:C.text}}>{user.name}</div>
             <div style={{fontSize:12,letterSpacing:1,textTransform:"uppercase",color:user.role==="admin"?C.amber:C.muted}}>{roleName(user.role)}</div>
           </div>
+          {!installedApp&&document.fullscreenEnabled&&(
+            <button style={btn("outline",false,true)} onClick={toggleFull} title={isFull?"Afslut fuld skærm":"Fuld skærm — huskes på denne tablet"}>
+              <i className={`ti ti-${isFull?"minimize":"maximize"}`} style={{fontSize:18}}/>
+            </button>
+          )}
           <button style={btn("outline",false,true)} onClick={logout}>Log ud</button>
         </div>
       </div>
@@ -726,6 +807,7 @@ export default function App(){
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
 
+      <Toasts/>
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}
     </div>
   );
@@ -853,6 +935,7 @@ function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetI
     const now=Date.now();
     setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now},...prev]);
     setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);
+    notify(`Job startet — opstilling kører på ${machine}`);
   };
   const goToSheet=(sheetId)=>{setFocusSheetId&&setFocusSheetId(sheetId);setTab&&setTab("setup");};
   // No sheet yet: open a new one so it can be filled in while setting up
@@ -1068,6 +1151,7 @@ function QuickEntryTab({user,machines,setJobs,setTab,saveNow}){
     const a=document.createElement("a"); a.href=photo; a.download=filename; a.click();
     saveNow&&saveNow();
     setDone(true);
+    notify("Job registreret");
   };
 
   const reset=()=>{
@@ -1248,8 +1332,9 @@ function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,pauseJob,re
       // Store duration only — timer starts when operator logs out
       setJobs(prev=>prev.map(x=>x.id===j.id?{...x,nightMode:true,nightModeDuration:dur,nightModeEndsAt:null,nightModeDone:false,lastModifiedAt:Date.now()}:x));
       setNmForm(false);setNmH("");setNmM("");
+      notify(`Natkørsel klar — kører ${fmtHM(dur)} efter du logger ud`);
     };
-    const cancelNightMode=()=>setJobs(prev=>prev.map(x=>x.id===j.id?{...x,nightMode:false,nightModeDuration:0,nightModeEndsAt:null,nightModeDone:false,nightPaused:false,lastModifiedAt:Date.now()}:x));
+    const cancelNightMode=()=>{notify("Natkørsel annulleret","warn");setJobs(prev=>prev.map(x=>x.id===j.id?{...x,nightMode:false,nightModeDuration:0,nightModeEndsAt:null,nightModeDone:false,nightPaused:false,lastModifiedAt:Date.now()}:x));};
 
     return(
       <div style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${color}`,border:`1px solid ${C.border}`,borderTopColor:color,padding:"12px 10px",display:"flex",flexDirection:"column",gap:6}}>
@@ -1425,6 +1510,7 @@ function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     saveNow&&saveNow();
+    notify("Job sat på pause","warn");
   };
 
   const resumeJob=id=>{
@@ -1436,6 +1522,7 @@ function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     saveNow&&saveNow();
+    notify("Job genoptaget");
   };
 
   if(!active.length) return <div style={{padding:"14px 16px"}}><div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:15,letterSpacing:1}}><i className="ti ti-tool" style={{fontSize:34,display:"block",marginBottom:10,opacity:0.3}}/> Ingen aktive job.</div></div>;
@@ -1450,6 +1537,7 @@ function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     saveNow&&saveNow();
+    notify("Afgratning færdig — job afsluttet");
   };
 
   return(
@@ -1534,6 +1622,7 @@ function CompleteModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
       if(stateRef) stateRef.current={...stateRef.current,jobs:updatedJobs};
       setJobs(updatedJobs);
       saveNow&&saveNow();
+      notify("Side 1 færdig — opstilling af side 2 er startet");
       setSaving(false);
       onClose();
     } else if(deburring){
@@ -1550,6 +1639,7 @@ function CompleteModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
       if(stateRef) stateRef.current={...stateRef.current,jobs:updatedJobs};
       setJobs(updatedJobs);
       saveNow&&saveNow();
+      notify("Afgratning startet");
       setSaving(false);
       onClose();
     } else {
@@ -1565,6 +1655,7 @@ function CompleteModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
       if(stateRef) stateRef.current={...stateRef.current,jobs:updatedJobs};
       setJobs(updatedJobs);
       saveNow&&saveNow();
+      notify("Job afsluttet");
       setSaving(false);
       onClose();
     }
@@ -1699,6 +1790,7 @@ function StartRunModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
     setJobs(updatedJobs);
     const a=document.createElement("a");a.href=photoData;a.download=filename;a.click();
     saveNow&&saveNow();
+    notify(isSide2?"Produktion side 2 startet":"Produktion startet");
     setSaving(false);
     onClose();
   };
@@ -2352,6 +2444,7 @@ function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef,s
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     saveNow&&saveNow();
+    notify("Job opdateret");
     setEditing(false);
   };
   const nightColor="#7c5cbf";
@@ -2385,6 +2478,7 @@ function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef,s
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     saveNow&&saveNow();
+    notify("Produktion startet");
   };
   // Start-time correction from StartTimeFix
   const applyFix=patch=>{
@@ -2392,6 +2486,7 @@ function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef,s
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     saveNow&&saveNow();
+    notify("Starttid rettet");
     setEditing(false);
   };
   const deleteJob=()=>{
@@ -2405,6 +2500,7 @@ function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,stateRef,s
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     saveNow&&saveNow();
+    notify("Job slettet","warn");
   };
 
   return(
@@ -2600,6 +2696,7 @@ function IssueCard({name,issue,setMachineIssues,resolveIssue,saveNow}){
     setMachineIssues(prev=>({...prev,[name]:{...prev[name],status,reason,fixDescription:fixDescription.trim(),fixCost:fixCost.trim(),updatedAt:Date.now()}}));
     setEditing(false);
     saveNow&&saveNow();
+    notify("Fejl opdateret");
   };
   return(
     <div style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${accentColor}`,border:`1px solid ${C.border}`,borderTopColor:accentColor,padding:"10px",display:"flex",flexDirection:"column",gap:6}}>
@@ -2706,6 +2803,7 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
     setSelectedIds(new Set());
     setConfirmBulkDelete(false);
     saveNow&&saveNow();
+    notify(`${ids.size} job slettet`,"warn");
   };
   return(
     <div style={{padding:"14px 16px"}}>
@@ -2809,6 +2907,7 @@ function ResolvedIssueCard({entry,setDowntimeLog,saveNow}){
     setDowntimeLog(prev=>prev.map(e=>e.id===entry.id?{...e,reason:reason.trim(),fixDescription:fixDescription.trim(),fixCost:fixCost.trim(),updatedAt:Date.now()}:e));
     setEditing(false);
     saveNow&&saveNow();
+    notify("Gemt");
   };
   return(
     <div style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${accentColor}`,border:`1px solid ${C.border}`,borderTopColor:accentColor,padding:"10px",display:"flex",flexDirection:"column",gap:6}}>
@@ -5382,6 +5481,7 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
     if(qty<1||qty>selectedTool.quantity) return;
     toolOp({inc:{quantity:-qty},log:logEntry("take",qty)},t=>({...t,quantity:Math.max(0,t.quantity-qty)}));
     setSelectedId(null);setTakeQty(1);
+    notify(`Taget: ${qty} stk ${selectedTool.name}`);
   };
   const doCheckout=()=>{
     if(!selectedTool||!selectedTool.returnable) return;
@@ -5391,6 +5491,7 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
     toolOp({inc:{checkedOutCount:1},checkout:by,log:logEntry("checkout",1)},
       t=>({...t,checkedOutCount:(t.checkedOutCount||0)+1,checkedOutBy:[...(t.checkedOutBy||[]),by]}));
     setSelectedId(null);setTakeQty(1);
+    notify(`Lånt: ${selectedTool.name}`);
   };
   const doReturn=(regrinded=null)=>{
     if(!selectedTool||!selectedTool.returnable) return;
@@ -5400,6 +5501,7 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
     toolOp({inc:{checkedOutCount:-1},set,returnBy:user.id,log:logEntry(action,1)},
       t=>({...t,...set,checkedOutCount:Math.max(0,(t.checkedOutCount||0)-1),checkedOutBy:_removeOneCheckout(t.checkedOutBy||[])}));
     setSelectedId(null);setTakeQty(1);
+    notify(`Afleveret: ${selectedTool.name}`);
   };
   const doReturnDamaged=()=>{
     if(!selectedTool||!selectedTool.returnable) return;
@@ -5407,12 +5509,14 @@ function ToolsTab({user,tools,setTools,toolLog,setToolLog,cabinets,saveNow,focus
     toolOp({inc:{checkedOutCount:-1,damagedCount:1},returnBy:user.id,log:logEntry("return-damaged",1)},
       t=>({...t,checkedOutCount:Math.max(0,(t.checkedOutCount||0)-1),damagedCount:(t.damagedCount||0)+1,checkedOutBy:_removeOneCheckout(t.checkedOutBy||[])}));
     setSelectedId(null);setTakeQty(1);
+    notify(`Afleveret som beskadiget: ${selectedTool.name}`,"warn");
   };
   const doReportBroken=()=>{
     if(!selectedTool) return;
     const set={broken:true,quantity:0,checkedOutCount:0,checkedOutBy:[],damagedCount:0};
     toolOp({set},t=>({...t,...set}));
     setSelectedId(null);setTakeQty(1);
+    notify(`Meldt i stykker: ${selectedTool.name} — admin får besked`,"warn");
   };
   const setConditionStars=(stars)=>{
     if(!selectedTool) return;
@@ -6365,7 +6469,7 @@ function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateR
   // Compute dept-specific params for the form
   const sheetDept=selected?(machines||[]).find(m=>m.name===selected.machine)?.department||"":"";
   const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
-  if(view==="edit") return(<SetupSheetForm sheet={selected} prefill={selected?null:prefill} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setPrefill(null);setSelectedId(sheet.id);setView("detail");}}/>);
+  if(view==="edit") return(<SetupSheetForm sheet={selected} prefill={selected?null:prefill} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setPrefill(null);notify("Opstillingsark gemt");setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
   if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
