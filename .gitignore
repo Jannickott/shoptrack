@@ -14,10 +14,10 @@ dist-ssr
 # ShopTrack runtime data — never sync these, they live on each server
 shoptrack-data.json
 shoptrack-data.json.tmp
-photos/
-backups/
-reports/
-setupsheets/
+/photos/
+/backups/
+/reports/
+/setupsheets/
 shoptrack-config.json
 
 # SSL certificates — generated per machine, never sync
