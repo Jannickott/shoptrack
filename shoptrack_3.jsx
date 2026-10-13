@@ -2665,7 +2665,11 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
   const [search,setSearch]=useState("");
   const [selectedIds,setSelectedIds]=useState(new Set());
   const [confirmBulkDelete,setConfirmBulkDelete]=useState(false);
-  const allMachines=[...new Set(jobs.map(j=>j.machine))].sort();
+  // Machine chips: machines with jobs, open faults or resolved faults
+  const allMachines=[...new Set([...jobs.map(j=>j.machine),...Object.keys(machineIssues),...(downtimeLog||[]).map(d=>d.machineName)].filter(Boolean))].sort();
+  // Faults follow the machine filter too
+  const openIssues=Object.entries(machineIssues).filter(([name])=>machineFilt==="all"||name===machineFilt);
+  const resolvedIssues=(downtimeLog||[]).filter(d=>machineFilt==="all"||d.machineName===machineFilt);
   const showIssues=statusFilt==="all"||statusFilt==="issues";
   const showJobs=statusFilt!=="issues";
   const filtered=showJobs?jobs.filter(j=>
@@ -2706,7 +2710,7 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
         {[["all","Alle"],["setup","Opstilling"],["run","Kører"],["done","Færdig"],["issues","Løste fejl"]].map(([f,l])=>(
           <button key={f} style={tag(statusFilt===f)} onClick={()=>setStatusFilt(f)}>
             {l}
-            {f==="issues"&&(downtimeLog||[]).length>0&&<span style={{background:"rgba(255,255,255,.15)",borderRadius:20,fontSize:12,padding:"0px 5px",marginLeft:5,fontWeight:700}}>{(downtimeLog||[]).length}</span>}
+            {f==="issues"&&resolvedIssues.length>0&&<span style={{background:"rgba(255,255,255,.15)",borderRadius:20,fontSize:12,padding:"0px 5px",marginLeft:5,fontWeight:700}}>{resolvedIssues.length}</span>}
           </button>
         ))}
       </div>
@@ -2714,33 +2718,33 @@ function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,set
         <button style={tag(machineFilt==="all")} onClick={()=>setMachineFilt("all")}>Alle</button>
         {allMachines.map(m=><button key={m} style={tag(machineFilt===m)} onClick={()=>setMachineFilt(m)}>{m}</button>)}
       </div>}
-      {showIssues&&Object.keys(machineIssues).length>0&&(
+      {showIssues&&openIssues.length>0&&(
         <div style={{marginBottom:16}}>
           <div style={{fontSize:13,color:C.red,letterSpacing:2,textTransform:"uppercase",marginBottom:8,paddingBottom:6,borderBottom:`1px solid ${C.red}40`}}>
-            <i className="ti ti-alert-triangle"/> Maskinfejl · {Object.keys(machineIssues).length}
+            <i className="ti ti-alert-triangle"/> Maskinfejl · {openIssues.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10}}>
-            {Object.entries(machineIssues).map(([name,issue])=>(
+            {openIssues.map(([name,issue])=>(
               <IssueCard key={name} name={name} issue={issue} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} saveNow={saveNow}/>
             ))}
           </div>
         </div>
       )}
-      {showJobs&&!filtered.length&&!Object.keys(machineIssues).length&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:15}}>Ingen job fundet.</div>}
+      {showJobs&&!filtered.length&&!openIssues.length&&<div style={{textAlign:"center",padding:"40px 16px",color:C.muted,fontSize:15}}>Ingen job fundet.</div>}
       {showJobs&&active.length>0&&(
         <ActiveJobsGrid jobs={active} renderCard={j=>(
           <AdminJobCard key={j.id} j={j} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} saveNow={saveNow} stateRef={stateRef}/>
         )}/>
       )}
-      {showIssues&&(downtimeLog||[]).length>0&&(
+      {showIssues&&resolvedIssues.length>0&&(
         <>
           <div style={{paddingTop:4,borderTop:`1px solid ${C.border}`,marginBottom:10,marginTop:6}}>
             <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:4}}>
-              <i className="ti ti-history"/> Løste fejl · {(downtimeLog||[]).length}
+              <i className="ti ti-history"/> Løste fejl · {resolvedIssues.length}
             </div>
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:10,marginBottom:16}}>
-            {[...(downtimeLog||[])].reverse().map(entry=>(
+            {[...resolvedIssues].reverse().map(entry=>(
               <ResolvedIssueCard key={entry.id} entry={entry} setDowntimeLog={setDowntimeLog} saveNow={saveNow}/>
             ))}
           </div>
