@@ -9,7 +9,7 @@ import { ManageTools } from "../tools/ManageTools";
 // DELEGATE JOBS — reassign active jobs when operator is away
 // ═══════════════════════════════════════════════════════
 export function DelegateJobs({users,jobs,setJobs,saveNow}){
-  const operators=users.filter(u=>u.active&&!u.removed&&u.role!=="admin");
+  const operators=users.filter(u=>u.active&&!u.removed&&u.role==="operator");
   const [fromId,setFromId]=useState("");
   // assignments: { [jobId]: operatorId string }
   const [assignments,setAssignments]=useState({});

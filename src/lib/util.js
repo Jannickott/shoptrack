@@ -30,7 +30,7 @@ export function jobEfficiency(j){ const t=jRunAll(j)+jSetupAll(j); return t>0?jR
 // Tool log actions as shown on screen
 export const TOOL_ACTION_NAME={take:"Taget",checkout:"Lånt",return:"Afleveret","return-regrinded":"Afleveret omslebet","return-needs-regrind":"Afleveret — skal omslibes","return-damaged":"Afleveret beskadiget",restock:"Fyldt op"};
 // Role as shown on screen (stored as "admin" / "operator")
-export function roleName(r){ return r==="admin"?"Admin":"Operatør"; }
+export function roleName(r){ return r==="admin"?"Admin":r==="requester"?"Bestiller":"Operatør"; }
 export function initials(n){ return n.split(" ").map(x=>x[0]).join("").slice(0,2).toUpperCase(); }
 export function liveTime(j){
   const now=Date.now();

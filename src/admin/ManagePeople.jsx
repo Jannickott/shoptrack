@@ -10,16 +10,18 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
   const [deleteId,setDeleteId]=useState(null);
   const [editNameId,setEditNameId]=useState(null); const [editNameVal,setEditNameVal]=useState(""); const [editNameErr,setEditNameErr]=useState("");
   const [showRemoved,setShowRemoved]=useState(false);
-  const operators=users.filter(u=>u.role==="operator"&&!u.removed);
-  const removed=users.filter(u=>u.role==="operator"&&u.removed);
+  const [role,setRole]=useState("operator"); // "operator" or "requester" (Bestiller — only creates tasks)
+  const isPerson=u=>u.role==="operator"||u.role==="requester";
+  const operators=users.filter(u=>isPerson(u)&&!u.removed);
+  const removed=users.filter(u=>isPerson(u)&&u.removed);
   const allDepts=(departments||[]).length>0?(departments||[]):[...new Set(machines.map(m=>m.department||"").filter(Boolean))].sort();
   const save=()=>{
     const e={};
     if(!name.trim()) e.name="Navn skal udfyldes";
     if(!/^\d{4}$/.test(pin)) e.pin="PIN skal være præcis 4 cifre";
     if(Object.keys(e).length){setErrs(e);return;}
-    setUsers(prev=>[...prev,{id:Date.now(),name:name.trim(),pin,role:"operator",active:true,departments:[]}]);
-    setName("");setPin("");setErrs({});setAdding(false);
+    setUsers(prev=>[...prev,{id:Date.now(),name:name.trim(),pin,role,active:true,departments:[]}]);
+    setName("");setPin("");setErrs({});setAdding(false);setRole("operator");
   };
   const toggleDept=(uid,dept)=>{
     setUsers(prev=>prev.map(u=>{
@@ -50,15 +52,23 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
   return(
     <div>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:14}}>
-        <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>{operators.length} operatører</div>
-        <button style={btn("primary",false,true)} onClick={()=>setAdding(a=>!a)}><i className={`ti ti-${adding?"x":"plus"}`}/> {adding?"Annuller":"Tilføj operatør"}</button>
+        <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}>{operators.length} brugere</div>
+        <button style={btn("primary",false,true)} onClick={()=>setAdding(a=>!a)}><i className={`ti ti-${adding?"x":"plus"}`}/> {adding?"Annuller":"Tilføj bruger"}</button>
       </div>
       {adding&&(
         <div style={{...card(),border:`1px solid ${C.amber}`,marginBottom:16}}>
-          <div style={{fontSize:13,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Ny operatør</div>
+          <div style={{fontSize:13,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Ny bruger</div>
+          <div style={{marginBottom:12}}>
+            <label style={label}>Rolle</label>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+              <button style={tag(role==="operator")} onClick={()=>setRole("operator")}><i className="ti ti-user"/> Operatør</button>
+              <button style={tag(role==="requester")} onClick={()=>setRole("requester")}><i className="ti ti-clipboard-check"/> Bestiller</button>
+            </div>
+            {role==="requester"&&<div style={{fontSize:14,color:C.muted,marginTop:8}}>En bestiller kan kun oprette opgaver (prototyper, små projekter) og se hvordan det går med dem.</div>}
+          </div>
           <div style={{marginBottom:10}}><label style={label}>Fulde navn *</label><input style={inp(errs.name)} value={name} onChange={e=>setName(e.target.value)} placeholder="f.eks. Jan Mortensen"/>{errs.name&&<div style={errMsg}>{errs.name}</div>}</div>
           <div style={{marginBottom:12}}><label style={label}>4-cifret PIN *</label><input type="password" inputMode="numeric" maxLength={4} style={{...inp(errs.pin),letterSpacing:8,fontSize:22,textAlign:"center"}} value={pin} onChange={e=>setPin(e.target.value.replace(/\D/g,""))} placeholder="••••"/>{errs.pin&&<div style={errMsg}>{errs.pin}</div>}</div>
-          <button style={btn("success",true)} onClick={save}><i className="ti ti-user-plus"/> Tilføj operatør</button>
+          <button style={btn("success",true)} onClick={save}><i className="ti ti-user-plus"/> Tilføj {role==="requester"?"bestiller":"operatør"}</button>
         </div>
       )}
       {operators.map(u=>(
@@ -66,13 +76,13 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
           <div style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={avatar()}>{initials(u.name)}</div>
             <div style={{flex:1}}>
-              <div style={{fontSize:16,color:C.text,fontWeight:700}}>{u.name}</div>
+              <div style={{fontSize:16,color:C.text,fontWeight:700}}>{u.name}{u.role==="requester"&&<span style={{fontSize:12,letterSpacing:1,textTransform:"uppercase",color:C.blue,background:"rgba(59,130,246,.12)",padding:"2px 8px",borderRadius:10,marginLeft:8,fontWeight:400}}><i className="ti ti-clipboard-check"/> Bestiller</span>}</div>
               <div style={{fontSize:13,color:C.muted,marginTop:2}}>PIN: {"●".repeat(4)} &nbsp;·&nbsp; <span style={{color:u.active?C.green:C.red}}>{u.active?"Aktive":"Inaktiv"}</span></div>
             </div>
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               <button style={btn("outline",false,true)} onClick={()=>{setEditNameId(editNameId===u.id?null:u.id);setEditNameVal(u.name);setEditNameErr("");setEditId(null);setEditDeptId(null);setDeleteId(null);}}><i className="ti ti-pencil"/></button>
               <button style={btn("outline",false,true)} onClick={()=>{setEditId(editId===u.id?null:u.id);setEditDeptId(null);setDeleteId(null);setEditNameId(null);setEditPin("");setEditErr("");}}><i className="ti ti-key"/> PIN</button>
-              {allDepts.length>0&&<button style={btn("blue",false,true)} onClick={()=>{setEditDeptId(editDeptId===u.id?null:u.id);setEditId(null);setDeleteId(null);setEditNameId(null);}}><i className="ti ti-building-factory"/> Afd.</button>}
+              {allDepts.length>0&&u.role==="operator"&&<button style={btn("blue",false,true)} onClick={()=>{setEditDeptId(editDeptId===u.id?null:u.id);setEditId(null);setDeleteId(null);setEditNameId(null);}}><i className="ti ti-building-factory"/> Afd.</button>}
               <button style={btn(u.active?"danger":"success",false,true)} onClick={()=>toggle(u.id)}>{u.active?"Deaktiver":"Aktiver"}</button>
               <button style={btn("danger",false,true)} onClick={()=>{setDeleteId(deleteId===u.id?null:u.id);setEditId(null);setEditDeptId(null);setEditNameId(null);}}><i className="ti ti-trash"/></button>
             </div>
@@ -88,8 +98,8 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
               </div>
             </div>
           )}
-          {/* Auto-pause — always visible, saves on change */}
-          <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
+          {/* Auto-pause — always visible for operators, saves on change */}
+          {u.role==="operator"&&<div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
             <i className="ti ti-clock" style={{color:u.autoPauseTime?C.amber:C.muted,fontSize:16,flexShrink:0}}/>
             <div style={{flex:1}}>
               <div style={{fontSize:12,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Automatisk pause kl.</div>
@@ -105,7 +115,7 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
                 <i className="ti ti-x"/> Ryd
               </button>
             )}
-          </div>
+          </div>}
           {/* Department badges */}
           {(u.departments||[]).length>0&&editDeptId!==u.id&&(
             <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
@@ -116,7 +126,7 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
               ))}
             </div>
           )}
-          {(u.departments||[]).length===0&&editDeptId!==u.id&&allDepts.length>0&&(
+          {(u.departments||[]).length===0&&editDeptId!==u.id&&allDepts.length>0&&u.role==="operator"&&(
             <div style={{marginTop:6,fontSize:13,color:C.muted}}><i className="ti ti-eye"/> Ser alle afdelinger</div>
           )}
           {/* Department checkboxes panel */}

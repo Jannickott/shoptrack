@@ -7,6 +7,8 @@ import { ReportsTab } from "./admin/ReportsTab";
 import { notify, setSync, Toasts, SyncIndicator } from "./components/Feedback";
 import { mergeIssues } from "./lib/api";
 import { C, btn, navBtn } from "./lib/theme";
+import { AdminTasksTab, RequesterTasksTab } from "./tasks/TasksTab";
+import { statJobsOf, visibleTasks, taskState } from "./tasks/taskUtil";
 import { INIT_USERS, INIT_MACHINES, roleName, liveTime, INIT_WORK_HOURS, todayWorkHours, isInWorkHoursNow } from "./lib/util";
 import { ActiveTab } from "./operator/ActiveTab";
 import { HistoryTab } from "./operator/HistoryTab";
@@ -58,6 +60,7 @@ export default function App(){
   const [efficiencyGoals,setEfficiencyGoals]=useState({overall:80,week:75,month:78,machines:{},departments:{},hiddenMachines:[]});
   const [planOrders,setPlanOrders]=useState([]);
   const [planSettings,setPlanSettings]=useState({deptOrder:[],groupSameParts:false});
+  const [tasks,setTasks]=useState([]); // Opgaver — see tasks/taskUtil.js
 
   // New version on the server? The first /api/data response tells us which build
   // this page is; a different X-App-Version later means the server was updated.
@@ -122,6 +125,7 @@ export default function App(){
           if(data.efficiencyGoals) setEfficiencyGoals(data.efficiencyGoals);
           if(data.planOrders) setPlanOrders(data.planOrders);
           if(data.planSettings) setPlanSettings(data.planSettings);
+          if(data.tasks) setTasks(data.tasks);
           if(data.settingsVersion) settingsVersionRef.current=data.settingsVersion;
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
@@ -139,6 +143,7 @@ export default function App(){
             efficiencyGoals:data.efficiencyGoals,
             planOrders:data.planOrders,
             planSettings:data.planSettings,
+            tasks:data.tasks,
           };
         }
       })
@@ -157,8 +162,8 @@ export default function App(){
   const doSaveRef=useRef(null);         // doSave, for the 3 s loop (defined further down)
   const [serverOnline,setServerOnline]=useState(true);
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings]);
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks};
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks]);
 
   // Save to server every 3 seconds — only when data has changed, with retry on failure
   useEffect(()=>{
@@ -209,6 +214,12 @@ export default function App(){
           data.planOrders.forEach(o=>{const l=m.get(o.id);if(!l||(o.updatedAt||0)>=(l.updatedAt||0))m.set(o.id,o);});
           return [...m.values()];
         });
+        // Tasks: same rule as planning orders
+        if(data.tasks&&JSON.stringify(data.tasks)!==JSON.stringify(last.tasks)) setTasks(local=>{
+          const m=new Map(local.map(o=>[o.id,o]));
+          data.tasks.forEach(o=>{const l=m.get(o.id);if(!l||(o.updatedAt||0)>=(l.updatedAt||0))m.set(o.id,o);});
+          return [...m.values()];
+        });
         // Settings: only apply if the server value actually changed (another device saved it)
         const s=JSON.stringify;
         if(data.workHours  &&s(data.workHours) !==s(last.workHours)) {setWorkHours(data.workHours);workHoursRef.current=data.workHours;}
@@ -246,7 +257,7 @@ export default function App(){
         // Keep settingsVersion in sync with server (take the max — never go backwards)
         if((data.settingsVersion||0)>settingsVersionRef.current) settingsVersionRef.current=data.settingsVersion;
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders,planSettings:data.planSettings};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders,planSettings:data.planSettings,tasks:data.tasks};
       }).catch(()=>setServerOnline(false));
     },5000);
     return()=>clearInterval(t);
@@ -277,7 +288,7 @@ export default function App(){
     if(!savePendingRef.current) return;
     savePendingRef.current=false;
     doSave();
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings]);
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks]);
 
   // ── Refresh immediately when tab becomes visible again ────
   useEffect(()=>{
@@ -443,7 +454,7 @@ export default function App(){
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     loginTimeRef.current=n;
-    setUser(u);setTab(u.role==="admin"?"admin":"new");
+    setUser(u);setTab(u.role==="admin"?"admin":u.role==="requester"?"mytasks":"new");
     saveNow();
   };
   const logout=()=>{
@@ -484,6 +495,12 @@ export default function App(){
   // Exclude soft-deleted jobs from all display — they stay in state/stateRef for server sync
   const visibleJobs=jobs.filter(j=>!j.deleted);
   const activeCnt=visibleJobs.filter(j=>j.status!=="done"&&j.operatorId===user.id).length;
+  // Task jobs stay out of efficiency figures; badges for tasks waiting on someone
+  const statJobs=statJobsOf(visibleJobs);
+  const taskStates=visibleTasks(tasks).map(t=>({t,key:taskState(t,visibleJobs).key}));
+  const myTaskCnt=taskStates.filter(x=>x.key==="assigned"&&x.t.assignedToId===user.id).length;
+  const waitingTaskCnt=taskStates.filter(x=>x.key==="waiting").length;
+  const badgeStyle=bg=>({background:bg,color:bg===C.amber?"#1a1a1a":"white",borderRadius:20,fontSize:12,padding:"1px 6px",marginLeft:6,fontWeight:700});
 
   return(
     <div style={{fontFamily:"'Share Tech Mono',monospace",background:C.bg,minHeight:"100vh",color:C.text}}>
@@ -518,6 +535,7 @@ export default function App(){
           {[["new","plus","Nyt job"],["quick","bolt","Hurtig registrering"],["active","player-play","Aktive"],["machines","alert-triangle","Maskiner"],["tools","package","Værktøj"],["setup","clipboard-list","Opstillingsark"],["history","list","Historik"]].map(([t,ic,lb])=>(
             <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
               <i className={`ti ti-${ic}`}/> {lb}
+              {t==="new"&&myTaskCnt>0&&<span style={badgeStyle(C.blue)}>{myTaskCnt}</span>}
               {t==="active"&&activeCnt>0&&<span style={{background:C.amber,color:"#1a1a1a",borderRadius:20,fontSize:12,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{activeCnt}</span>}
               {t==="machines"&&Object.keys(machineIssues).length>0&&<span style={{background:C.red,color:"white",borderRadius:20,fontSize:12,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{Object.keys(machineIssues).length}</span>}
             </button>
@@ -526,11 +544,12 @@ export default function App(){
       )}
       {user.role==="admin"&&(
         <div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`}}>
-          {[["admin","layout-dashboard","Overblik"],["planning","calendar-time","Planlægning β"],["alljobs","tool","Alle job"],["machdata","cpu","Maskiner"],["admintools","package","Værktøj"],["setup","clipboard-list","Opstillingsark"],["reports","chart-bar","Rapporter"],["manage","settings","Administration"]].map(([t,ic,lb])=>{
+          {[["admin","layout-dashboard","Overblik"],["planning","calendar-time","Planlægning β"],["alljobs","tool","Alle job"],["tasks","clipboard-check","Opgaver"],["machdata","cpu","Maskiner"],["admintools","package","Værktøj"],["setup","clipboard-list","Opstillingsark"],["reports","chart-bar","Rapporter"],["manage","settings","Administration"]].map(([t,ic,lb])=>{
             const lowCnt=t==="admintools"?tools.filter(tl=>tl.active&&((!tl.returnable&&tl.quantity<=(tl.minQuantity||0))||tl.broken||(tl.hasConditionRating&&(tl.conditionStars||5)<=2&&!tl.ordered))).length:0;
             return(
               <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
                 <i className={`ti ti-${ic}`}/> {lb}
+                {t==="tasks"&&waitingTaskCnt>0&&<span style={badgeStyle(C.amber)}>{waitingTaskCnt}</span>}
                 {t==="admintools"&&lowCnt>0&&<span style={{background:C.red,color:"white",borderRadius:20,fontSize:12,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{lowCnt}</span>}
               </button>
             );
@@ -538,8 +557,16 @@ export default function App(){
         </div>
       )}
 
+      {user.role==="requester"&&(
+        <div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`}}>
+          <button style={navBtn(true)}><i className="ti ti-clipboard-check"/> Mine opgaver</button>
+        </div>
+      )}
+
       {/* CONTENT */}
-      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor}/>}
+      {user.role==="requester"?<RequesterTasksTab user={user} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} saveNow={saveNow}/>:<>
+      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
+      {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} setCompleteId={setCompleteId} saveNow={saveNow}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} jobs={visibleJobs} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
@@ -547,12 +574,13 @@ export default function App(){
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
-      {tab==="machdata" &&<MachineDataTab     jobs={visibleJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
+      {tab==="machdata" &&<MachineDataTab     jobs={statJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
       {tab==="planning" &&<PlanningTab       jobs={visibleJobs} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} planSettings={planSettings} setPlanSettings={setPlanSettings} saveNow={saveNow}/>}
-      {tab==="reports"  &&<ReportsTab       jobs={visibleJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
+      {tab==="reports"  &&<ReportsTab       jobs={statJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
+      </>}
 
       <Toasts/>
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}

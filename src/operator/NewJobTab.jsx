@@ -2,12 +2,22 @@ import { useState } from "react";
 import { notify } from "../components/Feedback";
 import { C, card, inp, sel, btn, avatar, label, errMsg } from "../lib/theme";
 import { fmtDate, initials } from "../lib/util";
+import { MyTasksList } from "../tasks/TasksTab";
 
 // ═══════════════════════════════════════════════════════
 // NEW JOB
 // ═══════════════════════════════════════════════════════
-export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetId,setNewSheetFor}){
+export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetId,setNewSheetFor,tasks,setTasks}){
   const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const [machine,setMachine]=useState(""); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
+  const [task,setTask]=useState(null); // a task given to this operator, being started as this job
+  const pickTask=t=>{
+    setTask(t);
+    if(!t){setCustomer("");setJob("");setOp("");return;}
+    setCustomer(`Opgave · ${t.requesterName}`);
+    setJob(t.partNumber||t.title);
+    setOp([t.partNumber?t.title:"",t.qty?`${t.qty} stk`:"",t.material].filter(Boolean).join(" · "));
+    setShowSuggestions(false);setErrs({});
+  };
   const [twoSided,setTwoSided]=useState(false);
   const [showSuggestions,setShowSuggestions]=useState(true);
   const [sheetPickerOpen,setSheetPickerOpen]=useState(false);
@@ -50,9 +60,10 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
   const matchingSheets=job.trim()&&machine?(setupSheets||[]).filter(s=>s.partNumber.trim().toLowerCase()===job.trim().toLowerCase()&&s.machine===machine):[];
   const createJob=()=>{
     const now=Date.now();
-    setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now},...prev]);
-    setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);
-    notify(`Job startet — opstilling kører på ${machine}`);
+    setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now,...(task?{taskId:task.id}:{})},...prev]);
+    if(task) setTasks(prev=>prev.map(t=>t.id===task.id?{...t,jobId:now,startedAt:now,updatedAt:now}:t));
+    setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);setTask(null);
+    notify(`${task?"Opgave startet":"Job startet"} — opstilling kører på ${machine}`);
   };
   const goToSheet=(sheetId)=>{setFocusSheetId&&setFocusSheetId(sheetId);setTab&&setTab("setup");};
   // No sheet yet: open a new one so it can be filled in while setting up
@@ -64,11 +75,15 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
     createJob();
     const sheetId=chosenSheetId!=null?chosenSheetId:matchingSheets.length===1?matchingSheets[0].id:null;
     if(sheetId) goToSheet(sheetId);
-    else if(!matchingSheets.length) goToNewSheet();
+    else if(!matchingSheets.length&&!task) goToNewSheet(); // tasks are one-offs — no sheet forced
   };
   return(
     <div style={{padding:"14px 16px"}}>
+      <MyTasksList user={user} tasks={tasks} jobs={jobs} activeTaskId={task?.id} onPick={pickTask}/>
       <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Start nyt job</div>
+      {task&&<div style={{fontSize:15,color:C.blue,marginBottom:14,background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.3)",borderRadius:8,padding:"10px 12px"}}>
+        <i className="ti ti-clipboard-check"/> Opgave: <b>{task.title}</b> — vælg maskine og tryk Start opstilling
+      </div>}
 
       {/* Two-sided toggle — TOP of form so it can't be missed */}
       <div style={{marginBottom:16}}>

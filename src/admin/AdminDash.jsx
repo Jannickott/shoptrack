@@ -91,7 +91,9 @@ export function DonutChart({title,segments}){
 }
 
 export function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,users,machines,tools,efficiencyGoals,workHours}){
-  const done=jobs.filter(j=>j.status==="done"); const active=sortActive(jobs.filter(j=>j.status!=="done"));
+  // Task jobs (Opgaver) are shown as active but kept out of every figure
+  const statJobs=jobs.filter(j=>!j.taskId);
+  const done=statJobs.filter(j=>j.status==="done"); const active=sortActive(jobs.filter(j=>j.status!=="done"));
   // Efficiency helpers
   const jobEff=jobEfficiency;
   const targetEff=efficiencyGoals?.overall??80;
@@ -120,8 +122,8 @@ export function AdminDash({jobs,machineIssues,downtimeLog,setJobs,setCompleteId,
   const todayDate=new Date(); const dayOfWeek=todayDate.getDay();
   const monday=new Date(todayDate); monday.setDate(todayDate.getDate()-((dayOfWeek+6)%7)); monday.setHours(0,0,0,0);
   const weekStart=monday.getTime();
-  const weekJobs=jobs.filter(j=>(j.createdAt||0)>=weekStart);
-  const monthJobs=jobs.filter(j=>toDateInput(j.createdAt).startsWith(monthStr));
+  const weekJobs=statJobs.filter(j=>(j.createdAt||0)>=weekStart);
+  const monthJobs=statJobs.filter(j=>toDateInput(j.createdAt).startsWith(monthStr));
   // Use liveTime so donut values update every second for running jobs
   const jSetup=j=>{const lt=liveTime(j);return lt.setup+lt.setup2;};
   const jRun=j=>{const lt=liveTime(j);return lt.run+lt.run2;};

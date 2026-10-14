@@ -465,6 +465,8 @@ function mergeAndWrite(incoming) {
   merged.toolLog       = unionById(server.toolLog, incoming.toolLog);
   // Planning orders: per order, newest updatedAt wins (deleting sets deleted:true)
   merged.planOrders    = unionById(server.planOrders, incoming.planOrders);
+  // Tasks (Opgaver): same rule — per task, newest updatedAt wins (deleting sets deleted:true)
+  merged.tasks         = unionById(server.tasks, incoming.tasks);
   merged.machineIssues = mergeIssues(server.machineIssues, incoming.machineIssues, merged.downtimeLog);
 
   merged.settingsVersion = Math.max(serverSV, incomingSV);
@@ -524,7 +526,8 @@ function weekReportData(data, monday) {
   const start = monday.getTime(), endD = new Date(monday); endD.setDate(endD.getDate() + 7); const end = endD.getTime();
   const hidden = (data.efficiencyGoals && data.efficiencyGoals.hiddenMachines) || [];
   const machines = (data.machines || []).filter(m => m.active && !m.removed && !hidden.includes(m.name));
-  const jobs = (data.jobs || []).filter(j => !j.deleted && (j.createdAt || 0) >= start && (j.createdAt || 0) < end);
+  // Task jobs (prototypes and small projects, done when there is time) are kept out of the figures
+  const jobs = (data.jobs || []).filter(j => !j.deleted && !j.taskId && (j.createdAt || 0) >= start && (j.createdAt || 0) < end);
   const availPerMachine = workSecBetween(data.workHours, new Date(start), new Date(end));
   const downtime = (data.downtimeLog || []).filter(d => (d.resolvedAt || 0) >= start && (d.resolvedAt || 0) < end);
   const perMachine = machines.map(m => {
