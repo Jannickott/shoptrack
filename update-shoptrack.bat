@@ -8,6 +8,10 @@ echo.
 echo  Opdaterer ShopTrack...
 echo.
 
+REM dist\ er den færdigbyggede app og kommer altid fra GitHub - en lokal
+REM ombygning (fx fra en gammel "npm start") må aldrig stoppe opdateringen
+git checkout -- dist
+
 git status --porcelain --untracked-files=no > "%TEMP%\shoptrack-status.txt"
 for %%A in ("%TEMP%\shoptrack-status.txt") do if %%~zA GTR 0 (
   echo  STOPPET: mappen har ændringer der ikke er på GitHub:
