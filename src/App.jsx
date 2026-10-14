@@ -497,8 +497,8 @@ export default function App(){
   const activeCnt=visibleJobs.filter(j=>j.status!=="done"&&j.operatorId===user.id).length;
   // Task jobs stay out of efficiency figures; badges for tasks waiting on someone
   const statJobs=statJobsOf(visibleJobs);
-  const taskStates=visibleTasks(tasks).map(t=>({t,key:taskState(t,visibleJobs).key}));
-  const myTaskCnt=taskStates.filter(x=>x.key==="assigned"&&x.t.assignedToId===user.id).length;
+  const taskStates=visibleTasks(tasks).map(t=>taskState(t,visibleJobs));
+  const myTaskCnt=taskStates.filter(x=>x.key==="assigned"&&x.step.assignedToId===user.id).length;
   const waitingTaskCnt=taskStates.filter(x=>x.key==="waiting").length;
   const badgeStyle=bg=>({background:bg,color:bg===C.amber?"#1a1a1a":"white",borderRadius:20,fontSize:12,padding:"1px 6px",marginLeft:6,fontWeight:700});
 
@@ -566,7 +566,7 @@ export default function App(){
       {/* CONTENT */}
       {user.role==="requester"?<RequesterTasksTab user={user} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} saveNow={saveNow}/>:<>
       {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
-      {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} setCompleteId={setCompleteId} saveNow={saveNow}/>}
+      {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} departments={departments} setCompleteId={setCompleteId} saveNow={saveNow}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} jobs={visibleJobs} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}

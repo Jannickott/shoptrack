@@ -3,20 +3,24 @@ import { notify } from "../components/Feedback";
 import { C, card, inp, sel, btn, avatar, label, errMsg } from "../lib/theme";
 import { fmtDate, initials } from "../lib/util";
 import { MyTasksList } from "../tasks/TasksTab";
+import { withStep } from "../tasks/taskUtil";
 
 // ═══════════════════════════════════════════════════════
 // NEW JOB
 // ═══════════════════════════════════════════════════════
 export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetId,setNewSheetFor,tasks,setTasks}){
   const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const [machine,setMachine]=useState(""); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
-  const [task,setTask]=useState(null); // a task given to this operator, being started as this job
-  const pickTask=t=>{
-    setTask(t);
-    if(!t){setCustomer("");setJob("");setOp("");return;}
+  // A task step given to this operator, being started as this job: {task,step,label}
+  const [picked,setPicked]=useState(null);
+  const task=picked?.task||null;
+  const pickTask=p=>{
+    setPicked(p);
+    if(!p){setCustomer("");setJob("");setOp("");setMachine("");return;}
+    const t=p.task;
     setCustomer(`Opgave · ${t.requesterName}`);
     setJob(t.partNumber||t.title);
-    setOp([t.partNumber?t.title:"",t.qty?`${t.qty} stk`:"",t.material].filter(Boolean).join(" · "));
-    setShowSuggestions(false);setErrs({});
+    setOp([t.partNumber?t.title:"",t.qty?`${t.qty} stk`:"",t.material,p.label].filter(Boolean).join(" · "));
+    setMachine("");setShowSuggestions(false);setErrs({});
   };
   const [twoSided,setTwoSided]=useState(false);
   const [showSuggestions,setShowSuggestions]=useState(true);
@@ -60,9 +64,9 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
   const matchingSheets=job.trim()&&machine?(setupSheets||[]).filter(s=>s.partNumber.trim().toLowerCase()===job.trim().toLowerCase()&&s.machine===machine):[];
   const createJob=()=>{
     const now=Date.now();
-    setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now,...(task?{taskId:task.id}:{})},...prev]);
-    if(task) setTasks(prev=>prev.map(t=>t.id===task.id?{...t,jobId:now,startedAt:now,updatedAt:now}:t));
-    setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);setTask(null);
+    setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now,...(picked?{taskId:picked.task.id,taskStepId:picked.step.id}:{})},...prev]);
+    if(picked) setTasks(prev=>prev.map(t=>t.id===picked.task.id?withStep(t,picked.step.id,{jobId:now,startedAt:now}):t));
+    setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);setPicked(null);
     notify(`${task?"Opgave startet":"Job startet"} — opstilling kører på ${machine}`);
   };
   const goToSheet=(sheetId)=>{setFocusSheetId&&setFocusSheetId(sheetId);setTab&&setTab("setup");};
@@ -82,7 +86,7 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
       <MyTasksList user={user} tasks={tasks} jobs={jobs} activeTaskId={task?.id} onPick={pickTask}/>
       <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Start nyt job</div>
       {task&&<div style={{fontSize:15,color:C.blue,marginBottom:14,background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.3)",borderRadius:8,padding:"10px 12px"}}>
-        <i className="ti ti-clipboard-check"/> Opgave: <b>{task.title}</b> — vælg maskine og tryk Start opstilling
+        <i className="ti ti-clipboard-check"/> Opgave: <b>{task.title}</b>{picked.label?` (${picked.label})`:""} — vælg maskine og tryk Start opstilling
       </div>}
 
       {/* Two-sided toggle — TOP of form so it can't be missed */}
@@ -156,6 +160,9 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
           <option value="">— Vælg maskine —</option>
           {machines.filter(m=>{
             if(!m.active) return false;
+            // A task step for one department: only that department's machines
+            const stepDept=picked?.step?.dept;
+            if(stepDept&&machines.some(x=>x.active&&x.department===stepDept)) return m.department===stepDept;
             const userDepts=user.departments||[];
             if(userDepts.length===0) return true; // no dept filter → see everything
             // show machine if it has no dept, or its dept is in the user's depts
