@@ -9,6 +9,7 @@ import { mergeIssues } from "./lib/api";
 import { C, btn, navBtn } from "./lib/theme";
 import { AdminTasksTab, RequesterTasksTab } from "./tasks/TasksTab";
 import { statJobsOf, visibleTasks, taskState } from "./tasks/taskUtil";
+import { listDrafts } from "./setupsheets/sheetDraft";
 import { INIT_USERS, INIT_MACHINES, roleName, liveTime, INIT_WORK_HOURS, todayWorkHours, isInWorkHoursNow } from "./lib/util";
 import { ActiveTab } from "./operator/ActiveTab";
 import { HistoryTab } from "./operator/HistoryTab";
@@ -459,7 +460,11 @@ export default function App(){
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
     loginTimeRef.current=n;
-    setUser(u);setTab(u.role==="admin"?"admin":u.role==="requester"?"mytasks":"new");
+    // A setup sheet left unsaved recently (app closed, logged out) → straight back to it
+    const recentDraft=u.role!=="requester"&&listDrafts(u.id).find(d=>n-d.savedAt<12*3600*1000);
+    setUser(u);setTab(recentDraft?"setup":u.role==="admin"?"admin":u.role==="requester"?"mytasks":"new");
+    // (after the main screen is up — the message bar isn't there on the login screen)
+    if(recentDraft) setTimeout(()=>notify("Du har et opstillingsark, der ikke er gemt — tryk Fortsæt","warn"),300);
     saveNow();
   };
   const logout=()=>{

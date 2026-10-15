@@ -1,4 +1,5 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
+import { loadDraft, listDrafts, clearDraft } from "./sheetDraft";
 import { notify } from "../components/Feedback";
 import { C, inp, btn } from "../lib/theme";
 import { fmtDate } from "../lib/util";
@@ -14,7 +15,22 @@ export function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow
   useEffect(()=>{if(focusSheetId){setSelectedId(focusSheetId);setView("detail");setFocusSheetId&&setFocusSheetId(null);}},[focusSheetId]);
   // Started a job with no sheet → open a new sheet with the job filled in
   const [prefill,setPrefill]=useState(null);
-  useEffect(()=>{if(newSheetFor){setSelectedId(null);setPrefill(newSheetFor);setView("edit");setNewSheetFor&&setNewSheetFor(null);}},[newSheetFor]);
+  // Unsaved work to continue (sheetDraft.js) — picked when the form opens
+  const [resume,setResume]=useState(null);
+  const [draftsVer,setDraftsVer]=useState(0);
+  const [discardKey,setDiscardKey]=useState(null);
+  const openEdit=(sheetId,draft)=>{
+    setSelectedId(sheetId);setPrefill(null);
+    setResume(draft!==undefined?draft:loadDraft(user?.id,sheetId));
+    setView("edit");
+  };
+  const drafts=useMemo(()=>view==="list"&&user?listDrafts(user.id):[],[view,draftsVer,user]);
+  const discard=d=>{clearDraft(user.id,d.sheetId);setDiscardKey(null);setDraftsVer(v=>v+1);notify("Kladde kasseret","warn");};
+  useEffect(()=>{if(newSheetFor){
+    // A draft of a new sheet only belongs here if it is for the same part
+    const d=loadDraft(user?.id,null);
+    setSelectedId(null);setPrefill(newSheetFor);setResume(d&&d.form.partNumber===newSheetFor.partNumber?d:null);setView("edit");setNewSheetFor&&setNewSheetFor(null);
+  }},[newSheetFor]);
   const [search,setSearch]=useState("");
   const [deptFilt,setDeptFilt]=useState("all");
   const [subDeptFilt,setSubDeptFilt]=useState("all");
@@ -94,8 +110,7 @@ export function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow
     const updated=[copy,...(setupSheets||[])];
     setSetupSheets(updated);
     if(stateRef) stateRef.current={...stateRef.current,setupSheets:updated};
-    setSelectedId(now);
-    setView("edit");
+    openEdit(now,null);
   };
   const backupPdf=async(sheet)=>{
     try{await fetch("/api/setupsheet-pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheet})});}
@@ -104,9 +119,9 @@ export function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow
   // Compute dept-specific params for the form
   const sheetDept=selected?(machines||[]).find(m=>m.name===selected.machine)?.department||"":"";
   const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
-  if(view==="edit") return(<SetupSheetForm sheet={selected} prefill={selected?null:prefill} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setPrefill(null);notify("Opstillingsark gemt");setSelectedId(sheet.id);setView("detail");}}/>);
+  if(view==="edit") return(<SetupSheetForm sheet={selected} prefill={selected?null:prefill} draft={resume} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setResume(null);setDraftsVer(v=>v+1);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setPrefill(null);setResume(null);setDraftsVer(v=>v+1);notify("Opstillingsark gemt");setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
-  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>setView("edit")} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
+  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>openEdit(selected.id)} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).filter(s=>s.id!==selected.id));setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -115,8 +130,35 @@ export function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow
           <input style={{...inp(),paddingLeft:32}} value={search} onChange={e=>setSearch(e.target.value)} placeholder="Søg tegningsnr. eller kunde…"/>
         </div>
         {user?.role==="admin"&&<button style={{...btn("outline",false,true),padding:"8px 12px",background:showParamAdmin?C.amber+"22":"none",borderColor:showParamAdmin?C.amber:C.border,color:showParamAdmin?C.amber:C.muted}} onClick={()=>setShowParamAdmin(p=>!p)} title="Administrer parametre"><i className="ti ti-settings"/></button>}
-        <button style={btn("primary",false,true)} onClick={()=>{setSelectedId(null);setPrefill(null);setView("edit");}}><i className="ti ti-plus"/></button>
+        <button style={btn("primary",false,true)} onClick={()=>openEdit(null)}><i className="ti ti-plus"/></button>
       </div>
+      {/* Unsaved work — left behind by a reload, a logout or leaving the app */}
+      {drafts.map(d=>{
+        const k=String(d.sheetId??"new");
+        const exists=d.sheetId==null||(setupSheets||[]).some(s=>s.id===d.sheetId);
+        return(
+          <div key={k} style={{background:"rgba(240,165,0,.08)",border:`1px solid ${C.amber}`,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
+            <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+              <i className="ti ti-file-alert" style={{fontSize:26,color:C.amber}}/>
+              <div style={{flex:1,minWidth:200}}>
+                <div style={{fontSize:16,fontWeight:700,color:C.text}}>Ikke gemt: {d.form.partNumber||"nyt ark"}{d.form.machine?` · ${d.form.machine}`:""}</div>
+                <div style={{fontSize:14,color:C.muted}}>{d.sheetId==null?"Nyt opstillingsark":"Ændringer i et opstillingsark"} · skrevet {new Date(d.savedAt).toLocaleString("da-DK",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+              </div>
+              {discardKey!==k&&<>
+                <button style={btn("primary",false,true)} onClick={()=>openEdit(exists?d.sheetId:null,d)}><i className="ti ti-pencil"/> Fortsæt</button>
+                <button style={btn("outline",false,true)} onClick={()=>setDiscardKey(k)}><i className="ti ti-trash"/> Kassér</button>
+              </>}
+            </div>
+            {discardKey===k&&(
+              <div style={{display:"flex",gap:8,marginTop:10,alignItems:"center",flexWrap:"wrap"}}>
+                <span style={{fontSize:15,color:C.text,flex:1}}>Smid det du har skrevet væk?</span>
+                <button style={btn("danger",false,true)} onClick={()=>discard(d)}>Ja, kassér</button>
+                <button style={btn("outline",false,true)} onClick={()=>setDiscardKey(null)}>Nej</button>
+              </div>
+            )}
+          </div>
+        );
+      })}
       {showParamAdmin&&user?.role==="admin"&&(
         <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,padding:"14px",marginBottom:12}}>
           <div style={{fontSize:11,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Opstillingsparametre — admin</div>
@@ -189,7 +231,7 @@ export function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow
       )}
       {/* Machine sub-filter */}
       {machineNames.length>1&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>{["all",...machineNames].map(m=><button key={m} style={{fontSize:13,padding:"3px 10px",borderRadius:20,border:`1px solid ${machineFilt===m?C.amber:C.border}`,background:machineFilt===m?C.amber+"22":C.raised,color:machineFilt===m?C.amber:C.muted,cursor:"pointer",fontWeight:machineFilt===m?700:400}} onClick={()=>setMachineFilt(m)}>{m==="all"?"Alle maskiner":m}</button>)}</div>}
-      {filtered.length===0&&<div style={{textAlign:"center",padding:"50px 20px",color:C.muted}}><i className="ti ti-clipboard-list" style={{fontSize:40,display:"block",marginBottom:12,opacity:.25}}/><div style={{fontSize:16,marginBottom:6}}>Ingen opstillingsark endnu.</div><div style={{fontSize:14,color:C.amber,cursor:"pointer"}} onClick={()=>{setSelectedId(null);setPrefill(null);setView("edit");}}>+ Opret dit første opstillingsark</div></div>}
+      {filtered.length===0&&<div style={{textAlign:"center",padding:"50px 20px",color:C.muted}}><i className="ti ti-clipboard-list" style={{fontSize:40,display:"block",marginBottom:12,opacity:.25}}/><div style={{fontSize:16,marginBottom:6}}>Ingen opstillingsark endnu.</div><div style={{fontSize:14,color:C.amber,cursor:"pointer"}} onClick={()=>openEdit(null)}>+ Opret dit første opstillingsark</div></div>}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
         {filtered.map(s=>(
           <div key={s.id} onClick={()=>{setSelectedId(s.id);setView("detail");}} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",cursor:"pointer"}}>

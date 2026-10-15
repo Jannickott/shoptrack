@@ -1,24 +1,42 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { C, inp, sel, btn, label, errMsg } from "../lib/theme";
+import { saveDraft, clearDraft } from "./sheetDraft";
 import { ERIKS_BLANK } from "./SetupSheetDetail";
 import { resizeImage } from "../lib/api";
 
-export function SetupSheetForm({sheet,prefill,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
+export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
   const MZ_BLANK={fraesForlaenger:"",fraesMn:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneUdhaeng:"",pinoldokUdhaeng:""};
   const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{},mzAdvanced:{schnecke:{},werkstuck:{},entgratenVorne:{},entgratenHinten:{}},eriksSetup:{}};
-  const [form,setForm]=useState(sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}
+  const baseForm=()=>sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}
     :prefill?{...blank,partNumber:prefill.partNumber||"",machine:prefill.machine||"",customer:prefill.customer||"",department:getDept(prefill.machine||"")}
-    :blank);
+    :blank;
+  // Unsaved work from last time (see sheetDraft.js) wins over the saved sheet
+  const [init]=useState(()=>draft?{...blank,...draft.form}:baseForm());
+  const [form,setForm]=useState(init);
+  const [baseline,setBaseline]=useState(()=>JSON.stringify(init)); // "nothing typed yet" — no draft needed
+  const [restored,setRestored]=useState(draft||null);
+  const [photosDropped,setPhotosDropped]=useState(false);
+  const draftId=sheet?.id??null;
+  // Keep a draft on the tablet while typing — and at once when the app is left
+  const formRef=useRef(form); formRef.current=form;
+  const keepDraft=()=>{const f=formRef.current;if(JSON.stringify(f)!==baseline)setPhotosDropped(!saveDraft(user.id,draftId,f));};
+  useEffect(()=>{const t=setTimeout(keepDraft,500);return()=>clearTimeout(t);},[form]);
+  useEffect(()=>{
+    const onHide=()=>{if(document.visibilityState==="hidden")keepDraft();};
+    document.addEventListener("visibilitychange",onHide);
+    return()=>document.removeEventListener("visibilitychange",onHide);
+  },[baseline]);
+  const startOver=()=>{clearDraft(user.id,draftId);const b=baseForm();setForm(b);setBaseline(JSON.stringify(b));setRestored(null);setPhotosDropped(false);};
   // Sub-depts available for current dept
   const deptSubDepts=(subDepartments||{})[form.department]||[];
   // Param options: use sub-dept key if available, else dept key
   const paramKey=form.subDepartment||form.department;
   const setupParamOptions=(setupDeptParams||{})[paramKey]||[];
   const [errs,setErrs]=useState({});
-  const [showList2,setShowList2]=useState(!!(sheet?.tools2?.length));
-  const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
+  const [showList2,setShowList2]=useState(!!(init.tools2?.length));
+  const [showList3,setShowList3]=useState(!!(init.tools3?.length));
   const [uploading,setUploading]=useState(false);
   // Photos from the camera or the tablet's pictures — shrunk, then added to the sheet
   const addPhotos=async e=>{
@@ -513,6 +531,8 @@ export function SetupSheetForm({sheet,prefill,machines,user,setupDeptParams,subD
     const out={...form};
     if(!showList2){out.tools2=[];out.tools3=[];}
     if(!showList3) out.tools3=[];
+    clearDraft(user.id,draftId);
+    setBaseline(JSON.stringify(form)); // saved — nothing left to keep
     onSave({...out,id:out.id||now,createdAt:out.createdAt||now,updatedAt:now,createdBy:out.createdBy||user.name});
   };
   return(
@@ -521,6 +541,15 @@ export function SetupSheetForm({sheet,prefill,machines,user,setupDeptParams,subD
         <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onBack}><i className="ti ti-arrow-left"/></button>
         <div style={{fontSize:15,color:C.amber,letterSpacing:2,textTransform:"uppercase"}}>{sheet?"Rediger opstillingsark":"Nyt opstillingsark"}</div>
       </div>
+      {restored&&(
+        <div style={{background:"rgba(39,174,96,.08)",border:"1px solid rgba(39,174,96,.4)",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:15,color:C.text,lineHeight:1.5,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
+          <div style={{flex:1,minWidth:220}}>
+            <i className="ti ti-restore" style={{color:C.green}}/> <b>Hentet tilbage:</b> det du skrev kl. {new Date(restored.savedAt).toLocaleTimeString("da-DK",{hour:"2-digit",minute:"2-digit"})} {new Date(restored.savedAt).toDateString()!==new Date().toDateString()?`d. ${new Date(restored.savedAt).toLocaleDateString("da-DK",{day:"numeric",month:"short"})} `:""}er ikke gemt endnu.
+            <div style={{fontSize:14,color:C.muted,marginTop:2}}>Fortsæt og tryk Gem nederst, når du er færdig.{restored.photosDropped?" Billederne kunne ikke huskes — tag dem igen.":""}</div>
+          </div>
+          <button style={btn("outline",false,true)} onClick={startOver}><i className="ti ti-trash"/> Start forfra</button>
+        </div>
+      )}
       {!sheet&&prefill&&(
         <div style={{background:"rgba(240,165,0,.08)",border:"1px solid rgba(240,165,0,.35)",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:15,color:C.text,lineHeight:1.5}}>
           <i className="ti ti-clipboard-plus" style={{color:C.amber}}/> Der er intet opstillingsark for <b>{prefill.partNumber}</b> på <b>{prefill.machine}</b> endnu.
@@ -650,6 +679,7 @@ export function SetupSheetForm({sheet,prefill,machines,user,setupDeptParams,subD
               </label>
             ))}
           </div>}
+        {photosDropped&&<div style={{fontSize:14,color:C.amber,marginTop:8}}><i className="ti ti-alert-triangle"/> Billederne fylder for meget til at blive husket, hvis appen lukker — tryk Gem snart for at beholde dem.</div>}
       </div>
       {form.subDepartment==="MZ"&&mzAdvancedEditor()}
       <button style={btn("primary",true)} onClick={save}><i className="ti ti-check"/> Gem opstillingsark</button>
