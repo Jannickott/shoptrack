@@ -398,11 +398,16 @@ export default function App(){
   const [isFull,setIsFull]=useState(()=>!!document.fullscreenElement);
   const installedApp=window.matchMedia&&(matchMedia("(display-mode: fullscreen)").matches||matchMedia("(display-mode: standalone)").matches);
   useEffect(()=>{
-    const onChange=()=>setIsFull(!!document.fullscreenElement);
+    const onChange=()=>{
+      setIsFull(!!document.fullscreenElement);
+      // Left full screen on a computer (Esc) → stop remembering it on this browser
+      if(!document.fullscreenElement&&window.matchMedia&&matchMedia("(pointer: fine)").matches){try{localStorage.setItem("st-fullscreen","0");}catch{/* storage not available */}}
+    };
     document.addEventListener("fullscreenchange",onChange);
     // Browsers only allow full screen after a tap — re-enter on the first tap if this tablet wants it
     const wantFull=()=>{try{return localStorage.getItem("st-fullscreen")==="1";}catch{return false;}};
-    const onTap=()=>{if(wantFull()&&!document.fullscreenElement&&document.fullscreenEnabled)document.documentElement.requestFullscreen().catch(()=>{});};
+    // Only for a finger tap — on a computer (mouse) Esc means "leave full screen", so don't pull it back
+    const onTap=e=>{if(e.pointerType==="touch"&&wantFull()&&!document.fullscreenElement&&document.fullscreenEnabled)document.documentElement.requestFullscreen().catch(()=>{});};
     document.addEventListener("pointerdown",onTap,true);
     // Keep the screen on while ShopTrack is open (only where the browser allows it)
     let lock=null;
