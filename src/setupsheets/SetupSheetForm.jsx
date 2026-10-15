@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { C, inp, sel, btn, label, errMsg } from "../lib/theme";
 import { ERIKS_BLANK } from "./SetupSheetDetail";
+import { resizeImage } from "../lib/api";
 
 export function SetupSheetForm({sheet,prefill,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
@@ -19,6 +20,20 @@ export function SetupSheetForm({sheet,prefill,machines,user,setupDeptParams,subD
   const [showList2,setShowList2]=useState(!!(sheet?.tools2?.length));
   const [showList3,setShowList3]=useState(!!(sheet?.tools3?.length));
   const [uploading,setUploading]=useState(false);
+  // Photos from the camera or the tablet's pictures — shrunk, then added to the sheet
+  const addPhotos=async e=>{
+    const files=[...e.target.files];
+    e.target.value="";
+    if(!files.length) return;
+    setUploading(true);
+    const uploaded=[];
+    for(const file of files){
+      const dataUrl=await new Promise(res=>{const r=new FileReader();r.onload=ev=>res(ev.target.result);r.readAsDataURL(file);});
+      uploaded.push({url:await resizeImage(dataUrl),caption:""});
+    }
+    setForm(p=>({...p,photos:[...(p.photos||[]),...uploaded]}));
+    setUploading(false);
+  };
   const [lastPos,setLastPos]=useState({}); // per tool list: position of the tool made last
   const setF=(k,v)=>setForm(p=>({...p,[k]:v}));
   const rc=pos=>{if(!pos)return"";return(form.restartPrefix||"NAT")+String(pos).padStart(form.restartPad||2,"0");};
@@ -623,36 +638,18 @@ export function SetupSheetForm({sheet,prefill,machines,user,setupDeptParams,subD
             ))}
           </div>
         )}
-        <label style={{display:"flex",alignItems:"center",gap:8,background:C.raised,border:`1px dashed ${C.border}`,borderRadius:8,padding:"10px 14px",cursor:"pointer",color:C.muted,fontSize:15}}>
-          {uploading?<><i className="ti ti-loader" style={{animation:"spin 1s linear infinite"}}/> Uploader…</>:<><i className="ti ti-camera"/> Tilføj foto</>}
-          <input type="file" accept="image/*" multiple style={{display:"none"}} disabled={uploading} onChange={async e=>{
-            const files=[...e.target.files];
-            if(!files.length) return;
-            setUploading(true);
-            const resize=(dataUrl,maxW=1200,maxH=900)=>new Promise(res=>{
-              const img=new Image();
-              img.onload=()=>{
-                let w=img.width,h=img.height;
-                if(w>maxW){h=Math.round(h*maxW/w);w=maxW;}
-                if(h>maxH){w=Math.round(w*maxH/h);h=maxH;}
-                const c=document.createElement("canvas");c.width=w;c.height=h;
-                c.getContext("2d").drawImage(img,0,0,w,h);
-                res(c.toDataURL("image/jpeg",0.82));
-              };
-              img.src=dataUrl;
-            });
-            const uploaded=[];
-            for(const file of files){
-              const reader=new FileReader();
-              const dataUrl=await new Promise(res=>{reader.onload=ev=>res(ev.target.result);reader.readAsDataURL(file);});
-              const resized=await resize(dataUrl);
-              uploaded.push({url:resized,caption:""});
-            }
-            setForm(p=>({...p,photos:[...(p.photos||[]),...uploaded]}));
-            setUploading(false);
-            e.target.value="";
-          }}/>
-        </label>
+        {/* Two ways in: the camera right away, or pictures already on the tablet
+            (a "multiple" picker on Android goes straight to the gallery, so the camera needs its own button) */}
+        {uploading
+          ?<div style={{display:"flex",alignItems:"center",gap:8,background:C.raised,border:`1px dashed ${C.border}`,borderRadius:8,padding:"14px",color:C.muted,fontSize:15}}><i className="ti ti-loader" style={{animation:"spin 1s linear infinite"}}/> Uploader…</div>
+          :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+            {[["camera","Tag foto",true],["photo","Vælg billeder",false]].map(([icon,text,camera])=>(
+              <label key={icon} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,minHeight:50,background:C.raised,border:`1px dashed ${C.border}`,borderRadius:8,padding:"10px 14px",cursor:"pointer",color:C.text,fontSize:15}}>
+                <i className={`ti ti-${icon}`} style={{fontSize:20,color:C.amber}}/> {text}
+                <input type="file" accept="image/*" {...(camera?{capture:"environment"}:{multiple:true})} style={{display:"none"}} onChange={addPhotos}/>
+              </label>
+            ))}
+          </div>}
       </div>
       {form.subDepartment==="MZ"&&mzAdvancedEditor()}
       <button style={btn("primary",true)} onClick={save}><i className="ti ti-check"/> Gem opstillingsark</button>
