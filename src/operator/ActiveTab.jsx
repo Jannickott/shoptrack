@@ -3,11 +3,13 @@ import { notify } from "../components/Feedback";
 import { C, inp, btn, badge, tag } from "../lib/theme";
 import { fmtHM, fmtDetail, liveTime } from "../lib/util";
 import { StartRunModal } from "./JobModals";
+import { CountReport } from "../components/CountReport";
 
 // ═══════════════════════════════════════════════════════
 // ACTIVE
 // ═══════════════════════════════════════════════════════
-export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,pauseJob,resumeJob}){
+export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,pauseJob,resumeJob,saveNow}){
+    const [countOpen,setCountOpen]=useState(false);
     const [nmForm,setNmForm]=useState(false);
     const [nmH,setNmH]=useState(""); const [nmM,setNmM]=useState("");
     const [pauseConfirm,setPauseConfirm]=useState(false);
@@ -119,6 +121,21 @@ export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,paus
             </div>
           </div>
         )}
+        {/* Pieces so far — reported for the morning meeting (and the admin's progress view) */}
+        {!isDebur&&(()=>{
+          const side=isSide2?2:1;
+          const last=[...(j.counts||[])].reverse().find(c=>(c.side||1)===side);
+          const startedBeforeToday=(j.createdAt||0)<new Date().setHours(0,0,0,0);
+          const overdue=isRun&&startedBeforeToday&&(!last||last.at<new Date().setHours(0,0,0,0));
+          return countOpen
+            ?<CountReport j={j} setJobs={setJobs} by={j.operatorName} saveNow={saveNow} onClose={()=>setCountOpen(false)}/>
+            :<button style={{...btn("outline",true,true),borderColor:overdue?C.amber:C.border,color:overdue?C.amber:C.text,justifyContent:"space-between"}} onClick={()=>setCountOpen(true)}>
+              <span><i className="ti ti-123"/> Meld antal</span>
+              <span style={{fontFamily:"'Share Tech Mono',monospace",color:overdue?C.amber:C.muted}}>
+                {last?`${last.pieces}${j.targetQty?` / ${j.targetQty}`:""} stk`:j.targetQty?`0 / ${j.targetQty} stk`:""}{overdue?" · ikke meldt i dag":""}
+              </span>
+            </button>;
+        })()}
         {j.operatorPaused&&(
           <button style={{...btn("outline",true,true),borderColor:C.green,color:C.green,marginTop:2,fontWeight:700}} onClick={()=>resumeJob&&resumeJob(j.id)}>
             <i className="ti ti-player-play"/> Genoptag job
@@ -251,7 +268,7 @@ export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
             <i className="ti ti-tool"/> Afgratning · {deburJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {deburJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
+            {deburJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} saveNow={saveNow} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}
@@ -261,7 +278,7 @@ export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
             <i className="ti ti-settings"/> Opstilling · {setupJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {setupJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
+            {setupJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} saveNow={saveNow} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}
@@ -271,7 +288,7 @@ export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
             <i className="ti ti-player-play"/> Produktion · {runJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            {runJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
+            {runJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} saveNow={saveNow} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}

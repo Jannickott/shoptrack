@@ -2,10 +2,11 @@ import { useState, useMemo } from "react";
 import { toLocalInput, fromLocalInput } from "../admin/AllJobsTab";
 import { C, card, inp, sel, btn, badge, tag, label, errMsg, th, td } from "../lib/theme";
 import { fmtHM, fmtDate } from "../lib/util";
+import { LiveProgress } from "./LiveProgress";
 import { PLAN_COLORS, addDays, dueTs, partHistory, suggestRoute, stepDuration, dayWindow, effectiveDeptOrder, sortSteps, buildPlan, parseImport } from "./planEngine";
 
-export function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrders,planSettings,setPlanSettings,saveNow}){
-  const [view,setView]=useState("week");
+export function PlanningTab({jobs,machines,departments,workHours,planOrders,setPlanOrders,planSettings,setPlanSettings,saveNow,setJobs,user,machineIssues}){
+  const [view,setView]=useState("live");
   const [weekOffset,setWeekOffset]=useState(0);
   const [monthOffset,setMonthOffset]=useState(0);
   const [editing,setEditing]=useState(null); // copy of the order being edited
@@ -245,7 +246,7 @@ export function PlanningTab({jobs,machines,departments,workHours,planOrders,setP
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12,flexWrap:"wrap"}}>
         <div style={{fontSize:15,color:C.amber,letterSpacing:2,textTransform:"uppercase",fontWeight:700}}><i className="ti ti-calendar-time"/> Planlægning <span style={{fontSize:12,background:C.blue,color:"#fff",borderRadius:4,padding:"1px 5px",letterSpacing:1}}>BETA</span></div>
         <div style={{flex:1}}/>
-        {[["week","Uge"],["month","Måned"],["orders",`Ordrer (${plan.ordered.length})`],["settings","Indstillinger"]].map(([v,l])=><button key={v} style={tag(view===v)} onClick={()=>setView(v)}>{l}</button>)}
+        {[["live","I gang"],["week","Uge"],["month","Måned"],["orders",`Ordrer (${plan.ordered.length})`],["settings","Indstillinger"]].map(([v,l])=><button key={v} style={tag(view===v)} onClick={()=>setView(v)}>{l}</button>)}
         <button style={btn("outline",false,true)} onClick={()=>setView("import")}><i className="ti ti-file-import"/> Importer</button>
         <button style={btn("primary",false,true)} onClick={newOrder}><i className="ti ti-plus"/> Ny ordre</button>
       </div>
@@ -255,6 +256,7 @@ export function PlanningTab({jobs,machines,departments,workHours,planOrders,setP
           {problems.map(o=><div key={o.id}><i className="ti ti-alert-triangle"/> {o.partNumber}: {plan.results[o.id].problem||plan.results[o.id].warning}</div>)}
         </div>
       )}
+      {view==="live"&&<LiveProgress jobs={jobs} machines={machines} workHours={workHours} planOrders={planOrders} setJobs={setJobs} saveNow={saveNow} user={user} machineIssues={machineIssues}/>}
       {view==="week"&&weekView}
       {view==="month"&&monthView}
       {view==="orders"&&ordersView}

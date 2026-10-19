@@ -122,6 +122,47 @@ export function orderQueue(orders,groupSameParts){
 //    one and goes to the machine in its department that can finish it first, in
 //    the first gap long enough. A machine already set up for the same part and
 //    step (the block right before) needs no new setup.
+// ── Progress of a running job ─────────────────────────────
+// job.targetQty = pieces in the order (typed when the job starts), job.counts =
+// [{at,pieces,side,runSec,by}] reported along the way (operator's "Meld antal", or
+// admin at the morning meeting). runSec is the job's production time when counted,
+// so the pace is pieces per production hour — breaks and nights don't skew it.
+const SIDE2=new Set(["side2_setup","side2_run"]);
+export const jobSide=j=>SIDE2.has(j.status)?2:1;
+export const isJobPaused=j=>!!(j.paused||j.operatorPaused||j.logoutPaused);
+
+// A new count for the side the job is on now
+export function makeCount(j,pieces,by){
+  const lt=liveTime(j),side=jobSide(j);
+  return {at:Date.now(),pieces,side,runSec:side===2?lt.run2:lt.run,by};
+}
+
+export function jobProgress(j,{jobs,machines,workHours,now}){
+  const lt=liveTime(j),side=jobSide(j);
+  const runNow=side===2?lt.run2:lt.run;
+  const inSetup=j.status==="setup"||j.status==="side2_setup";
+  const target=j.targetQty>0?Number(j.targetQty):null;
+  const counts=(j.counts||[]).filter(c=>(c.side||1)===side);
+  const last=counts[counts.length-1]||null;
+  const m=(machines||[]).find(x=>x.name===j.machine);
+  const est=estimateStep(partHistory(jobs,machines||[],j.job),{machine:j.machine,department:m?.department});
+  // Pace: this job's own counts first; else earlier runs of the part (one-sided only —
+  // history has both sides together)
+  let perPc=null,basis=null;
+  if(last&&last.pieces>0&&last.runSec>=300){perPc=last.runSec/last.pieces;basis="job";}
+  else if(!j.twoSided&&est?.runPerPcSec){perPc=est.runPerPcSec;basis="history";}
+  let made=last?last.pieces:null;
+  if(perPc&&!inSetup) made=(last?last.pieces:0)+Math.max(0,runNow-(last?last.runSec:0))/perPc;
+  if(made!=null&&target) made=Math.min(made,target);
+  const setupLeft=inSetup&&est?.setupSec?Math.max(0,est.setupSec-(side===2?lt.setup2:lt.setup)):0;
+  const remainingSec=target&&perPc?Math.max(0,(target-(made||0))*perPc)+setupLeft:null;
+  const finishAt=remainingSec!=null?addWorkTime(workHours,now,remainingSec).end:null;
+  const todayStart=new Date(now).setHours(0,0,0,0);
+  return {target,made:made!=null?Math.floor(made):null,estimated:!!perPc&&!inSetup&&(!last||runNow>last.runSec+60),
+    last,perPc,basis,pcsPerHour:perPc?3600/perPc:null,remainingSec,finishAt,inSetup,side,
+    paused:isJobPaused(j),countedToday:!!last&&last.at>=todayStart};
+}
+
 export function buildPlan({orders,jobs,allMachines,machines,workHours,now,groupSameParts}){
   const busy={};machines.forEach(m=>{busy[m.name]=[];}); // [{s,e,part,stepIdx,orderId,live}]
   const reserve=(m,iv)=>{busy[m].push(iv);busy[m].sort((a,b)=>a.s-b.s);};
@@ -147,12 +188,17 @@ export function buildPlan({orders,jobs,allMachines,machines,workHours,now,groupS
     const lt=liveTime(j);
     const inSetup=j.status==="setup"||j.status==="side2_setup";
     let r,setupLeft=0;
-    if(typSetup!=null&&typRun!=null){
+    // Order quantity + a pace (counts or history) → the most precise end
+    const pg=jobProgress(j,{jobs,machines:allMachines,workHours,now});
+    if(pg.remainingSec!=null){
+      r=addWorkTime(workHours,liveFree[j.machine],pg.remainingSec);
+      if(inSetup&&typSetup!=null) setupLeft=Math.min(pg.remainingSec,Math.max(0,typSetup-(j.status==="setup"?lt.setup:lt.setup2)));
+    }else if(typSetup!=null&&typRun!=null){
       const remaining=Math.max(0,typSetup+typRun-(lt.setup+lt.run+lt.setup2+lt.run2));
       if(inSetup) setupLeft=Math.min(remaining,Math.max(0,typSetup-(j.status==="setup"?lt.setup:lt.setup2)));
       r=addWorkTime(workHours,liveFree[j.machine],remaining);
     }else{const w=dayWindow(workHours,now);r=w&&now<w[1]?{end:w[1],segs:[[Math.max(now,w[0]),w[1]]]}:{end:now,segs:[]};} // unknown: assume it finishes today
-    blocks.push({live:true,guess:typSetup==null,inSetup,machine:j.machine,end:r.end,segs:r.segs,setupEnd:workPoint(r.segs,setupLeft),
+    blocks.push({live:true,guess:pg.remainingSec==null&&typSetup==null,inSetup,machine:j.machine,end:r.end,segs:r.segs,setupEnd:workPoint(r.segs,setupLeft),
       label:[j.customer,j.job].filter(Boolean).join(" · "),operator:j.operatorName});
     liveFree[j.machine]=Math.max(liveFree[j.machine],r.end);
     reserve(j.machine,{s:now,e:r.end,part:normPart(j.job),live:true});

@@ -12,15 +12,16 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
   const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const defaultMachine=lastFinishedMachine(jobs,user.id,machines); const [machine,setMachine]=useState(defaultMachine); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
   // A task step given to this operator, being started as this job: {task,step,label}
   const [picked,setPicked]=useState(null);
+  const [qty,setQty]=useState(""); // pieces in the order — for progress and the finish estimate
   const task=picked?.task||null;
   const pickTask=p=>{
     setPicked(p);
-    if(!p){setCustomer("");setJob("");setOp("");setMachine(defaultMachine);return;}
+    if(!p){setCustomer("");setJob("");setOp("");setMachine(defaultMachine);setQty("");return;}
     const t=p.task;
     setCustomer(`Opgave · ${t.requesterName}`);
     setJob(t.partNumber||t.title);
     setOp([t.partNumber?t.title:"",t.qty?`${t.qty} stk`:"",t.material,p.label].filter(Boolean).join(" · "));
-    setMachine("");setShowSuggestions(false);setErrs({});
+    setMachine("");setQty(t.qty?String(t.qty):"");setShowSuggestions(false);setErrs({});
   };
   const [twoSided,setTwoSided]=useState(false);
   const [showSuggestions,setShowSuggestions]=useState(true);
@@ -66,9 +67,9 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
   const matchingSheets=job.trim()&&machine?(setupSheets||[]).filter(s=>s.partNumber.trim().toLowerCase()===job.trim().toLowerCase()&&s.machine===machine):[];
   const createJob=()=>{
     const now=Date.now();
-    setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now,...(picked?{taskId:picked.task.id,taskStepId:picked.step.id}:{})},...prev]);
+    setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,targetQty:parseInt(qty,10)||null,lastModifiedAt:now,...(picked?{taskId:picked.task.id,taskStepId:picked.step.id}:{})},...prev]);
     if(picked) setTasks(prev=>prev.map(t=>t.id===picked.task.id?withStep(t,picked.step.id,{jobId:now,startedAt:now}):t));
-    setCustomer("");setJob("");setMachine(defaultMachine);setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);setPicked(null);
+    setCustomer("");setJob("");setMachine(defaultMachine);setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);setPicked(null);setQty("");
     notify(`${task?"Opgave startet":"Job startet"} — opstilling kører på ${machine}`);
   };
   const goToSheet=(sheetId)=>{setFocusSheetId&&setFocusSheetId(sheetId);setTab&&setTab("setup");};
@@ -156,6 +157,10 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
             ))}
           </div>
         )}
+      </div>
+      <div style={{marginBottom:12}}>
+        <label style={label}>Antal i ordren <span style={{textTransform:"none",letterSpacing:0,color:C.muted}}>· valgfrit</span></label>
+        <input style={inp()} inputMode="numeric" value={qty} onChange={e=>setQty(e.target.value.replace(/\D/g,""))} placeholder="f.eks. 500"/>
       </div>
       <div style={{marginBottom:12}}>
         <label style={label}>Maskine *{machine&&machine===defaultMachine&&!picked&&<span style={{textTransform:"none",letterSpacing:0,marginLeft:8,color:C.blue}}>· forvalgt fra dit sidste afsluttede job</span>}</label>

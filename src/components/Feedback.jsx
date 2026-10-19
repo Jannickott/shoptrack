@@ -6,8 +6,8 @@ import { C } from "../lib/theme";
 // on tablets that support it); setSync() drives the "Gemt / Gemmer… / Ikke gemt"
 // indicator in the header.
 export const feedbackBus=new EventTarget();
-export function notify(text,kind="ok"){
-  feedbackBus.dispatchEvent(new CustomEvent("toast",{detail:{text,kind,id:Date.now()+Math.random()}}));
+export function notify(text,kind="ok",ms=2600){
+  feedbackBus.dispatchEvent(new CustomEvent("toast",{detail:{text,kind,ms,id:Date.now()+Math.random()}}));
   try{navigator.vibrate&&navigator.vibrate(kind==="error"?[60,40,60]:30);}catch{/* not supported */}
 }
 export function setSync(state){feedbackBus.dispatchEvent(new CustomEvent("sync",{detail:state}));}
@@ -15,7 +15,7 @@ export function setSync(state){feedbackBus.dispatchEvent(new CustomEvent("sync",
 export function Toasts(){
   const [list,setList]=useState([]);
   useEffect(()=>{
-    const on=e=>{const t=e.detail;setList(l=>[...l.slice(-2),t]);setTimeout(()=>setList(l=>l.filter(x=>x.id!==t.id)),2600);};
+    const on=e=>{const t=e.detail;setList(l=>[...l.slice(-2),t]);setTimeout(()=>setList(l=>l.filter(x=>x.id!==t.id)),t.ms||2600);};
     feedbackBus.addEventListener("toast",on);
     return()=>feedbackBus.removeEventListener("toast",on);
   },[]);

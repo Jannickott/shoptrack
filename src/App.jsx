@@ -55,6 +55,19 @@ export default function App(){
   const userRef=useRef(null); // always mirrors current user so tick can read it
   useEffect(()=>{userRef.current=user;},[user]);
   useEffect(()=>{if(user)writeSession({tab});},[tab,user]); // reopen on the same screen
+  // Admin: say so when a job is finished (on any tablet). Only jobs finished in the
+  // last 10 minutes, so loading the app doesn't announce old ones.
+  const doneSeenRef=useRef(null);
+  useEffect(()=>{
+    const done=jobs.filter(j=>j.status==="done"&&!j.deleted);
+    if(doneSeenRef.current&&user?.role==="admin"){
+      done.filter(j=>!doneSeenRef.current.has(j.id)&&Date.now()-(j.completedAt||0)<600000).forEach(j=>{
+        const pcs=Math.max(j.pieces||0,j.pieces2||0);
+        notify(`Færdig: ${j.job} på ${j.machine} (${j.operatorName}) — ${pcs}${j.targetQty?` af ${j.targetQty}`:""} stk`,j.targetQty&&pcs<j.targetQty?"warn":"ok",9000);
+      });
+    }
+    doneSeenRef.current=new Set(done.map(j=>j.id));
+  },[jobs,user]);
   const lastAutoPauseMinuteRef=useRef(""); // tracks last hhmm we fired auto-pause
   const [completeId,setCompleteId]=useState(null);
   const [clock, setClock]    =useState("");
@@ -612,7 +625,7 @@ export default function App(){
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} focusJob={focusJob} setFocusJob={setFocusJob} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={statJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
-      {tab==="planning" &&<PlanningTab       jobs={visibleJobs} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} planSettings={planSettings} setPlanSettings={setPlanSettings} saveNow={saveNow}/>}
+      {tab==="planning" &&<PlanningTab       jobs={visibleJobs} setJobs={setJobs} user={user} machineIssues={machineIssues} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} planSettings={planSettings} setPlanSettings={setPlanSettings} saveNow={saveNow}/>}
       {tab==="reports"  &&<ReportsTab       jobs={statJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
