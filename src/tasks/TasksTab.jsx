@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { notify } from "../components/Feedback";
 import { C, card, inp, btn, tag, label, errMsg } from "../lib/theme";
 import { fmtDate } from "../lib/util";
@@ -224,8 +224,20 @@ export function RequesterTasksTab({user,tasks,setTasks,jobs,saveNow}){
 // ═══════════════════════════════════════════════════════
 // ADMIN — all tasks; set the route, give each step to an operator, finish
 // ═══════════════════════════════════════════════════════
-export function AdminTasksTab({user,users,tasks,setTasks,jobs,departments,setCompleteId,saveNow}){
+export function AdminTasksTab({user,users,tasks,setTasks,jobs,departments,setCompleteId,saveNow,focusTaskId,setFocusTaskId}){
   const [view,setView]=useState("waiting");
+  // Opened from the admin search: show the right group, scroll to the task and flash it
+  useEffect(()=>{
+    if(!focusTaskId) return;
+    const t=(tasks||[]).find(x=>x.id===focusTaskId);
+    if(t){const k=taskState(t,jobs).key;setView(k==="waiting"?"waiting":k==="done"?"done":"active");}
+    const tm=setTimeout(()=>{
+      const el=document.querySelector(`[data-task-id="${focusTaskId}"]`);
+      if(el){el.scrollIntoView({behavior:"smooth",block:"center"});el.animate([{boxShadow:`0 0 0 4px ${C.amber}`},{boxShadow:"0 0 0 0 transparent"}],{duration:2400});}
+      setFocusTaskId&&setFocusTaskId(null);
+    },150);
+    return()=>clearTimeout(tm);
+  },[focusTaskId]);
   const [editing,setEditing]=useState(null);
   const [deleteId,setDeleteId]=useState(null);
   const operators=users.filter(u=>u.role==="operator"&&u.active&&!u.removed);
@@ -274,7 +286,7 @@ export function AdminTasksTab({user,users,tasks,setTasks,jobs,departments,setCom
         const multi=st.steps.length>1;
         const stepOps=operatorsFor(operators,st.step.dept);
         return(
-        <div key={t.id} style={{...card(st.key==="done"?null:TASK_STATE[st.key].color)}}>
+        <div key={t.id} data-task-id={t.id} style={{...card(st.key==="done"?null:TASK_STATE[st.key].color)}}>
           <div style={{display:"flex",flexWrap:"wrap",gap:8,alignItems:"center",marginBottom:10}}>
             <StatePill st={st}/>
             {where&&st.key!=="done"&&<span style={{fontSize:15,color:C.text,fontWeight:700}}>{where}</span>}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { sortActive, ActiveJobsGrid } from "./AdminDash";
 import { notify } from "../components/Feedback";
 import { C, inp, sel, btn, badge, tag, label, errMsg } from "../lib/theme";
@@ -192,7 +192,7 @@ export function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,sta
   };
 
   return(
-    <div style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${accentColor}`,border:`1px solid ${C.border}`,borderTopColor:accentColor,padding:"10px",display:"flex",flexDirection:"column",gap:6}}>
+    <div data-job-id={j.id} style={{background:C.surface,borderRadius:10,borderTop:`3px solid ${accentColor}`,border:`1px solid ${C.border}`,borderTopColor:accentColor,padding:"10px",display:"flex",flexDirection:"column",gap:6}}>
       {/* header */}
       <div style={{display:"flex",alignItems:"center",gap:6}}>
         <div style={{flex:1,minWidth:0}}>
@@ -446,10 +446,22 @@ export function IssueCard({name,issue,setMachineIssues,resolveIssue,saveNow}){
   );
 }
 
-export function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,setMachineIssues,resolveIssue,downtimeLog,setDowntimeLog,saveNow,stateRef}){
+export function AllJobsTab({jobs,setJobs,setCompleteId,users,machines,machineIssues,setMachineIssues,resolveIssue,downtimeLog,setDowntimeLog,saveNow,stateRef,focusJob,setFocusJob}){
   const [statusFilt,setStatusFilt]=useState("all");
   const [machineFilt,setMachineFilt]=useState("all");
   const [search,setSearch]=useState("");
+  // Opened from the admin search: filter down to the job, then scroll to it and flash it
+  useEffect(()=>{
+    if(!focusJob) return;
+    const done=focusJob.status==="done";
+    setStatusFilt(done?"done":"all");setMachineFilt(focusJob.machine||"all");setSearch(done?focusJob.job||"":"");
+    const t=setTimeout(()=>{
+      const el=document.querySelector(`[data-job-id="${focusJob.id}"]`);
+      if(el){el.scrollIntoView({behavior:"smooth",block:"center"});el.animate([{boxShadow:`0 0 0 4px ${C.amber}`},{boxShadow:"0 0 0 0 transparent"}],{duration:2400});}
+      setFocusJob&&setFocusJob(null);
+    },150);
+    return()=>clearTimeout(t);
+  },[focusJob]);
   const [selectedIds,setSelectedIds]=useState(new Set());
   const [confirmBulkDelete,setConfirmBulkDelete]=useState(false);
   // Machine chips: machines with jobs, open faults or resolved faults

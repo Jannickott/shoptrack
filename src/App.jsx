@@ -10,6 +10,7 @@ import { C, btn, navBtn } from "./lib/theme";
 import { AdminTasksTab, RequesterTasksTab } from "./tasks/TasksTab";
 import { statJobsOf, visibleTasks, taskState } from "./tasks/taskUtil";
 import { listDrafts } from "./setupsheets/sheetDraft";
+import { AdminSearch } from "./admin/AdminSearch";
 import { INIT_USERS, INIT_MACHINES, roleName, liveTime, INIT_WORK_HOURS, todayWorkHours, isInWorkHoursNow } from "./lib/util";
 import { ActiveTab } from "./operator/ActiveTab";
 import { HistoryTab } from "./operator/HistoryTab";
@@ -42,6 +43,8 @@ export default function App(){
   const [tab,   setTab]      =useState("new");
   const [focusToolId,setFocusToolId]=useState(null);
   const [focusSheetId,setFocusSheetId]=useState(null);
+  const [focusJob,setFocusJob]=useState(null);       // admin search → open in Alle job
+  const [focusTaskId,setFocusTaskId]=useState(null); // admin search → open in Opgaver
   const [newSheetFor,setNewSheetFor]=useState(null); // {partNumber,machine,customer} — open a new sheet for this
   const [jobs,  setJobs]     =useState([]);
   const [users, setUsers]    =useState(INIT_USERS);
@@ -527,6 +530,12 @@ export default function App(){
   const taskStates=visibleTasks(tasks).map(t=>taskState(t,visibleJobs));
   const myTaskCnt=taskStates.filter(x=>x.key==="assigned"&&x.step.assignedToId===user.id).length;
   const waitingTaskCnt=taskStates.filter(x=>x.key==="waiting").length;
+  // A hit from the admin search opens where it lives
+  const openSearchHit=(type,item)=>{
+    if(type==="job"){setFocusJob(item);setTab("alljobs");}
+    else if(type==="sheet"){setFocusSheetId(item.id);setTab("setup");}
+    else if(type==="task"){setFocusTaskId(item.id);setTab("tasks");}
+  };
   const badgeStyle=bg=>({background:bg,color:bg===C.amber?"#1a1a1a":"white",borderRadius:20,fontSize:12,padding:"1px 6px",marginLeft:6,fontWeight:700});
 
   return(
@@ -581,6 +590,7 @@ export default function App(){
               </button>
             );
           })}
+          <AdminSearch jobs={visibleJobs} setupSheets={setupSheets} tasks={tasks} onOpen={openSearchHit}/>
         </div>
       )}
 
@@ -593,14 +603,14 @@ export default function App(){
       {/* CONTENT */}
       {user.role==="requester"?<RequesterTasksTab user={user} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} saveNow={saveNow}/>:<>
       {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
-      {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} departments={departments} setCompleteId={setCompleteId} saveNow={saveNow}/>}
+      {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} focusTaskId={focusTaskId} setFocusTaskId={setFocusTaskId} departments={departments} setCompleteId={setCompleteId} saveNow={saveNow}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} jobs={visibleJobs} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} jobs={visibleJobs} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
       {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
-      {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
+      {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} focusJob={focusJob} setFocusJob={setFocusJob} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachineDataTab     jobs={statJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
       {tab==="planning" &&<PlanningTab       jobs={visibleJobs} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} planSettings={planSettings} setPlanSettings={setPlanSettings} saveNow={saveNow}/>}
       {tab==="reports"  &&<ReportsTab       jobs={statJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
