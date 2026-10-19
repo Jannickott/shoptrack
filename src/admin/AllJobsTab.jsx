@@ -99,6 +99,7 @@ export function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,sta
   const [editCustomer,setEditCustomer]=useState("");
   const [editJob,setEditJob]=useState("");
   const [editPieces,setEditPieces]=useState("");
+  const [editTarget,setEditTarget]=useState(""); // pieces in the order
   const [editOpId,setEditOpId]=useState("");
   const [editMachine,setEditMachine]=useState("");
   const [setupH,setSetupH]=useState(""); const [setupM,setSetupM]=useState("");
@@ -107,6 +108,7 @@ export function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,sta
     setEditCustomer(j.customer||"");
     setEditJob(j.job||"");
     setEditPieces(j.pieces!=null?String(j.pieces):"");
+    setEditTarget(j.targetQty?String(j.targetQty):"");
     setEditOpId(String(j.operatorId||""));
     setEditMachine(j.machine||"");
     setSetupH(String(Math.floor(j.setupSec/3600)));
@@ -123,6 +125,7 @@ export function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,sta
       setupSec:s,runSec:r,
       customer:editCustomer,job:editJob,
       pieces:parseInt(editPieces)||j.pieces||0,
+      targetQty:parseInt(editTarget,10)||null,
       machine:editMachine,
       operatorId:opUser?opUser.id:j.operatorId,
       operatorName:opUser?opUser.name:j.operatorName,
@@ -249,13 +252,19 @@ export function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,sta
               {machines.filter(m=>m.active).map(m=><option key={m.id} value={m.name}>{m.name}</option>)}
             </select>
           </div>
-          {/* pieces only for done jobs */}
-          {j.status==="done"&&(
+          {/* pieces made (done jobs) + pieces in the order */}
+          <div style={{display:"grid",gridTemplateColumns:j.status==="done"?"1fr 1fr":"1fr",gap:6}}>
+            {j.status==="done"&&(
+              <div>
+                <div style={label}>Stk. lavet</div>
+                <input type="number" min="0" style={inp()} value={editPieces} onChange={e=>setEditPieces(e.target.value)} placeholder="0"/>
+              </div>
+            )}
             <div>
-              <div style={label}>Stk.</div>
-              <input type="number" min="0" style={inp()} value={editPieces} onChange={e=>setEditPieces(e.target.value)} placeholder="0"/>
+              <div style={label}>Antal i ordren</div>
+              <input inputMode="numeric" style={inp()} value={editTarget} onChange={e=>setEditTarget(e.target.value.replace(/\D/g,""))} placeholder="—"/>
             </div>
-          )}
+          </div>
           {/* times */}
           <div>
             <div style={label}>Opstillingstid</div>
@@ -310,6 +319,14 @@ export function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,sta
       <div style={{fontSize:13,color:C.muted,display:"flex",flexDirection:"column",gap:2}}>
         <span><i className="ti ti-robot"/> {j.machine}</span>
         <span><i className="ti ti-user"/> {j.operatorName}</span>
+        {j.targetQty>0&&(()=>{
+          // Order quantity — with the last count while running, or what's missing when done
+          const made=j.status==="done"?Math.max(j.pieces||0,j.pieces2||0):null;
+          const last=(j.counts||[])[(j.counts||[]).length-1];
+          const short=made!=null&&made<j.targetQty?j.targetQty-made:0;
+          return <span style={{color:short?C.amber:C.muted}}><i className="ti ti-clipboard-list"/> Ordre: {j.targetQty} stk
+            {made==null&&last?` · meldt ${last.pieces}`:""}{short?` · ${short} mangler`:""}</span>;
+        })()}
       </div>
 
       {/* done job extras */}
