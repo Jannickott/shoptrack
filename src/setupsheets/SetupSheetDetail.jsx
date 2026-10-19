@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { C, btn } from "../lib/theme";
+import { PdfDrawings } from "../components/PdfDrawings";
 
 // Blank Eriks/150 setup values — used by both the detail view and the form
 export const ERIKS_BLANK={mn:"",z:"",beta:"",dk:"",uo:"",df:"",fraeserDia:"",fraesLagerLinks:"",fraesLagerRechts:"",fraesLag3:"",fraesLag4:"",richtung:"Gegenlauf",differential:"ausgerastet",zahnzahl:"",zahnzahlRatio:"",zahnD:"",zahnZw:"",zahnC:"",zahnB:"",zahnA:"",steigung:"",steigA:"",steigZw:"",steigB:"",steigC:"",steigD:"",fraesDrehzahl:"",fraesA:"",fraesB:"",fraesC:"",fraesD:"",laengs:"",laengsA:"",laengsB:"",laengsC:"",laengsZw:"",laengsD:"",schalterA2:"",schalterA3:"",schalterA4:"",schalterA5:"",tauchsteuerung:"",eingang:"m. Zwischenrad",stckStd:"",stckSpannung:""};
@@ -202,6 +203,12 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
         </div>
       )}
       {sheet.notes&&<div style={{marginBottom:14}}><div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Noter</div><div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",fontSize:15,color:C.text,lineHeight:1.6,whiteSpace:"pre-wrap"}}>{sheet.notes}</div></div>}
+      {(sheet.drawings||[]).length>0&&(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tegninger (PDF)</div>
+          <PdfDrawings files={sheet.drawings}/>
+        </div>
+      )}
       {(sheet.photos||[]).length>0&&(
         <div style={{marginBottom:14}}>
           <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Fotos</div>

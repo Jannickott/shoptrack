@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { C, inp, sel, btn, label, errMsg } from "../lib/theme";
 import { saveDraft, clearDraft } from "./sheetDraft";
+import { PdfDrawings } from "../components/PdfDrawings";
 import { ERIKS_BLANK } from "./SetupSheetDetail";
 import { resizeImage } from "../lib/api";
 
@@ -680,6 +681,10 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
             ))}
           </div>}
         {photosDropped&&<div style={{fontSize:14,color:C.amber,marginTop:8}}><i className="ti ti-alert-triangle"/> Billederne fylder for meget til at blive husket, hvis appen lukker — tryk Gem snart for at beholde dem.</div>}
+      </div>
+      <div style={{marginBottom:20}}>
+        <div style={{fontSize:11,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Tegninger (PDF)</div>
+        <PdfDrawings files={form.drawings} onChange={v=>setF("drawings",v)}/>
       </div>
       {form.subDepartment==="MZ"&&mzAdvancedEditor()}
       <button style={btn("primary",true)} onClick={save}><i className="ti ti-check"/> Gem opstillingsark</button>

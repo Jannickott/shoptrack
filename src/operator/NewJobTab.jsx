@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { notify } from "../components/Feedback";
 import { C, card, inp, sel, btn, avatar, label, errMsg } from "../lib/theme";
-import { fmtDate, initials } from "../lib/util";
+import { fmtDate, initials, recentCustomers, lastFinishedMachine } from "../lib/util";
 import { MyTasksList } from "../tasks/TasksTab";
 import { withStep } from "../tasks/taskUtil";
 
@@ -9,13 +9,13 @@ import { withStep } from "../tasks/taskUtil";
 // NEW JOB
 // ═══════════════════════════════════════════════════════
 export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetId,setNewSheetFor,tasks,setTasks}){
-  const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const [machine,setMachine]=useState(""); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
+  const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const defaultMachine=lastFinishedMachine(jobs,user.id,machines); const [machine,setMachine]=useState(defaultMachine); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
   // A task step given to this operator, being started as this job: {task,step,label}
   const [picked,setPicked]=useState(null);
   const task=picked?.task||null;
   const pickTask=p=>{
     setPicked(p);
-    if(!p){setCustomer("");setJob("");setOp("");setMachine("");return;}
+    if(!p){setCustomer("");setJob("");setOp("");setMachine(defaultMachine);return;}
     const t=p.task;
     setCustomer(`Opgave · ${t.requesterName}`);
     setJob(t.partNumber||t.title);
@@ -28,6 +28,8 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
 
   // Past completed jobs matching the typed part number (min 2 chars)
   const userDepts=user.departments||[];
+  // Only a machine the operator picked narrows the list — not the preselected one
+  const chosenMachine=machine!==defaultMachine?machine:"";
   const suggestions=job.trim().length>=2
     ?(()=>{
       const q=job.trim().toLowerCase();
@@ -36,7 +38,7 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
           if(j.status!=="done") return false;
           if(!j.job.toLowerCase().includes(q)) return false;
           // If machine already chosen, only show runs on that machine
-          if(machine&&j.machine!==machine) return false;
+          if(chosenMachine&&j.machine!==chosenMachine) return false;
           // Dept filter: only jobs on machines in the operator's departments
           if(userDepts.length>0){
             const mach=(machines||[]).find(m=>m.name===j.machine);
@@ -47,7 +49,7 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
         })
         .sort((a,b)=>(b.completedAt||0)-(a.completedAt||0));
       // If machine selected: just the most recent run on that machine
-      return machine?sorted.slice(0,1):sorted.slice(0,5);
+      return chosenMachine?sorted.slice(0,1):sorted.slice(0,5);
     })()
     :[];
 
@@ -66,7 +68,7 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
     const now=Date.now();
     setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,lastModifiedAt:now,...(picked?{taskId:picked.task.id,taskStepId:picked.step.id}:{})},...prev]);
     if(picked) setTasks(prev=>prev.map(t=>t.id===picked.task.id?withStep(t,picked.step.id,{jobId:now,startedAt:now}):t));
-    setCustomer("");setJob("");setMachine("");setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);setPicked(null);
+    setCustomer("");setJob("");setMachine(defaultMachine);setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);setPicked(null);
     notify(`${task?"Opgave startet":"Job startet"} — opstilling kører på ${machine}`);
   };
   const goToSheet=(sheetId)=>{setFocusSheetId&&setFocusSheetId(sheetId);setTab&&setTab("setup");};
@@ -121,7 +123,8 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
 
       <div style={{marginBottom:12}}>
         <label style={label}>Kunde *</label>
-        <input style={inp(errs.customer)} value={customer} onChange={e=>setCustomer(e.target.value)} placeholder="f.eks. Firma A/S"/>
+        <input style={inp(errs.customer)} value={customer} onChange={e=>setCustomer(e.target.value)} placeholder="f.eks. Firma A/S" list="st-customers" autoComplete="off"/>
+        <datalist id="st-customers">{recentCustomers(jobs).map(c=><option key={c} value={c}/>)}</datalist>
         {errs.customer&&<div style={errMsg}>{errs.customer}</div>}
       </div>
       <div style={{marginBottom:12}}>
@@ -155,7 +158,7 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
         )}
       </div>
       <div style={{marginBottom:12}}>
-        <label style={label}>Maskine *</label>
+        <label style={label}>Maskine *{machine&&machine===defaultMachine&&!picked&&<span style={{textTransform:"none",letterSpacing:0,marginLeft:8,color:C.blue}}>· forvalgt fra dit sidste afsluttede job</span>}</label>
         <select style={sel(errs.machine)} value={machine} onChange={e=>setMachine(e.target.value)}>
           <option value="">— Vælg maskine —</option>
           {machines.filter(m=>{

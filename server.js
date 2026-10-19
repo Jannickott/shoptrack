@@ -95,9 +95,11 @@ function mirrorDir(src, dst) {
 
 // Copies the whole backups folder, so a backup missed while the second location
 // was unreachable (USB unplugged, network down) is caught up next time
+let lastCopy = null; // { at, ok, error } — shown on the admin's server status
 function copyBackupElsewhere() {
   const dir = backupCopyDir();
   if (!dir) return;
+  lastCopy = { at: Date.now(), ok: false, error: "" };
   try {
     const bdir = path.join(dir, "backups");
     const files = mirrorDir(BACKUPS_DIR, bdir);
@@ -106,8 +108,10 @@ function copyBackupElsewhere() {
     all.slice(0, Math.max(0, all.length - 180)).forEach(f => fs.unlinkSync(path.join(bdir, f)));
     const photos = mirrorDir(PHOTOS_DIR, path.join(dir, "photos"));
     console.log(`  ✓ Copied to ${dir}: ${files} backup file${files === 1 ? "" : "s"}, ${photos} photo file${photos === 1 ? "" : "s"}`);
+    lastCopy.ok = true;
   } catch (e) {
     console.error(`  ✗ Could not copy backups to ${dir}:`, e.message);
+    lastCopy.error = e.message;
   }
 }
 
@@ -675,6 +679,7 @@ function externalizePhotos(data) {
   (data.tools || []).forEach(t => { if (t.photoData) t.photoData = toFile(t.photoData); });
   (data.cabinets || []).forEach(c => { if (c.photoData) c.photoData = toFile(c.photoData); });
   (data.setupSheets || []).forEach(s => (s.photos || []).forEach(p => { if (p.url) p.url = toFile(p.url); }));
+  (data.tasks || []).forEach(t => { if (t.photo) t.photo = toFile(t.photo); });
   (data.jobs || []).forEach(j => {
     if (j.photoData)  j.photoData  = toFile(j.photoData);
     if (j.photoData2) j.photoData2 = toFile(j.photoData2);
@@ -923,6 +928,50 @@ app.post("/api/photo", (req, res) => {
     fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
     res.json({ url: `/photos/${filename}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/file — a PDF drawing for a setup sheet or a task ──
+// Stored next to the photos (so it is in the second backup copy too), never in the data file
+app.post("/api/file", (req, res) => {
+  try {
+    const { name, data } = req.body;
+    const m = typeof data === "string" && data.match(/^data:application\/pdf;base64,/);
+    if (!m) return res.status(400).json({ error: "Kun PDF-filer" });
+    const safe = String(name || "tegning.pdf").replace(/\.pdf$/i, "").replace(/[^\wæøåÆØÅ.-]+/g, "_").slice(0, 60) || "tegning";
+    const rel = `files/${Date.now()}_${safe}.pdf`;
+    const filePath = path.join(PHOTOS_DIR, rel);
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, Buffer.from(data.slice(m[0].length), "base64"));
+    res.json({ url: `/photos/${rel}` });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/server-status — the admin's "Server" page ──
+const STARTED_AT = Date.now();
+const newestFile = (dir, test) => {
+  try {
+    return fs.readdirSync(dir).filter(test)
+      // A copied file keeps the original's modified time on Windows — its creation time is when it was made
+      .map(f => { const s = fs.statSync(path.join(dir, f)); return { name: f, at: Math.max(s.mtimeMs, s.birthtimeMs || 0) }; })
+      .sort((a, b) => b.at - a.at)[0] || null;
+  } catch { return null; }
+};
+app.get("/api/server-status", (_req, res) => {
+  const isBackup = f => f.startsWith("shoptrack-data-") && f.endsWith(".json");
+  const copyDir = backupCopyDir();
+  let disk = null;
+  try { const s = fs.statfsSync(__dirname); disk = { free: s.bavail * s.bsize, total: s.blocks * s.bsize }; } catch { /* older Node */ }
+  let dataFile = null;
+  try { const s = fs.statSync(DATA_FILE); dataFile = { size: s.size, savedAt: s.mtimeMs }; } catch { /* no data yet */ }
+  res.json({
+    version: APP_VERSION, startedAt: STARTED_AT, now: Date.now(),
+    lastBackup: newestFile(BACKUPS_DIR, isBackup),
+    backupCount: (() => { try { return fs.readdirSync(BACKUPS_DIR).filter(isBackup).length; } catch { return 0; } })(),
+    copyDir, lastCopy,
+    copyLatest: copyDir ? newestFile(path.join(copyDir, "backups"), isBackup) : null,
+    lastReport: newestFile(REPORTS_DIR, f => f.endsWith(".pdf")),
+    dataFile, disk,
+  });
 });
 
 // ── Fallback to React app ─────────────────────────────────

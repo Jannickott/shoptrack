@@ -94,3 +94,19 @@ export function calcAvailableWorkSec(wh,fromMs,toMs){
   }
   return total;
 }
+
+// Customers used before, newest first — suggestions while typing (tasks left out)
+export function recentCustomers(jobs){
+  const seen=new Map();
+  [...(jobs||[])].sort((a,b)=>(b.createdAt||0)-(a.createdAt||0)).forEach(j=>{
+    const c=(j.customer||"").trim();
+    if(c&&!c.startsWith("Opgave ·")&&!seen.has(c.toLowerCase())) seen.set(c.toLowerCase(),c);
+  });
+  return [...seen.values()];
+}
+
+// The machine of the operator's last finished job — the likely one for the next job
+export function lastFinishedMachine(jobs,userId,machines){
+  const j=(jobs||[]).filter(x=>x.operatorId===userId&&x.status==="done"&&!x.deleted).sort((a,b)=>(b.completedAt||0)-(a.completedAt||0))[0];
+  return j&&(machines||[]).some(m=>m.name===j.machine&&m.active)?j.machine:"";
+}

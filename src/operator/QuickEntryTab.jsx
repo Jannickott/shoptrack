@@ -1,16 +1,18 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { notify } from "../components/Feedback";
 import { uploadPhoto } from "../lib/api";
+import { PhotoChoice } from "../components/PhotoChoice";
 import { C, card, inp, sel, btn, avatar, label, errMsg } from "../lib/theme";
-import { initials } from "../lib/util";
+import { initials, recentCustomers, lastFinishedMachine } from "../lib/util";
 
 // ═══════════════════════════════════════════════════════
 // QUICK ENTRY — start + complete in one form
 // ═══════════════════════════════════════════════════════
-export function QuickEntryTab({user,machines,setJobs,setTab,saveNow}){
+export function QuickEntryTab({user,machines,jobs,setJobs,setTab,saveNow}){
+  const defaultMachine=lastFinishedMachine(jobs,user.id,machines);
   const [customer,setCustomer]=useState("");
   const [job,    setJob]    =useState("");
-  const [machine,setMachine]=useState("");
+  const [machine,setMachine]=useState(defaultMachine);
   const [op,     setOp]     =useState("");
   const [setupH,  setSetupH]  =useState("");
   const [setupM,  setSetupM]  =useState("");
@@ -20,7 +22,6 @@ export function QuickEntryTab({user,machines,setJobs,setTab,saveNow}){
   const [photo,  setPhoto]  =useState(null);
   const [errs,   setErrs]   =useState({});
   const [done,   setDone]   =useState(false);
-  const fileRef=useRef();
 
   const handlePhoto=e=>{
     const f=e.target.files[0]; if(!f) return;
@@ -65,7 +66,7 @@ export function QuickEntryTab({user,machines,setJobs,setTab,saveNow}){
   };
 
   const reset=()=>{
-    setCustomer("");setJob("");setMachine("");setOp("");setSetupH("");setSetupM("");setRunH("");setRunM("");
+    setCustomer("");setJob("");setMachine(defaultMachine);setOp("");setSetupH("");setSetupM("");setRunH("");setRunM("");
     setPieces("");setPhoto(null);setErrs({});setDone(false);
   };
 
@@ -110,7 +111,8 @@ export function QuickEntryTab({user,machines,setJobs,setTab,saveNow}){
         <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}><i className="ti ti-file-description"/> Jobdetaljer</div>
         <div style={{marginBottom:10}}>
           <label style={label}>Kunde <span style={{color:C.red}}>*</span></label>
-          <input style={inp(errs.customer)} value={customer} onChange={e=>{setCustomer(e.target.value);setErrs(p=>({...p,customer:null}));}} placeholder="f.eks. Firma A/S"/>
+          <input style={inp(errs.customer)} value={customer} onChange={e=>{setCustomer(e.target.value);setErrs(p=>({...p,customer:null}));}} placeholder="f.eks. Firma A/S" list="st-customers-q" autoComplete="off"/>
+          <datalist id="st-customers-q">{recentCustomers(jobs).map(c=><option key={c} value={c}/>)}</datalist>
           {errs.customer&&<div style={errMsg}><i className="ti ti-alert-triangle"/> {errs.customer}</div>}
         </div>
         <div style={{marginBottom:10}}>
@@ -189,14 +191,11 @@ export function QuickEntryTab({user,machines,setJobs,setTab,saveNow}){
           <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase"}}><i className="ti ti-camera"/> Kvalitetsfoto <span style={{color:C.red}}>*</span></div>
           <span style={{fontSize:13,letterSpacing:1,color:photo?C.green:C.red}}>{photo?"✓ Vedhæftet":"Skal udfyldes"}</span>
         </div>
-        <div
-          style={{border:`2px dashed ${errs.photo&&!photo?C.red:photo?C.green:"rgba(255,255,255,.12)"}`,borderRadius:8,padding:photo?12:24,textAlign:"center",cursor:"pointer",background:photo?"rgba(39,174,96,.05)":"transparent",transition:"all 0.2s"}}
-          onClick={()=>fileRef.current.click()}>
-          {photo
-            ?<><img src={photo} style={{maxHeight:110,borderRadius:6,display:"block",margin:"0 auto 8px",border:`1px solid ${C.border}`}}/><div style={{fontSize:14,color:C.green,letterSpacing:1}}>Foto vedhæftet — tryk for at skifte</div></>
-            :<><i className="ti ti-camera" style={{fontSize:32,opacity:0.3,display:"block",marginBottom:8}}/><div style={{fontSize:15,color:C.muted,letterSpacing:1}}>Tryk for at tage eller vælge foto</div><div style={{fontSize:13,color:C.muted,marginTop:4,opacity:0.6}}>Kamera eller galleri</div></>}
-        </div>
-        <input type="file" ref={fileRef} accept="image/*" capture="environment" style={{display:"none"}} onChange={e=>{handlePhoto(e);setErrs(p=>({...p,photo:null}));}}/>
+        {photo&&<div style={{border:`2px solid ${C.green}`,borderRadius:8,padding:12,textAlign:"center",background:"rgba(39,174,96,.05)",marginBottom:8}}>
+          <img src={photo} style={{maxHeight:110,borderRadius:6,display:"block",margin:"0 auto 8px",border:`1px solid ${C.border}`}}/>
+          <div style={{fontSize:14,color:C.green,letterSpacing:1}}>Foto vedhæftet — vælg nedenfor for at skifte</div>
+        </div>}
+        <PhotoChoice error={!!errs.photo&&!photo} onChange={e=>{handlePhoto(e);setErrs(p=>({...p,photo:null}));}}/>
         {errs.photo&&!photo&&<div style={errMsg}><i className="ti ti-alert-triangle"/> {errs.photo}</div>}
       </div>
 

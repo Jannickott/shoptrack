@@ -3,6 +3,7 @@ import { notify } from "../components/Feedback";
 import { C, card, inp, btn, tag, label, errMsg } from "../lib/theme";
 import { fmtDate } from "../lib/util";
 import { uploadPhoto, resizeImage } from "../lib/api";
+import { PdfDrawings } from "../components/PdfDrawings";
 import { taskState, stepState, stepsOf, stepLabel, withStep, TASK_STATE, operatorLoad, operatorsFor, visibleTasks } from "./taskUtil";
 
 const dayLabel=d=>d?new Date(d+"T00:00").toLocaleDateString("da-DK",{day:"numeric",month:"short"}):"";
@@ -19,6 +20,7 @@ function TaskForm({task,user,onSave,onCancel}){
   const [note,setNote]=useState(task?.note||"");
   const [wantedBy,setWantedBy]=useState(task?.wantedBy||"");
   const [photo,setPhoto]=useState(task?.photo||null);
+  const [drawings,setDrawings]=useState(task?.drawings||[]);
   const [err,setErr]=useState("");
   const [busy,setBusy]=useState(false);
   const fileRef=useRef(null);
@@ -36,7 +38,7 @@ function TaskForm({task,user,onSave,onCancel}){
     onSave({
       ...(task||{id,createdAt:now,requesterId:user.id,requesterName:user.name,steps:[]}),
       title:title.trim(),partNumber:partNumber.trim(),qty:parseInt(qty)||0,material:material.trim(),
-      note:note.trim(),wantedBy,photo:photoUrl||null,updatedAt:now,
+      note:note.trim(),wantedBy,photo:photoUrl||null,drawings,updatedAt:now,
     });
   };
   return(
@@ -67,6 +69,10 @@ function TaskForm({task,user,onSave,onCancel}){
         <input type="file" ref={fileRef} accept="image/*" style={{display:"none"}} onChange={pickPhoto}/>
         {photo&&<button style={{...btn("outline",false,true),marginTop:6}} onClick={()=>setPhoto(null)}><i className="ti ti-x"/> Fjern billede</button>}
       </div>
+      <div style={{marginBottom:14}}>
+        <label style={label}>Tegninger (PDF)</label>
+        <PdfDrawings files={drawings} onChange={setDrawings}/>
+      </div>
       <div style={{display:"flex",gap:8}}>
         <button style={btn("outline",true)} onClick={onCancel}>Annuller</button>
         <button style={btn("success",true)} onClick={save} disabled={busy}><i className="ti ti-check"/> {busy?"Gemmer…":task?"Gem":"Opret opgave"}</button>
@@ -88,6 +94,7 @@ function TaskDetails({t}){
           {t.wantedBy&&<span style={{color:isLate(t.wantedBy)?C.red:C.muted}}> · Ønskes færdig {dayLabel(t.wantedBy)}</span>}
         </div>
         {t.note&&<div style={{fontSize:15,color:C.text,marginTop:8,whiteSpace:"pre-wrap",background:C.raised,borderRadius:8,padding:"8px 10px"}}>{t.note}</div>}
+        {(t.drawings||[]).length>0&&<div style={{marginTop:8}}><PdfDrawings files={t.drawings}/></div>}
       </div>
       {t.photo&&<a href={t.photo} target="_blank" rel="noreferrer" style={{flexShrink:0}}><img src={t.photo} alt="" style={{width:96,height:96,objectFit:"cover",borderRadius:8,border:`1px solid ${C.border}`}}/></a>}
     </div>

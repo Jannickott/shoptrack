@@ -16,6 +16,22 @@ export async function uploadPhoto(photoData, filename) {
   }
 }
 
+// A PDF drawing goes straight to the server as a file (it is too big to travel in
+// the data). Returns {url,name}, or null when it could not be sent.
+export async function uploadPdf(file){
+  if(file.size>15*1024*1024){notify("PDF'en er for stor (over 15 MB)","error");return null;}
+  try{
+    const data=await new Promise((res,rej)=>{const r=new FileReader();r.onload=ev=>res(ev.target.result);r.onerror=rej;r.readAsDataURL(file);});
+    const r=await fetch("/api/file",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name:file.name,data})});
+    if(!r.ok) throw new Error();
+    const {url}=await r.json();
+    return {url,name:file.name};
+  }catch{
+    notify("PDF'en kunne ikke sendes — tjek forbindelsen og prøv igen","error");
+    return null;
+  }
+}
+
 // Every tool change goes to the server as an operation, applied there one at a time
 // (tools are not part of the regular 3 s save). The caller also updates local state
 // so the screen changes at once; the next poll brings the server's result.

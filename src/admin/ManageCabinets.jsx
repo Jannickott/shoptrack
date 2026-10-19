@@ -1,5 +1,6 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { resizeImage } from "../lib/api";
+import { PhotoChoice } from "../components/PhotoChoice";
 import { C, card, inp, btn, label, errMsg } from "../lib/theme";
 
 // ═══════════════════════════════════════════════════════
@@ -9,7 +10,6 @@ export function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
   const [view,setView]=useState("list"); // "list"|"cabinet"|"drawer"
   const [editCabId,setEditCabId]=useState(null);
   const [cabForm,setCabForm]=useState({name:"",departments:[],photoData:null});
-  const cabPhotoRef=useRef();
   const [editDrawer,setEditDrawer]=useState(null); // {cabinetId, drawerId|null}
   const [drawerForm,setDrawerForm]=useState({number:"",label:"",rows:6,cols:7});
   const [errs,setErrs]=useState({});
@@ -86,14 +86,11 @@ export function ManageCabinets({cabinets,setCabinets,departments,saveNow}){
       </div>
       <div style={{marginBottom:16}}>
         <label style={label}>Foto af skabet</label>
-        <div style={{border:`2px dashed ${cabForm.photoData?"rgba(39,174,96,.4)":"rgba(255,255,255,.12)"}`,borderRadius:8,padding:cabForm.photoData?12:22,textAlign:"center",cursor:"pointer",background:cabForm.photoData?"rgba(39,174,96,.05)":"transparent",transition:"all .2s"}}
-          onClick={()=>cabPhotoRef.current.click()}>
-          {cabForm.photoData
-            ?<><img src={cabForm.photoData} style={{maxHeight:130,borderRadius:6,display:"block",margin:"0 auto 8px",border:`1px solid ${C.border}`}}/><div style={{fontSize:14,color:C.green,letterSpacing:1}}>Foto vedhæftet — tryk for at skifte</div></>
-            :<><i className="ti ti-camera" style={{fontSize:30,opacity:0.3,display:"block",marginBottom:8}}/><div style={{fontSize:15,color:C.muted}}>Tryk for at tilføje et foto af skabet</div></>}
-        </div>
-        <input type="file" ref={cabPhotoRef} accept="image/*" capture="environment" style={{display:"none"}}
-          onChange={e=>{const f=e.target.files[0];if(!f)return;const r=new FileReader();r.onload=ev=>resizeImage(ev.target.result).then(d=>setCabForm(p=>({...p,photoData:d})));r.readAsDataURL(f);}}/>
+        {cabForm.photoData&&<div style={{border:"2px solid rgba(39,174,96,.4)",borderRadius:8,padding:12,textAlign:"center",background:"rgba(39,174,96,.05)",marginBottom:8}}>
+          <img src={cabForm.photoData} style={{maxHeight:130,borderRadius:6,display:"block",margin:"0 auto 8px",border:`1px solid ${C.border}`}}/>
+          <div style={{fontSize:14,color:C.green,letterSpacing:1}}>Foto vedhæftet — vælg nedenfor for at skifte</div>
+        </div>}
+        <PhotoChoice onChange={e=>{const f=e.target.files[0];e.target.value="";if(!f)return;const r=new FileReader();r.onload=ev=>resizeImage(ev.target.result).then(d=>setCabForm(p=>({...p,photoData:d})));r.readAsDataURL(f);}}/>
         {cabForm.photoData&&<button style={{...btn("danger",false,true),marginTop:6,fontSize:12}} onClick={()=>setCabForm(p=>({...p,photoData:null}))}><i className="ti ti-x"/> Fjern foto</button>}
       </div>
       <button style={btn("success",true)} onClick={saveCabinet}><i className="ti ti-check"/> {editCabId?"Gem ændringer":"Tilføj skab"}</button>

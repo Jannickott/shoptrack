@@ -25,6 +25,16 @@ import { ToolsTab } from "./tools/ToolsTab";
 // ═══════════════════════════════════════════════════════
 // APP ROOT
 // ═══════════════════════════════════════════════════════
+// ── Stay logged in on this tablet ──────────────────────────────────────────────
+// A reload (the tablet dropped the page, a trip to the camera app, an update) used to
+// log the operator out. The login is remembered until Log ud, the automatic pause,
+// or 12 hours have passed. Each operator has their own tablet.
+const SESSION_KEY="st-session", SESSION_MAX=12*3600*1000;
+function readSession(){try{const s=JSON.parse(localStorage.getItem(SESSION_KEY)||"null");return s&&s.userId!=null?s:null;}catch{return null;}}
+function writeSession(patch){try{localStorage.setItem(SESSION_KEY,JSON.stringify({...(readSession()||{}),...patch}));}catch{/* storage not available */}}
+function clearSession(){try{localStorage.removeItem(SESSION_KEY);}catch{/* storage not available */}}
+const homeTab=u=>u?.role==="admin"?"admin":u?.role==="requester"?"mytasks":"new";
+
 export default function App(){
   const [loaded,setLoaded]   =useState(false);
   const [user,  setUser]     =useState(null);
@@ -41,6 +51,7 @@ export default function App(){
   useEffect(()=>{workHoursRef.current=workHours;},[workHours]);
   const userRef=useRef(null); // always mirrors current user so tick can read it
   useEffect(()=>{userRef.current=user;},[user]);
+  useEffect(()=>{if(user)writeSession({tab});},[tab,user]); // reopen on the same screen
   const lastAutoPauseMinuteRef=useRef(""); // tracks last hhmm we fired auto-pause
   const [completeId,setCompleteId]=useState(null);
   const [clock, setClock]    =useState("");
@@ -128,6 +139,11 @@ export default function App(){
           if(data.planSettings) setPlanSettings(data.planSettings);
           if(data.tasks) setTasks(data.tasks);
           if(data.settingsVersion) settingsVersionRef.current=data.settingsVersion;
+          // Still logged in on this tablet (page reloaded, app reopened) → carry on without the PIN
+          const s=readSession();
+          const su=s&&(data.users||[]).find(x=>x.id===s.userId&&x.active&&!x.removed);
+          if(su&&!(su.forcedLogoutAt&&su.forcedLogoutAt>s.loginAt)&&Date.now()-s.loginAt<SESSION_MAX){loginTimeRef.current=s.loginAt;setUser(su);setTab(s.tab||homeTab(su));}
+          else if(s) clearSession();
           // Seed lastServerRef so the first poll doesn't overwrite local edits
           lastServerRef.current={
             workHours:data.workHours,
@@ -230,7 +246,7 @@ export default function App(){
           if(user){
             const su=data.users.find(x=>x.id===user.id);
             if(su&&su.forcedLogoutAt&&su.forcedLogoutAt>loginTimeRef.current){
-              setUser(null);setTab("new");
+              clearSession();setUser(null);setTab("new");
             }
           }
         }
@@ -386,7 +402,7 @@ export default function App(){
           setUsers(updatedUsers);
           // Force logout on THIS device if this operator is currently logged in
           if(userRef.current&&userRef.current.id===u.id){
-            setUser(null);setTab("new");
+            clearSession();setUser(null);setTab("new");
           }
           saveNow();
         });
@@ -462,7 +478,8 @@ export default function App(){
     loginTimeRef.current=n;
     // A setup sheet left unsaved recently (app closed, logged out) → straight back to it
     const recentDraft=u.role!=="requester"&&listDrafts(u.id).find(d=>n-d.savedAt<12*3600*1000);
-    setUser(u);setTab(recentDraft?"setup":u.role==="admin"?"admin":u.role==="requester"?"mytasks":"new");
+    setUser(u);setTab(recentDraft?"setup":homeTab(u));
+    writeSession({userId:u.id,loginAt:n,tab:null});
     // (after the main screen is up — the message bar isn't there on the login screen)
     if(recentDraft) setTimeout(()=>notify("Du har et opstillingsark, der ikke er gemt — tryk Fortsæt","warn"),300);
     saveNow();
@@ -488,7 +505,7 @@ export default function App(){
     });
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
-    setUser(null);setTab("new");
+    clearSession();setUser(null);setTab("new");
     saveNow();
   };
 
@@ -522,7 +539,7 @@ export default function App(){
       {!serverOnline&&<div style={{background:"rgba(231,76,60,.92)",color:"#fff",textAlign:"center",padding:"6px 12px",fontSize:14,fontWeight:700,letterSpacing:1.2,textTransform:"uppercase"}}><i className="ti ti-wifi-off"/> Ingen forbindelse til serveren — ændringer gemmes automatisk, når forbindelsen er tilbage</div>}
       {/* HEADER */}
       <div style={{background:C.surface,borderBottom:`1px solid ${C.border}`,padding:"12px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
-        <div style={{fontSize:16,letterSpacing:3,textTransform:"uppercase",color:C.amber,fontWeight:700,cursor:"pointer",userSelect:"none"}} onClick={()=>{setUser(null);setTab("new");}}>⚙ ShopTrack</div>
+        <div style={{fontSize:16,letterSpacing:3,textTransform:"uppercase",color:C.amber,fontWeight:700,cursor:"pointer",userSelect:"none"}} onClick={()=>setTab(homeTab(user))} title="Til forsiden">⚙ ShopTrack</div>
         <div style={{display:"flex",alignItems:"center",gap:14}}>
           <SyncIndicator/>
           <div style={{fontSize:21,letterSpacing:3}}>{clock}</div>
@@ -577,7 +594,7 @@ export default function App(){
       {user.role==="requester"?<RequesterTasksTab user={user} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} saveNow={saveNow}/>:<>
       {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
       {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} departments={departments} setCompleteId={setCompleteId} saveNow={saveNow}/>}
-      {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
+      {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} jobs={visibleJobs} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} jobs={visibleJobs} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue}/>}
       {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}

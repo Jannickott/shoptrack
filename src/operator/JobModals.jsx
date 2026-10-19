@@ -1,6 +1,7 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { notify } from "../components/Feedback";
 import { uploadPhoto } from "../lib/api";
+import { PhotoChoice } from "../components/PhotoChoice";
 import { C, card, inp, btn, badge, statBox, label, errMsg, meta } from "../lib/theme";
 import { fmtHM, liveTime } from "../lib/util";
 
@@ -179,7 +180,6 @@ export function StartRunModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
   const j=jobs.find(x=>x.id===jobId);
   const [photoData,setPhotoData]=useState(null);
   const [saving,setSaving]=useState(false);
-  const fileRef=useRef();
   if(!j) return null;
   const isSide2=j.status==="side2_setup";
   const accentColor=isSide2?C.blue:C.amber;
@@ -240,13 +240,11 @@ export function StartRunModal({jobId,jobs,setJobs,onClose,saveNow,stateRef}){
               </button>
             </div>
           ):(
-            <button onClick={()=>fileRef.current.click()} style={{width:"100%",padding:"28px 16px",background:C.raised,border:`2px dashed ${C.border}`,borderRadius:10,color:accentColor,cursor:"pointer",display:"flex",flexDirection:"column",alignItems:"center",gap:8,fontFamily:"inherit"}}>
-              <i className="ti ti-camera" style={{fontSize:36}}/>
-              <span style={{fontSize:16,letterSpacing:1}}>Tryk for at tage kvalitetsfoto</span>
-              <span style={{fontSize:13,color:C.muted}}>Skal tages før produktionen starter</span>
-            </button>
+            <>
+              <div style={{fontSize:14,color:C.muted,marginBottom:8}}>Kvalitetsfoto — skal tages før produktionen starter</div>
+              <PhotoChoice onChange={handlePhoto} color={accentColor}/>
+            </>
           )}
-          <input ref={fileRef} type="file" accept="image/*" capture="environment" style={{display:"none"}} onChange={handlePhoto}/>
         </div>
         <button
           style={{...btn("primary",true),opacity:!photoData||saving?0.45:1,...(isSide2?{background:C.blue,borderColor:C.blue}:{})}}
