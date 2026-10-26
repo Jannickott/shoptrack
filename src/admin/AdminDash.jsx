@@ -3,7 +3,7 @@ import { C, card, badge, th, td, tag, btn } from "../lib/theme";
 import { fmtHM, fmtDate, toDateInput, jRunAll, jSetupAll, liveTime, calcAvailableWorkSec } from "../lib/util";
 import { jobProgress, normPart } from "../planning/planEngine";
 import { visibleTasks, taskState } from "../tasks/taskUtil";
-import { machineMaint } from "../maintenance/maintUtil";
+import { machineMaint, machineOperator, dueText } from "../maintenance/maintUtil";
 
 // ═══════════════════════════════════════════════════════
 // ADMIN DASHBOARD
@@ -155,7 +155,10 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
   const issueEntries=Object.entries(machineIssues);
   const toOrder=(tools||[]).filter(t=>t.active&&t.quantity<=(t.minQuantity||0)&&!t.ordered);
   const waitingTasks=visibleTasks(tasks).filter(t=>taskState(t,jobs).key==="waiting");
-  const maintDue=machines.filter(m=>m.active&&!m.removed).map(m=>({m,n:machineMaint(m.name,maintTasks,maintLog,jobs).filter(x=>x.st.state==="due").length})).filter(x=>x.n);
+  // Maintenance: late points (red, by name) apart from points due today (yellow)
+  const maintAll=machines.filter(m=>m.active&&!m.removed).flatMap(m=>machineMaint(m.name,maintTasks,maintLog,jobs).filter(x=>x.st.state==="due").map(x=>({...x,machine:m.name})));
+  const maintLate=maintAll.filter(x=>x.st.late), maintToday=maintAll.filter(x=>!x.st.late);
+  const byMachine=list=>Object.entries(list.reduce((a,x)=>{a[x.machine]=(a[x.machine]||0)+1;return a;},{})).map(([m,n])=>`${m} (${n})`).join(", ");
   const noCount=running.filter(j=>(j.status==="run"||j.status==="side2_run")&&(j.createdAt||0)<todayStart&&!progress[j.id]?.countedToday);
   const longSetup=running.filter(j=>{const lt=liveTime(j);return (j.status==="setup"&&lt.setup>8*3600)||(j.status==="side2_setup"&&lt.setup2>8*3600);});
   const srvProblem=srv&&(()=>{
@@ -170,7 +173,8 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
     issueEntries.length&&{color:C.red,icon:"alert-triangle",text:`${issueEntries.length} maskine${issueEntries.length>1?"r":""} nede eller til reparation: ${issueEntries.map(([n])=>n).join(", ")}`,tab:"alljobs"},
     lateJobs.length&&{color:C.red,icon:"alarm",text:`${lateJobs.length} job bliver ikke færdig${lateJobs.length>1?"e":""} til leveringsdatoen: ${lateJobs.map(j=>j.job).join(", ")}`,tab:"planning"},
     srvProblem&&{color:C.red,icon:"server",text:`Server: ${srvProblem} — se Administration → Server`,tab:"manage"},
-    maintDue.length&&{color:C.amber,icon:"tool",text:`Vedligehold skal gøres: ${maintDue.map(x=>`${x.m.name} (${x.n})`).join(", ")}`,go:onOpenMaint},
+    maintLate.length&&{color:C.red,icon:"tool",text:`Forsinket vedligehold: ${maintLate.slice(0,3).map(x=>`${x.t.title} på ${x.machine} (${dueText(x.t,x.st)}${machineOperator(jobs,x.machine)?`, ${machineOperator(jobs,x.machine).name}`:""})`).join("; ")}${maintLate.length>3?` + ${maintLate.length-3} mere`:""}`,go:onOpenMaint},
+    maintToday.length&&{color:C.amber,icon:"tool",text:`Vedligehold skal gøres i dag: ${byMachine(maintToday)}`,go:onOpenMaint},
     waitingTasks.length&&{color:C.amber,icon:"clipboard-check",text:`${waitingTasks.length} opgave${waitingTasks.length>1?"r":""} venter på at blive givet til en operatør`,tab:"tasks"},
     toOrder.length&&{color:C.amber,icon:"package",text:`${toOrder.length} værktøj skal bestilles: ${toOrder.slice(0,3).map(t=>t.name).join(", ")}${toOrder.length>3?" …":""}`,tab:"admintools"},
     longSetup.length&&{color:C.amber,icon:"clock-exclamation",text:`${longSetup.length} job har stået i opstilling i over 8 timer — glemt at trykke Start produktion? ${longSetup.map(j=>j.machine).join(", ")}`,tab:"alljobs"},

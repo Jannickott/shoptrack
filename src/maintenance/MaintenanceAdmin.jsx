@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { notify } from "../components/Feedback";
 import { C, card, inp, sel, btn, tag, label, errMsg, th, td } from "../lib/theme";
-import { UNITS, WEEKDAYS, intervalLabel, visibleMaint, machineMaint, MAINT_STATE } from "./maintUtil";
+import { UNITS, WEEKDAYS, intervalLabel, visibleMaint, machineMaint, machineRunTotal, MAINT_STATE } from "./maintUtil";
 import { MaintChecklist, maintSummary } from "./MaintChecklist";
 
 const dayInput=ms=>{const d=new Date(ms);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
@@ -134,7 +134,7 @@ export function MaintenanceAdmin({user,machines,jobs,maintTasks,setMaintTasks,ma
           onSave={(data,on)=>{
             const now=Date.now();
             if(editing==="new"){
-              putTasks(prev=>[...prev,...on.map((m,i)=>({id:now+i,machine:m,...data,active:true,createdAt:now,updatedAt:now}))]);
+              putTasks(prev=>[...prev,...on.map((m,i)=>({id:now+i,machine:m,...data,active:true,createdAt:now,runTotalAtCreate:machineRunTotal(jobs,m),updatedAt:now}))]);
               notify(on.length>1?`Vedligeholdspunkt oprettet på ${on.length} maskiner`:"Vedligeholdspunkt oprettet");
             }else{
               putTasks(prev=>prev.map(t=>t.id===editing.id?{...t,...data,updatedAt:now}:t));

@@ -59,8 +59,14 @@ export function lastDone(task,log){
   return last;
 }
 
-// Production seconds on a machine since a moment (jobs still running count in full —
-// close enough for "every 500 hours")
+// All production seconds a machine has ever had in ShopTrack. Stored on each check
+// (log.runTotal) and on a new point (task.runTotalAtCreate), so hours since = now − then.
+export function machineRunTotal(jobs,machine){
+  return (jobs||[]).filter(j=>j.machine===machine&&!j.deleted).reduce((s,j)=>{const lt=liveTime(j);return s+lt.run+lt.run2;},0);
+}
+
+// Older checks without runTotal: production seconds since a moment (a job still
+// running counts in full)
 export function machineRunSecSince(jobs,machine,since){
   return (jobs||[]).filter(j=>j.machine===machine&&!j.deleted&&(j.status!=="done"||(j.completedAt||0)>since)&&(j.createdAt||0)<=Date.now())
     .reduce((s,j)=>{const lt=liveTime(j);return s+lt.run+lt.run2;},0);
@@ -71,9 +77,11 @@ export function maintStatus(task,log,jobs,now=Date.now()){
   const last=lastDone(task,log);
   const n=Math.max(1,Number(task.every)||1);
   if(task.unit==="hours"){
-    const used=machineRunSecSince(jobs,task.machine,last?last.doneAt:task.createdAt)/3600;
+    const base=last?last.runTotal:task.runTotalAtCreate;
+    const used=(base!=null?Math.max(0,machineRunTotal(jobs,task.machine)-base):machineRunSecSince(jobs,task.machine,last?last.doneAt:task.createdAt))/3600;
     const state=!last||used>=n?"due":used>=n*0.9?"soon":"ok";
-    return {state,last,used,label:`${Math.floor(used)} af ${n} driftstimer brugt`};
+    // Late = 10 % past the hours (a day or two of production)
+    return {state,last,used,late:!!last&&used>=n*1.1,label:`${Math.floor(used)} af ${n} driftstimer brugt`};
   }
   // Calendar: due from the start of the day the interval runs out (never done → due now).
   // With a fixed day: the next such day after the last check (never done → the first one).
@@ -98,7 +106,7 @@ export function maintStatus(task,log,jobs,now=Date.now()){
   }
   const lateDays=Math.floor((now-next)/DAY);
   const state=now>=next?"due":task.unit!=="day"&&next-now<2*DAY?"soon":"ok";
-  return {state,last,next,lateDays:Math.max(0,lateDays)};
+  return {state,last,next,lateDays:Math.max(0,lateDays),late:state==="due"&&lateDays>=1};
 }
 
 export const MAINT_STATE={
@@ -112,4 +120,29 @@ export function machineMaint(machine,tasks,log,jobs,now){
   return visibleMaint(tasks).filter(t=>t.machine===machine&&t.active!==false)
     .map(t=>({t,st:maintStatus(t,log,jobs,now)}))
     .sort((a,b)=>({due:0,soon:1,ok:2}[a.st.state]-{due:0,soon:1,ok:2}[b.st.state])||a.t.title.localeCompare(b.t.title));
+}
+
+// Who looks after a machine right now: the operator with a job running on it,
+// else the operator of the last job there. null when the machine has had no jobs.
+export function machineOperator(jobs,machine){
+  const on=(jobs||[]).filter(j=>j.machine===machine&&!j.deleted);
+  const running=on.filter(j=>j.status!=="done").sort((a,b)=>(b.createdAt||0)-(a.createdAt||0))[0];
+  const j=running||on.sort((a,b)=>Math.max(b.completedAt||0,b.createdAt||0)-Math.max(a.completedAt||0,a.createdAt||0))[0];
+  return j?{id:j.operatorId,name:j.operatorName}:null;
+}
+
+// Maintenance due on the machines this operator looks after: [{machine,t,st}]
+export function myMaint(userId,machines,tasks,log,jobs){
+  const out=[];
+  (machines||[]).filter(m=>m.active&&!m.removed).forEach(m=>{
+    if(machineOperator(jobs,m.name)?.id!==userId) return;
+    machineMaint(m.name,tasks,log,jobs).filter(x=>x.st.state==="due").forEach(x=>out.push({machine:m.name,...x}));
+  });
+  return out.sort((a,b)=>(b.st.late?1:0)-(a.st.late?1:0));
+}
+
+// "forsinket 3 dage" / "skal gøres i dag" / "450 af 500 driftstimer brugt"
+export function dueText(t,st){
+  if(t.unit==="hours") return st.late?`forsinket — ${st.label}`:st.label;
+  return st.lateDays>0?`forsinket ${st.lateDays} dag${st.lateDays>1?"e":""}`:"skal gøres i dag";
 }

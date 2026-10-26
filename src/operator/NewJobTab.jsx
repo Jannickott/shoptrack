@@ -3,12 +3,13 @@ import { notify } from "../components/Feedback";
 import { C, card, inp, sel, btn, avatar, label, errMsg } from "../lib/theme";
 import { fmtDate, initials, recentCustomers, lastFinishedMachine } from "../lib/util";
 import { MyTasksList } from "../tasks/TasksTab";
+import { MaintReminder } from "../maintenance/MaintReminder";
 import { withStep } from "../tasks/taskUtil";
 
 // ═══════════════════════════════════════════════════════
 // NEW JOB
 // ═══════════════════════════════════════════════════════
-export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetId,setNewSheetFor,tasks,setTasks}){
+export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocusSheetId,setNewSheetFor,tasks,setTasks,maintItems,onOpenMaint}){
   const [customer,setCustomer]=useState(""); const [job,setJob]=useState(""); const defaultMachine=lastFinishedMachine(jobs,user.id,machines); const [machine,setMachine]=useState(defaultMachine); const [op,setOp]=useState(""); const [errs,setErrs]=useState({});
   // A task step given to this operator, being started as this job: {task,step,label}
   const [picked,setPicked]=useState(null);
@@ -86,6 +87,7 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
   };
   return(
     <div style={{padding:"14px 16px"}}>
+      <MaintReminder items={maintItems} onOpen={onOpenMaint}/>
       <MyTasksList user={user} tasks={tasks} jobs={jobs} activeTaskId={task?.id} onPick={pickTask}/>
       <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:12}}>Start nyt job</div>
       {task&&<div style={{fontSize:15,color:C.blue,marginBottom:14,background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.3)",borderRadius:8,padding:"10px 12px"}}>

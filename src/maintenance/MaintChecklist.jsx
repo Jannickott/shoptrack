@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { notify } from "../components/Feedback";
 import { C, inp, btn } from "../lib/theme";
-import { intervalLabel, machineMaint, MAINT_STATE } from "./maintUtil";
+import { intervalLabel, machineMaint, machineRunTotal, MAINT_STATE } from "./maintUtil";
 
 const when=ms=>{
   const d=new Date(ms),now=new Date();
@@ -24,7 +24,7 @@ export function MaintChecklist({machine,tasks,log,jobs,user,setMaintLog,saveNow,
   const items=machineMaint(machine,tasks,log,jobs);
   const record=(t,ok,text)=>{
     const now=Date.now();
-    setMaintLog(prev=>[...prev,{id:now+Math.floor(Math.random()*1000),taskId:t.id,machine,title:t.title,doneAt:now,by:user.name,ok,note:text||"",updatedAt:now}]);
+    setMaintLog(prev=>[...prev,{id:now+Math.floor(Math.random()*1000),taskId:t.id,machine,title:t.title,doneAt:now,by:user.name,ok,note:text||"",runTotal:machineRunTotal(jobs,machine),updatedAt:now}]);
     saveNow&&saveNow();
     notify(ok?`Vedligehold udført: ${t.title}`:`Problem registreret: ${t.title}`,ok?"ok":"warn");
   };

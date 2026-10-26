@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { AdminDash } from "./admin/AdminDash";
 import { AllJobsTab } from "./admin/AllJobsTab";
 import { MachinesAdminTab } from "./admin/MachinesAdminTab";
-import { machineMaint } from "./maintenance/maintUtil";
+import { myMaint, dueText } from "./maintenance/maintUtil";
 import { ManageTab, AdminToolsTab } from "./admin/ManageTab";
 import { ReportsTab } from "./admin/ReportsTab";
 import { notify, setSync, Toasts, SyncIndicator } from "./components/Feedback";
@@ -47,6 +47,7 @@ export default function App(){
   const [focusJob,setFocusJob]=useState(null);       // admin search → open in Alle job
   const [focusTaskId,setFocusTaskId]=useState(null); // admin search → open in Opgaver
   const [machView,setMachView]=useState("data");      // admin Maskiner: "data" or "maint" (Vedligehold)
+  const [focusMaint,setFocusMaint]=useState(null);    // operator: open this machine's maintenance checklist
   const [newSheetFor,setNewSheetFor]=useState(null); // {partNumber,machine,customer} — open a new sheet for this
   const [jobs,  setJobs]     =useState([]);
   const [users, setUsers]    =useState(INIT_USERS);
@@ -508,6 +509,16 @@ export default function App(){
     writeSession({userId:u.id,loginAt:n,tab:null});
     // (after the main screen is up — the message bar isn't there on the login screen)
     if(recentDraft) setTimeout(()=>notify("Du har et opstillingsark, der ikke er gemt — tryk Fortsæt","warn"),300);
+    // Maintenance due on the machines this operator looks after — said once at login
+    if(u.role==="operator"){
+      const s=stateRef.current;
+      const due=myMaint(u.id,s.machines,s.maintTasks,s.maintLog,(s.jobs||[]).filter(j=>!j.deleted));
+      if(due.length){
+        const first=due[0];
+        const text=`Vedligehold: ${first.t.title} på ${first.machine} — ${dueText(first.t,first.st)}${due.length>1?` (+${due.length-1} mere)`:""}`;
+        setTimeout(()=>notify(text,first.st.late?"error":"warn",9000),recentDraft?3200:300);
+      }
+    }
     saveNow();
   };
   const logout=()=>{
@@ -553,9 +564,10 @@ export default function App(){
   const taskStates=visibleTasks(tasks).map(t=>taskState(t,visibleJobs));
   const myTaskCnt=taskStates.filter(x=>x.key==="assigned"&&x.step.assignedToId===user.id).length;
   const waitingTaskCnt=taskStates.filter(x=>x.key==="waiting").length;
-  // Maintenance due on the machines this operator works on
-  const myMaintDue=user.role!=="operator"?0:machines.filter(m=>m.active&&!m.removed&&(!(user.departments||[]).length||!m.department||user.departments.includes(m.department)))
-    .reduce((n,m)=>n+machineMaint(m.name,maintTasks,maintLog,visibleJobs).filter(x=>x.st.state==="due").length,0);
+  // Maintenance due on the machines this operator looks after (running or last job there)
+  const myMaintItems=user.role!=="operator"?[]:myMaint(user.id,machines,maintTasks,maintLog,visibleJobs);
+  const myMaintDue=myMaintItems.length;
+  const openMaintFor=m=>{setFocusMaint(m);setTab("machines");};
   // A hit from the admin search opens where it lives
   const openSearchHit=(type,item)=>{
     if(type==="job"){setFocusJob(item);setTab("alljobs");}
@@ -600,7 +612,7 @@ export default function App(){
               {t==="new"&&myTaskCnt>0&&<span style={badgeStyle(C.blue)}>{myTaskCnt}</span>}
               {t==="active"&&activeCnt>0&&<span style={{background:C.amber,color:"#1a1a1a",borderRadius:20,fontSize:12,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{activeCnt}</span>}
               {t==="machines"&&Object.keys(machineIssues).length>0&&<span style={{background:C.red,color:"white",borderRadius:20,fontSize:12,padding:"1px 6px",marginLeft:6,fontWeight:700}}>{Object.keys(machineIssues).length}</span>}
-              {t==="machines"&&myMaintDue>0&&<span title="Vedligehold der skal gøres" style={badgeStyle(C.amber)}><i className="ti ti-tool"/> {myMaintDue}</span>}
+              {t==="machines"&&myMaintDue>0&&<span title="Vedligehold der skal gøres på dine maskiner" style={badgeStyle(myMaintItems.some(x=>x.st.late)?C.red:C.amber)}><i className="ti ti-tool"/> {myMaintDue}</span>}
             </button>
           ))}
         </div>
@@ -629,11 +641,11 @@ export default function App(){
 
       {/* CONTENT */}
       {user.role==="requester"?<RequesterTasksTab user={user} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} saveNow={saveNow}/>:<>
-      {tab==="new"      &&<NewJobTab         user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
+      {tab==="new"      &&<NewJobTab         maintItems={myMaintItems} onOpenMaint={openMaintFor} user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
       {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} focusTaskId={focusTaskId} setFocusTaskId={setFocusTaskId} departments={departments} setCompleteId={setCompleteId} saveNow={saveNow}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} jobs={visibleJobs} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
-      {tab==="machines" &&<MachineStatusTab  user={user} machines={machines} jobs={visibleJobs} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue} maintTasks={maintTasks} maintLog={maintLog} setMaintLog={setMaintLog} saveNow={saveNow}/>}
+      {tab==="machines" &&<MachineStatusTab  focusMaint={focusMaint} setFocusMaint={setFocusMaint} user={user} machines={machines} jobs={visibleJobs} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue} maintTasks={maintTasks} maintLog={maintLog} setMaintLog={setMaintLog} saveNow={saveNow}/>}
       {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
       {tab==="admin"    &&<AdminDash         maintTasks={maintTasks} maintLog={maintLog} onOpenMaint={()=>{setMachView("maint");setTab("machdata");}} tasks={tasks} planOrders={planOrders} setTab={setTab} onOpenJob={j=>{setFocusJob(j);setTab("alljobs");}} jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { C, card, inp, btn, badge } from "../lib/theme";
 import { fmtHM, fmtDate, liveTime } from "../lib/util";
 import { machineMaint } from "../maintenance/maintUtil";
@@ -19,8 +19,15 @@ export function jobPhase(j){
   return {label:j.twoSided?"Produktion side 1":"Produktion",color:j.nightMode?"#7c5cbf":C.green,sec:lt.run};
 }
 
-export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,resolveIssue,maintTasks,maintLog,setMaintLog,saveNow}){
-  const [openMaint,setOpenMaint]=useState(null); // machine whose maintenance checklist is open
+export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,resolveIssue,maintTasks,maintLog,setMaintLog,saveNow,focusMaint,setFocusMaint}){
+  const [openMaint,setOpenMaint]=useState(focusMaint||null); // machine whose maintenance checklist is open
+  // Opened from the reminder on Nyt job: scroll to that machine once
+  useEffect(()=>{
+    if(!focusMaint) return;
+    setOpenMaint(focusMaint);
+    const t=setTimeout(()=>{document.querySelector(`[data-machine="${focusMaint}"]`)?.scrollIntoView({behavior:"smooth",block:"start"});setFocusMaint&&setFocusMaint(null);},100);
+    return()=>clearTimeout(t);
+  },[focusMaint]);
   const [reporting,setReporting]=useState(null);
   const [issueType,setIssueType]=useState("repair");
   const [note,setNote]=useState("");
@@ -43,7 +50,7 @@ export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,r
         const isReporting=reporting===m.name;
         const onMachine=(jobs||[]).filter(j=>j.machine===m.name&&j.status!=="done");
         return(
-          <div key={m.id} style={card(issue?(issue.status==="down"?C.red:C.amber):C.green)}>
+          <div key={m.id} data-machine={m.name} style={card(issue?(issue.status==="down"?C.red:C.amber):C.green)}>
             <div style={{display:"flex",alignItems:"center",gap:12}}>
               <div style={{width:38,height:38,borderRadius:8,background:C.raised,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
                 <i className="ti ti-robot" style={{fontSize:20,color:issue?(issue.status==="down"?C.red:C.amber):C.green}}/>
