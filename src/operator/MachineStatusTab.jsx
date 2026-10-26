@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { C, card, inp, btn, badge } from "../lib/theme";
 import { fmtHM, fmtDate, liveTime } from "../lib/util";
+import { machineMaint } from "../maintenance/maintUtil";
+import { MaintChecklist, maintSummary } from "../maintenance/MaintChecklist";
 
 // ═══════════════════════════════════════════════════════
 // MACHINE STATUS (operator)
@@ -17,7 +19,8 @@ export function jobPhase(j){
   return {label:j.twoSided?"Produktion side 1":"Produktion",color:j.nightMode?"#7c5cbf":C.green,sec:lt.run};
 }
 
-export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,resolveIssue}){
+export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,resolveIssue,maintTasks,maintLog,setMaintLog,saveNow}){
+  const [openMaint,setOpenMaint]=useState(null); // machine whose maintenance checklist is open
   const [reporting,setReporting]=useState(null);
   const [issueType,setIssueType]=useState("repair");
   const [note,setNote]=useState("");
@@ -82,6 +85,23 @@ export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,r
                 <div>Meldt af <span style={{color:C.text}}>{issue.reportedBy}</span> · {fmtDate(issue.reportedAt)}</div>
               </div>
             )}
+            {/* Maintenance (ISO 9001) — what the admin has set up for this machine */}
+            {(()=>{
+              const items=machineMaint(m.name,maintTasks,maintLog,jobs);
+              if(!items.length) return null;
+              const s=maintSummary(items),open=openMaint===m.name;
+              return(
+                <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`}}>
+                  <button style={{...btn("outline",true,true),justifyContent:"space-between",borderColor:s.due?C.amber:C.border,color:s.due?C.amber:C.text}} onClick={()=>setOpenMaint(open?null:m.name)}>
+                    <span><i className="ti ti-tool"/> Vedligehold</span>
+                    <span>{s.due?`${s.due} skal gøres`:"Alt udført ✓"} <i className={`ti ti-chevron-${open?"up":"down"}`}/></span>
+                  </button>
+                  {open&&<div style={{marginTop:6}}>
+                    <MaintChecklist machine={m.name} tasks={maintTasks} log={maintLog} jobs={jobs} user={user} setMaintLog={setMaintLog} saveNow={saveNow} onReportFault={(mn,txt)=>reportIssue(mn,"repair",txt)}/>
+                  </div>}
+                </div>
+              );
+            })()}
             {isReporting&&(
               <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
                 <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:10}}>Hvad er galt?</div>

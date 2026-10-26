@@ -3,6 +3,7 @@ import { C, card, badge, th, td, tag, btn } from "../lib/theme";
 import { fmtHM, fmtDate, toDateInput, jRunAll, jSetupAll, liveTime, calcAvailableWorkSec } from "../lib/util";
 import { jobProgress, normPart } from "../planning/planEngine";
 import { visibleTasks, taskState } from "../tasks/taskUtil";
+import { machineMaint } from "../maintenance/maintUtil";
 
 // ═══════════════════════════════════════════════════════
 // ADMIN DASHBOARD
@@ -122,7 +123,7 @@ const Title=({children,color=C.muted,right})=>(
 );
 const PHASE={setup:["Opstilling",C.amber],side2_setup:["Opstilling S2",C.blue],run:["Produktion",C.green],side2_run:["Produktion S2",C.blue],deburring:["Afgratning",C.deburr]};
 
-export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficiencyGoals,workHours,tasks,planOrders,setTab,onOpenJob}){
+export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficiencyGoals,workHours,tasks,planOrders,setTab,onOpenJob,maintTasks,maintLog,onOpenMaint}){
   const [period,setPeriod]=useState("week");
   const [srv,setSrv]=useState(null);
   useEffect(()=>{
@@ -154,6 +155,7 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
   const issueEntries=Object.entries(machineIssues);
   const toOrder=(tools||[]).filter(t=>t.active&&t.quantity<=(t.minQuantity||0)&&!t.ordered);
   const waitingTasks=visibleTasks(tasks).filter(t=>taskState(t,jobs).key==="waiting");
+  const maintDue=machines.filter(m=>m.active&&!m.removed).map(m=>({m,n:machineMaint(m.name,maintTasks,maintLog,jobs).filter(x=>x.st.state==="due").length})).filter(x=>x.n);
   const noCount=running.filter(j=>(j.status==="run"||j.status==="side2_run")&&(j.createdAt||0)<todayStart&&!progress[j.id]?.countedToday);
   const longSetup=running.filter(j=>{const lt=liveTime(j);return (j.status==="setup"&&lt.setup>8*3600)||(j.status==="side2_setup"&&lt.setup2>8*3600);});
   const srvProblem=srv&&(()=>{
@@ -168,6 +170,7 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
     issueEntries.length&&{color:C.red,icon:"alert-triangle",text:`${issueEntries.length} maskine${issueEntries.length>1?"r":""} nede eller til reparation: ${issueEntries.map(([n])=>n).join(", ")}`,tab:"alljobs"},
     lateJobs.length&&{color:C.red,icon:"alarm",text:`${lateJobs.length} job bliver ikke færdig${lateJobs.length>1?"e":""} til leveringsdatoen: ${lateJobs.map(j=>j.job).join(", ")}`,tab:"planning"},
     srvProblem&&{color:C.red,icon:"server",text:`Server: ${srvProblem} — se Administration → Server`,tab:"manage"},
+    maintDue.length&&{color:C.amber,icon:"tool",text:`Vedligehold skal gøres: ${maintDue.map(x=>`${x.m.name} (${x.n})`).join(", ")}`,go:onOpenMaint},
     waitingTasks.length&&{color:C.amber,icon:"clipboard-check",text:`${waitingTasks.length} opgave${waitingTasks.length>1?"r":""} venter på at blive givet til en operatør`,tab:"tasks"},
     toOrder.length&&{color:C.amber,icon:"package",text:`${toOrder.length} værktøj skal bestilles: ${toOrder.slice(0,3).map(t=>t.name).join(", ")}${toOrder.length>3?" …":""}`,tab:"admintools"},
     longSetup.length&&{color:C.amber,icon:"clock-exclamation",text:`${longSetup.length} job har stået i opstilling i over 8 timer — glemt at trykke Start produktion? ${longSetup.map(j=>j.machine).join(", ")}`,tab:"alljobs"},
@@ -240,7 +243,7 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
               <div key={i} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",borderTop:i?`1px solid ${C.border}`:"none"}}>
                 <i className={`ti ti-${a.icon}`} style={{fontSize:22,color:a.color,flexShrink:0}}/>
                 <span style={{flex:1,fontSize:15,color:a.color===C.muted?C.muted:C.text}}>{a.text}</span>
-                <button style={btn("outline",false,true)} onClick={()=>setTab(a.tab)}>Vis <i className="ti ti-arrow-right"/></button>
+                <button style={btn("outline",false,true)} onClick={()=>a.go?a.go():setTab(a.tab)}>Vis <i className="ti ti-arrow-right"/></button>
               </div>
             ))}
           </>}

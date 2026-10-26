@@ -471,6 +471,9 @@ function mergeAndWrite(incoming) {
   merged.planOrders    = unionById(server.planOrders, incoming.planOrders);
   // Tasks (Opgaver): same rule — per task, newest updatedAt wins (deleting sets deleted:true)
   merged.tasks         = unionById(server.tasks, incoming.tasks);
+  // Maintenance (Vedligehold): points per machine + the record of every check — same rule
+  merged.maintTasks    = unionById(server.maintTasks, incoming.maintTasks);
+  merged.maintLog      = unionById(server.maintLog, incoming.maintLog);
   merged.machineIssues = mergeIssues(server.machineIssues, incoming.machineIssues, merged.downtimeLog);
 
   merged.settingsVersion = Math.max(serverSV, incomingSV);
