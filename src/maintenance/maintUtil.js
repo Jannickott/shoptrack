@@ -9,14 +9,45 @@ import { liveTime } from "../lib/util";
 // Both are merged by id on the server (newest updatedAt wins), like planning orders.
 // ═══════════════════════════════════════════════════════
 const DAY=86400000;
-export const UNITS=[["day","Dage"],["week","Uger"],["month","Måneder"],["hours","Driftstimer"]];
+export const UNITS=[["day","Dage"],["week","Uger"],["month","Måneder"],["year","År"],["hours","Driftstimer"]];
+// A fixed day (optional): task.weekday 0–6 (søndag=0) for weeks, task.monthDay 1–31 for
+// months (31 = last day in shorter months), task.yearDate "MM-DD" for years
+export const WEEKDAYS=["søndag","mandag","tirsdag","onsdag","torsdag","fredag","lørdag"];
+const MONTHS=["januar","februar","marts","april","maj","juni","juli","august","september","oktober","november","december"];
+const hasFixedDay=t=>(t.unit==="week"&&t.weekday!=null&&t.weekday!=="")||(t.unit==="month"&&!!t.monthDay)||(t.unit==="year"&&!!t.yearDate);
 
 export function intervalLabel(t){
   const n=Number(t.every)||1;
   if(t.unit==="hours") return `Hver ${n}. driftstime`;
-  if(t.unit==="week") return n===1?"Hver uge":`Hver ${n}. uge`;
-  if(t.unit==="month") return n===1?"Hver måned":`Hver ${n}. måned`;
+  if(t.unit==="week"){
+    if(hasFixedDay(t)) return n===1?`Hver ${WEEKDAYS[t.weekday]}`:`Hver ${n}. ${WEEKDAYS[t.weekday]}`;
+    return n===1?"Hver uge":`Hver ${n}. uge`;
+  }
+  if(t.unit==="month"){
+    if(hasFixedDay(t)) return n===1?`Den ${t.monthDay}. i hver måned`:`Den ${t.monthDay}. hver ${n}. måned`;
+    return n===1?"Hver måned":`Hver ${n}. måned`;
+  }
+  if(t.unit==="year"){
+    const [mm,dd]=(t.yearDate||"").split("-").map(Number);
+    const on=hasFixedDay(t)?` d. ${dd}. ${MONTHS[mm-1]}`:"";
+    return (n===1?"Hvert år":`Hvert ${n}. år`)+on;
+  }
   return n===1?"Hver dag":`Hver ${n}. dag`;
+}
+
+// First date on or after `from` (a day start) that is the task's fixed day
+function firstFixedDay(t,from){
+  const d=new Date(from);
+  if(t.unit==="week"){while(d.getDay()!==Number(t.weekday))d.setDate(d.getDate()+1);return d;}
+  if(t.unit==="month"){
+    const dayIn=x=>Math.min(Number(t.monthDay),new Date(x.getFullYear(),x.getMonth()+1,0).getDate());
+    if(d.getDate()>dayIn(d)){d.setDate(1);d.setMonth(d.getMonth()+1);}
+    d.setDate(dayIn(d));return d;
+  }
+  const [mm,dd]=t.yearDate.split("-").map(Number);
+  let c=new Date(d.getFullYear(),mm-1,dd);
+  if(c<d) c=new Date(d.getFullYear()+1,mm-1,dd);
+  return c;
 }
 
 export const visibleMaint=list=>(list||[]).filter(x=>!x.deleted);
@@ -44,12 +75,24 @@ export function maintStatus(task,log,jobs,now=Date.now()){
     const state=!last||used>=n?"due":used>=n*0.9?"soon":"ok";
     return {state,last,used,label:`${Math.floor(used)} af ${n} driftstimer brugt`};
   }
-  // Calendar: due from the start of the day the interval runs out (never done → due now)
+  // Calendar: due from the start of the day the interval runs out (never done → due now).
+  // With a fixed day: the next such day after the last check (never done → the first one).
   let next;
-  if(!last) next=new Date(task.createdAt||now).setHours(0,0,0,0);
+  if(hasFixedDay(task)){
+    const from=new Date(last?last.doneAt:(task.createdAt||now));from.setHours(0,0,0,0);
+    if(last) from.setDate(from.getDate()+1);
+    const d=firstFixedDay(task,from);
+    if(last&&n>1){
+      if(task.unit==="week") d.setDate(d.getDate()+7*(n-1));
+      else if(task.unit==="month"){d.setDate(1);d.setMonth(d.getMonth()+n-1);next=firstFixedDay(task,d).getTime();}
+      else d.setFullYear(d.getFullYear()+n-1);
+    }
+    if(next==null) next=d.getTime();
+  }else if(!last) next=new Date(task.createdAt||now).setHours(0,0,0,0);
   else{
     const d=new Date(last.doneAt);d.setHours(0,0,0,0);
     if(task.unit==="month") d.setMonth(d.getMonth()+n);
+    else if(task.unit==="year") d.setFullYear(d.getFullYear()+n);
     else d.setDate(d.getDate()+(task.unit==="week"?7*n:n));
     next=d.getTime();
   }

@@ -1,25 +1,30 @@
 import { useState } from "react";
 import { notify } from "../components/Feedback";
 import { C, card, inp, sel, btn, tag, label, errMsg, th, td } from "../lib/theme";
-import { UNITS, intervalLabel, visibleMaint, machineMaint, MAINT_STATE } from "./maintUtil";
+import { UNITS, WEEKDAYS, intervalLabel, visibleMaint, machineMaint, MAINT_STATE } from "./maintUtil";
 import { MaintChecklist, maintSummary } from "./MaintChecklist";
 
 const dayInput=ms=>{const d=new Date(ms);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;};
 
 // New / edit a maintenance point. A new one can be put on several machines at once.
-function MaintForm({task,machine,machines,onSave,onCancel}){
+export function MaintForm({task,machine,machines,onSave,onCancel}){
   const [title,setTitle]=useState(task?.title||"");
   const [description,setDescription]=useState(task?.description||"");
   const [every,setEvery]=useState(String(task?.every||1));
   const [unit,setUnit]=useState(task?.unit||"day");
   const [on,setOn]=useState(task?[task.machine]:[machine]);
+  // Optional fixed day: weekday (0–6), day of month (1–31) or a date each year ("MM-DD")
+  const [weekday,setWeekday]=useState(task?.weekday!=null?String(task.weekday):"");
+  const [monthDay,setMonthDay]=useState(task?.monthDay?String(task.monthDay):"");
+  const [yearDate,setYearDate]=useState(task?.yearDate?`${new Date().getFullYear()}-${task.yearDate}`:"");
   const [err,setErr]=useState("");
+  const fixed={weekday:unit==="week"&&weekday!==""?Number(weekday):null,monthDay:unit==="month"&&monthDay?Number(monthDay):null,yearDate:unit==="year"&&yearDate?yearDate.slice(5):null};
   const save=()=>{
     if(!title.trim()){setErr("Skriv hvad der skal tjekkes");return;}
     const n=parseInt(every,10);
     if(!n||n<1){setErr("Hvor ofte skal være mindst 1");return;}
     if(!on.length){setErr("Vælg mindst én maskine");return;}
-    onSave({title:title.trim(),description:description.trim(),every:n,unit},on);
+    onSave({title:title.trim(),description:description.trim(),every:n,unit,...fixed},on);
   };
   return(
     <div style={{...card(),border:`1px solid ${C.amber}`,marginBottom:12}}>
@@ -31,8 +36,37 @@ function MaintForm({task,machine,machines,onSave,onCancel}){
         <span style={{fontSize:15,color:C.text}}>Hver</span>
         <input inputMode="numeric" style={{...inp(),width:90,textAlign:"center"}} value={every} onChange={e=>{setEvery(e.target.value.replace(/\D/g,""));setErr("");}}/>
         <select style={{...sel(),width:"auto",minWidth:150}} value={unit} onChange={e=>setUnit(e.target.value)}>{UNITS.map(([k,l])=><option key={k} value={k}>{l.toLowerCase()}</option>)}</select>
-        <span style={{fontSize:14,color:C.muted}}>= {intervalLabel({every:parseInt(every,10)||1,unit})}</span>
+        <span style={{fontSize:14,color:C.muted}}>= {intervalLabel({every:parseInt(every,10)||1,unit,...fixed})}</span>
       </div>
+      {unit==="week"&&(
+        <div style={{marginBottom:10}}>
+          <label style={label}>På en bestemt dag</label>
+          <select style={{...sel(),width:"auto",minWidth:200}} value={weekday} onChange={e=>setWeekday(e.target.value)}>
+            <option value="">Ingen fast dag — en uge efter sidst</option>
+            {[1,2,3,4,5,6,0].map(d=><option key={d} value={d}>{WEEKDAYS[d][0].toUpperCase()+WEEKDAYS[d].slice(1)}</option>)}
+          </select>
+        </div>
+      )}
+      {unit==="month"&&(
+        <div style={{marginBottom:10}}>
+          <label style={label}>På en bestemt dato</label>
+          <select style={{...sel(),width:"auto",minWidth:200}} value={monthDay} onChange={e=>setMonthDay(e.target.value)}>
+            <option value="">Ingen fast dato — en måned efter sidst</option>
+            {[...Array(31)].map((_,i)=><option key={i+1} value={i+1}>Den {i+1}.{i+1===31?" (sidste dag i måneden)":""}</option>)}
+          </select>
+        </div>
+      )}
+      {unit==="year"&&(
+        <div style={{marginBottom:10}}>
+          <label style={label}>På en bestemt dato (valgfrit)</label>
+          <div style={{display:"flex",gap:8,alignItems:"center"}}>
+            <input type="date" style={{...inp(),width:"auto"}} value={yearDate} onChange={e=>setYearDate(e.target.value)}/>
+            {yearDate&&<button style={btn("outline",false,true)} onClick={()=>setYearDate("")}>Ingen fast dato</button>}
+          </div>
+          <div style={{fontSize:13,color:C.muted,marginTop:4}}>Kun dag og måned bruges — den gentages hvert år.</div>
+        </div>
+      )}
+      {(fixed.weekday!=null||fixed.monthDay||fixed.yearDate)&&<div style={{fontSize:13,color:C.muted,marginBottom:10}}>Punktet skal først gøres på dagen. Bliver det gjort for sent, er næste gang stadig på den faste dag.</div>}
       {unit==="hours"&&<div style={{fontSize:13,color:C.muted,marginBottom:10}}>Driftstimer = maskinens produktionstid i ShopTrack siden punktet sidst blev udført.</div>}
       {!task&&(
         <>
