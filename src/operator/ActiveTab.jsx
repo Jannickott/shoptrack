@@ -3,13 +3,30 @@ import { notify } from "../components/Feedback";
 import { C, inp, btn, badge, tag } from "../lib/theme";
 import { fmtHM, fmtDetail, liveTime } from "../lib/util";
 import { StartRunModal } from "./JobModals";
-import { jobToolWarnings } from "../tools/toolLife";
+import { jobToolWarnings, sheetsOfJob } from "../tools/toolLife";
+import { findNewDraft } from "../setupsheets/sheetDraft";
 import { ToolLifeRow } from "../tools/ToolLifeRow";
 
 // ═══════════════════════════════════════════════════════
 // ACTIVE
 // ═══════════════════════════════════════════════════════
-export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,pauseJob,resumeJob,life}){
+// The job's setup sheet: open it — or, when there is none yet, make it (or continue the
+// unsaved one). So a sheet can be filled in later, after the job is started.
+function SheetButton({j,nav}){
+  if(!nav||j.taskId) return null;
+  const sheet=sheetsOfJob(j,nav.sheets)[0];
+  if(sheet) return(
+    <button style={{...btn("outline",true,true),fontSize:14}} onClick={()=>nav.open(sheet.id)}><i className="ti ti-clipboard-list"/> Opstillingsark</button>
+  );
+  const draft=nav.userId!=null&&findNewDraft(nav.userId,j.job,j.machine);
+  return(
+    <button style={{...btn("outline",true,true),fontSize:14,borderColor:C.amber,color:C.amber}} onClick={()=>nav.create(j)}>
+      <i className={`ti ti-${draft?"pencil":"clipboard-plus"}`}/> {draft?"Fortsæt opstillingsark (ikke gemt)":"Lav opstillingsark"}
+    </button>
+  );
+}
+
+export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,pauseJob,resumeJob,life,sheetNav}){
     // Tools on this job's setup sheet that are nearly or fully used up (tool life)
     const toolWarns=life?jobToolWarnings(j,life.ctx):[];
     const [nmForm,setNmForm]=useState(false);
@@ -54,6 +71,7 @@ export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,paus
         {j.customer&&<div style={{fontSize:20,color:C.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.customer}</div>}
         <div style={{fontSize:14,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><i className="ti ti-hash"/> {j.job}</div>
         {j.op&&<div style={{fontSize:13,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.op}</div>}
+        <SheetButton j={j} nav={sheetNav}/>
         {j.paused&&<div style={{background:"rgba(231,76,60,0.12)",borderRadius:6,padding:"6px 8px",fontSize:13,color:C.red}}><i className="ti ti-player-pause"/> Tiduret er på pause — maskinen er nede</div>}
         {j.logoutPaused&&!j.nightModeDone&&!j.operatorPaused&&<div style={{background:"rgba(138,155,181,0.1)",borderRadius:6,padding:"6px 8px",fontSize:13,color:C.muted}}><i className="ti ti-moon"/> Tiduret er på pause — operatøren er væk</div>}
         {j.logoutPaused&&j.nightModeDone&&<div style={{background:"rgba(124,92,191,0.12)",borderRadius:6,padding:"6px 8px",fontSize:13,color:nightColor}}><i className="ti ti-moon-stars"/> Natkørsel færdig — fortsætter når du logger ind</div>}
@@ -196,7 +214,7 @@ export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,paus
     );
 }
 
-export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef,life}){
+export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef,life,sheetNav}){
   const [machineFilt,setMachineFilt]=useState("all");
   const [startRunId,setStartRunId]=useState(null);
   const active=jobs.filter(j=>j.status!=="done"&&j.operatorId===user.id);
@@ -261,7 +279,7 @@ export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef,life
             <i className="ti ti-tool"/> Afgratning · {deburJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {deburJobs.map(j=><JobCard key={j.id} life={life} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
+            {deburJobs.map(j=><JobCard key={j.id} life={life} sheetNav={sheetNav} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}
@@ -271,7 +289,7 @@ export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef,life
             <i className="ti ti-settings"/> Opstilling · {setupJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {setupJobs.map(j=><JobCard key={j.id} life={life} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
+            {setupJobs.map(j=><JobCard key={j.id} life={life} sheetNav={sheetNav} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}
@@ -281,7 +299,7 @@ export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef,life
             <i className="ti ti-player-play"/> Produktion · {runJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            {runJobs.map(j=><JobCard key={j.id} life={life} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
+            {runJobs.map(j=><JobCard key={j.id} life={life} sheetNav={sheetNav} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}

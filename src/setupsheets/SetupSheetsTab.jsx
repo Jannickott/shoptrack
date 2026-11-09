@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
-import { loadDraft, listDrafts, clearDraft } from "./sheetDraft";
+import { loadDraft, listDrafts, clearDraft, findNewDraft, isNewDraft } from "./sheetDraft";
 import { notify } from "../components/Feedback";
 import { C, inp, btn } from "../lib/theme";
 import { fmtDate } from "../lib/util";
@@ -18,18 +18,21 @@ export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,sa
   // Unsaved work to continue (sheetDraft.js) — picked when the form opens
   const [resume,setResume]=useState(null);
   const [draftsVer,setDraftsVer]=useState(0);
+  const [draftKey,setDraftKey]=useState(null); // where the open form keeps its draft
   const [discardKey,setDiscardKey]=useState(null);
   const openEdit=(sheetId,draft)=>{
     setSelectedId(sheetId);setPrefill(null);
-    setResume(draft!==undefined?draft:loadDraft(user?.id,sheetId));
+    // A brand-new sheet starts empty — unsaved ones are listed at the top of the list
+    const d=draft!==undefined?draft:sheetId!=null?loadDraft(user?.id,sheetId):null;
+    setResume(d);setDraftKey(d?d.sheetId:sheetId??`new-${Date.now()}`);
     setView("edit");
   };
   const drafts=useMemo(()=>view==="list"&&user?listDrafts(user.id):[],[view,draftsVer,user]);
   const discard=d=>{clearDraft(user.id,d.sheetId);setDiscardKey(null);setDraftsVer(v=>v+1);notify("Kladde kasseret","warn");};
   useEffect(()=>{if(newSheetFor){
     // A draft of a new sheet only belongs here if it is for the same part
-    const d=loadDraft(user?.id,null);
-    setSelectedId(null);setPrefill(newSheetFor);setResume(d&&d.form.partNumber===newSheetFor.partNumber?d:null);setView("edit");setNewSheetFor&&setNewSheetFor(null);
+    const d=findNewDraft(user?.id,newSheetFor.partNumber,newSheetFor.machine);
+    setSelectedId(null);setPrefill(newSheetFor);setResume(d);setDraftKey(d?d.sheetId:`new-${Date.now()}`);setView("edit");setNewSheetFor&&setNewSheetFor(null);
   }},[newSheetFor]);
   const [search,setSearch]=useState("");
   const [deptFilt,setDeptFilt]=useState("all");
@@ -124,7 +127,7 @@ export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,sa
   // Compute dept-specific params for the form
   const sheetDept=selected?(machines||[]).find(m=>m.name===selected.machine)?.department||"":"";
   const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
-  if(view==="edit") return(<SetupSheetForm sheet={selected} prefill={selected?null:prefill} draft={resume} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setResume(null);setDraftsVer(v=>v+1);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet,selected);setPrefill(null);setResume(null);setDraftsVer(v=>v+1);notify("Opstillingsark gemt");setSelectedId(sheet.id);setView("detail");}}/>);
+  if(view==="edit") return(<SetupSheetForm draftKey={draftKey} sheet={selected} prefill={selected?null:prefill} draft={resume} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setResume(null);setDraftsVer(v=>v+1);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet,selected);setPrefill(null);setResume(null);setDraftsVer(v=>v+1);notify("Opstillingsark gemt");setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
   if(view==="detail"&&selected) return(<SetupSheetDetail prep={prep} isAdmin={user?.role==="admin"} sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>openEdit(selected.id)} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).map(s=>s.id===selected.id?{...s,deleted:true,updatedAt:Date.now()}:s));archivePdf(selected);setView("list");setSelectedId(null);}}/>);
   return(
@@ -140,14 +143,15 @@ export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,sa
       {/* Unsaved work — left behind by a reload, a logout or leaving the app */}
       {drafts.map(d=>{
         const k=String(d.sheetId??"new");
-        const exists=d.sheetId==null||(setupSheets||[]).some(s=>s.id===d.sheetId);
+        const isNew=isNewDraft(d);
+        const exists=!isNew&&(setupSheets||[]).some(s=>s.id===d.sheetId);
         return(
           <div key={k} style={{background:"rgba(240,165,0,.08)",border:`1px solid ${C.amber}`,borderRadius:10,padding:"12px 14px",marginBottom:12}}>
             <div style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
               <i className="ti ti-file-alert" style={{fontSize:26,color:C.amber}}/>
               <div style={{flex:1,minWidth:200}}>
                 <div style={{fontSize:16,fontWeight:700,color:C.text}}>Ikke gemt: {d.form.partNumber||"nyt ark"}{d.form.machine?` · ${d.form.machine}`:""}</div>
-                <div style={{fontSize:14,color:C.muted}}>{d.sheetId==null?"Nyt opstillingsark":"Ændringer i et opstillingsark"} · skrevet {new Date(d.savedAt).toLocaleString("da-DK",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
+                <div style={{fontSize:14,color:C.muted}}>{isNew?"Nyt opstillingsark":"Ændringer i et opstillingsark"} · skrevet {new Date(d.savedAt).toLocaleString("da-DK",{day:"numeric",month:"short",hour:"2-digit",minute:"2-digit"})}</div>
               </div>
               {discardKey!==k&&<>
                 <button style={btn("primary",false,true)} onClick={()=>openEdit(exists?d.sheetId:null,d)}><i className="ti ti-pencil"/> Fortsæt</button>

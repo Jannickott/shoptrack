@@ -6,7 +6,7 @@ import { ToolPickerField } from "../tools/ToolPicker";
 import { ERIKS_BLANK, UnusedCross } from "./SetupSheetDetail";
 import { resizeImage } from "../lib/api";
 
-export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
+export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
   const MZ_BLANK={fraesForlaenger:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneafstand:"",emneUdhaeng:"",pinoldokUdhaeng:""};
@@ -20,7 +20,7 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
   const [baseline,setBaseline]=useState(()=>JSON.stringify(init)); // "nothing typed yet" — no draft needed
   const [restored,setRestored]=useState(draft||null);
   const [photosDropped,setPhotosDropped]=useState(false);
-  const draftId=sheet?.id??null;
+  const draftId=draftKey!==undefined?draftKey:(sheet?.id??null);
   // Keep a draft on the tablet while typing — and at once when the app is left
   const formRef=useRef(form); formRef.current=form;
   const keepDraft=()=>{const f=formRef.current;if(JSON.stringify(f)!==baseline)setPhotosDropped(!saveDraft(user.id,draftId,f));};
@@ -550,6 +550,11 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
         <button style={{...btn("outline",false,true),padding:"8px 12px",flexShrink:0}} onClick={onBack}><i className="ti ti-arrow-left"/></button>
         <div style={{fontSize:15,color:C.amber,letterSpacing:2,textTransform:"uppercase"}}>{sheet?"Rediger opstillingsark":"Nyt opstillingsark"}</div>
       </div>
+      {prefill&&!sheet&&!restored&&(
+        <div style={{background:"rgba(59,130,246,.08)",border:"1px solid rgba(59,130,246,.35)",borderRadius:10,padding:"10px 14px",marginBottom:16,fontSize:14,color:C.text,lineHeight:1.5}}>
+          <i className="ti ti-info-circle" style={{color:C.blue}}/> Arket er først gemt, når du trykker <b>Gem</b> nederst. Vil du hellere udfylde det senere, så gå bare videre — tryk <b>Lav opstillingsark</b> på jobkortet under Aktive, når du er klar.
+        </div>
+      )}
       {restored&&(
         <div style={{background:"rgba(39,174,96,.08)",border:"1px solid rgba(39,174,96,.4)",borderRadius:10,padding:"12px 14px",marginBottom:16,fontSize:15,color:C.text,lineHeight:1.5,display:"flex",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <div style={{flex:1,minWidth:220}}>

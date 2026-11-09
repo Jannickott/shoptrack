@@ -43,6 +43,15 @@ export function saveDraft(userId,sheetId,form){
   }
 }
 
+// New sheets get their own key ("new-<time>"), so two unsaved new sheets don't overwrite each other.
+// Old drafts saved under plain "new" have sheetId null.
+export const isNewDraft=d=>d.sheetId==null||String(d.sheetId).startsWith("new");
+const norm=s=>String(s||"").trim().toLowerCase();
+// The unsaved new sheet for this drawing number on this machine, if there is one
+export function findNewDraft(userId,partNumber,machine){
+  return listDrafts(userId).find(d=>isNewDraft(d)&&norm(d.form.partNumber)===norm(partNumber)&&(!d.form.machine||!machine||d.form.machine===machine))||null;
+}
+
 export function clearDraft(userId,sheetId){
   try{localStorage.removeItem(keyOf(userId,sheetId));}catch{/* storage not available */}
 }
