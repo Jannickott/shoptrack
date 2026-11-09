@@ -112,16 +112,21 @@ export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,sa
     if(stateRef) stateRef.current={...stateRef.current,setupSheets:updated};
     openEdit(now,null);
   };
-  const backupPdf=async(sheet)=>{
-    try{await fetch("/api/setupsheet-pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheet})});}
+  // The server keeps a PDF of the newest version; the old one goes to the history (admin only)
+  const backupPdf=async(sheet,prev)=>{
+    try{await fetch("/api/setupsheet-pdf",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheet,prev:prev||null,by:user?.name||""})});}
+    catch{}
+  };
+  const archivePdf=async(sheet)=>{
+    try{await fetch("/api/setupsheet-pdf-delete",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({sheet:{id:sheet.id,partNumber:sheet.partNumber,machine:sheet.machine},by:user?.name||""})});}
     catch{}
   };
   // Compute dept-specific params for the form
   const sheetDept=selected?(machines||[]).find(m=>m.name===selected.machine)?.department||"":"";
   const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
-  if(view==="edit") return(<SetupSheetForm sheet={selected} prefill={selected?null:prefill} draft={resume} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setResume(null);setDraftsVer(v=>v+1);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setPrefill(null);setResume(null);setDraftsVer(v=>v+1);notify("Opstillingsark gemt");setSelectedId(sheet.id);setView("detail");}}/>);
+  if(view==="edit") return(<SetupSheetForm sheet={selected} prefill={selected?null:prefill} draft={resume} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setResume(null);setDraftsVer(v=>v+1);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet,selected);setPrefill(null);setResume(null);setDraftsVer(v=>v+1);notify("Opstillingsark gemt");setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
-  if(view==="detail"&&selected) return(<SetupSheetDetail prep={prep} sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>openEdit(selected.id)} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).map(s=>s.id===selected.id?{...s,deleted:true,updatedAt:Date.now()}:s));setView("list");setSelectedId(null);}}/>);
+  if(view==="detail"&&selected) return(<SetupSheetDetail prep={prep} isAdmin={user?.role==="admin"} sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>openEdit(selected.id)} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).map(s=>s.id===selected.id?{...s,deleted:true,updatedAt:Date.now()}:s));archivePdf(selected);setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>

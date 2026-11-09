@@ -2,11 +2,12 @@ import { useState } from "react";
 import { C, btn } from "../lib/theme";
 import { PdfDrawings } from "../components/PdfDrawings";
 import { PrepareTools } from "./PrepareTools";
+import { SheetHistory } from "./SheetHistory";
 
 // Blank Eriks/150 setup values — used by both the detail view and the form
 export const ERIKS_BLANK={mn:"",z:"",beta:"",dk:"",uo:"",df:"",fraeserDia:"",fraesLagerLinks:"",fraesLagerRechts:"",fraesLag3:"",fraesLag4:"",richtung:"Gegenlauf",differential:"ausgerastet",zahnzahl:"",zahnzahlRatio:"",zahnD:"",zahnZw:"",zahnC:"",zahnB:"",zahnA:"",steigung:"",steigA:"",steigZw:"",steigB:"",steigC:"",steigD:"",fraesDrehzahl:"",fraesA:"",fraesB:"",fraesC:"",fraesD:"",laengs:"",laengsA:"",laengsB:"",laengsC:"",laengsZw:"",laengsD:"",schalterA2:"",schalterA3:"",schalterA4:"",schalterA5:"",tauchsteuerung:"",eingang:"m. Zwischenrad",stckStd:"",stckSpannung:""};
 
-export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool,onDuplicate,prep}){
+export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool,onDuplicate,prep,isAdmin}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const [lightboxPhoto,setLightboxPhoto]=useState(null);
   const [mzDetOpen,setMzDetOpen]=useState({schnecke:false,werkstuck:false,entgraten:false});
@@ -370,6 +371,7 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
           </div>}
         </div>);
       })()}
+      {isAdmin&&<SheetHistory sheetId={sheet.id}/>}
       <div style={{borderTop:`1px solid ${C.border}`,paddingTop:14,display:"flex",flexDirection:"column",gap:8}}>
         <button style={btn("primary",true)} onClick={printPdf}><i className="ti ti-file-type-pdf"/> Eksporter PDF</button>
         <button style={btn("outline",true)} onClick={onEdit}><i className="ti ti-edit"/> Rediger opstillingsark</button>
@@ -377,7 +379,7 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
         {!deleteConfirmSS
           ?<button style={{...btn("outline",true),borderColor:"rgba(231,76,60,.4)",color:C.red}} onClick={()=>setDeleteConfirmSS(true)}><i className="ti ti-trash"/> Slet</button>
           :<div style={{background:"rgba(231,76,60,.1)",border:`1px solid ${C.red}`,borderRadius:8,padding:"10px 12px"}}>
-            <div style={{fontSize:14,color:C.red,marginBottom:10,fontWeight:600}}>Slet "{sheet.partNumber}" on {sheet.machine}?</div>
+            <div style={{fontSize:14,color:C.red,marginBottom:10,fontWeight:600}}>Slet "{sheet.partNumber}" på {sheet.machine}?</div>
             <div style={{display:"flex",gap:8}}>
               <button style={{...btn("danger",false,false),flex:1}} onClick={onDelete}><i className="ti ti-trash"/> Ja, slet</button>
               <button style={btn("outline",false,true)} onClick={()=>setDeleteConfirmSS(false)}>Annuller</button>

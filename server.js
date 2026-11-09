@@ -88,7 +88,8 @@ function mirrorDir(src, dst) {
   for (const e of fs.readdirSync(src, { withFileTypes: true })) {
     const s = path.join(src, e.name), d = path.join(dst, e.name);
     if (e.isDirectory()) copied += mirrorDir(s, d);
-    else if (!fs.existsSync(d) || fs.statSync(d).size !== fs.statSync(s).size) { fs.copyFileSync(s, d); copied++; }
+    else if (e.name.endsWith(".tmp")) continue;
+    else if (!fs.existsSync(d) || fs.statSync(d).size !== fs.statSync(s).size || fs.statSync(s).mtimeMs > fs.statSync(d).mtimeMs + 1000) { fs.copyFileSync(s, d); copied++; }
   }
   return copied;
 }
@@ -107,7 +108,8 @@ function copyBackupElsewhere() {
     const all = fs.readdirSync(bdir).filter(f => f.startsWith("shoptrack-data-") && f.endsWith(".json")).sort();
     all.slice(0, Math.max(0, all.length - 180)).forEach(f => fs.unlinkSync(path.join(bdir, f)));
     const photos = mirrorDir(PHOTOS_DIR, path.join(dir, "photos"));
-    console.log(`  ✓ Copied to ${dir}: ${files} backup file${files === 1 ? "" : "s"}, ${photos} photo file${photos === 1 ? "" : "s"}`);
+    const sheets = mirrorDir(SETUPSHEETS_DIR, path.join(dir, "setupsheets"));
+    console.log(`  ✓ Copied to ${dir}: ${files} backup file${files === 1 ? "" : "s"}, ${photos} photo file${photos === 1 ? "" : "s"}, ${sheets} setup sheet PDF file${sheets === 1 ? "" : "s"}`);
     lastCopy.ok = true;
   } catch (e) {
     console.error(`  ✗ Could not copy backups to ${dir}:`, e.message);
@@ -742,21 +744,60 @@ app.post("/api/tool-op", (req, res) => {
 // ── Serve setup sheet PDFs ────────────────────────────────
 app.use("/setupsheets", express.static(SETUPSHEETS_DIR));
 
+// ── Setup sheet PDFs: one current file per sheet + history ──
+// setupsheets/<Tegningsnr>_<Maskine>_<id>.pdf   the newest version (the id keeps two
+//                                               sheets with the same part/machine apart)
+// setupsheets/index.json                        sheet id → { file, savedAt, by }
+// setupsheets/historik/<id>/…pdf + index.json   every older version, and the last one
+//                                               of a deleted sheet (admin only in the app)
+const SHEET_INDEX  = path.join(SETUPSHEETS_DIR, "index.json");
+const SHEET_HIST   = path.join(SETUPSHEETS_DIR, "historik");
+const safeName     = s => String(s || "").replace(/[^a-z0-9æøå]/gi, "_").slice(0, 60);
+const safeId       = id => String(id || "").replace(/[^\w-]/g, "").slice(0, 40);
+const readJson     = (f, d) => { try { return JSON.parse(fs.readFileSync(f, "utf8")); } catch { return d; } };
+const writeJson    = (f, v) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(v, null, 2)); };
+const legacyName   = s => s && `${String(s.partNumber || "").replace(/[^a-z0-9]/gi, "_").slice(0, 60)}_${String(s.machine || "").replace(/[^a-z0-9]/gi, "_").slice(0, 60)}.pdf`;
+
+// Move the sheet's current PDF (and any file under the old naming) into its history
+function archiveSheetPdf(id, reason, by, prevSheets = []) {
+  const index = readJson(SHEET_INDEX, {});
+  const cur = index[id];
+  const moves = [];
+  if (cur && fs.existsSync(path.join(SETUPSHEETS_DIR, cur.file))) moves.push({ file: cur.file, savedAt: cur.savedAt, by: cur.by || "" });
+  // PDFs made before the id was in the name: <Tegningsnr>_<Maskine>.pdf
+  [...new Set(prevSheets.map(legacyName).filter(Boolean))].forEach(f => {
+    const p = path.join(SETUPSHEETS_DIR, f);
+    if (fs.existsSync(p) && !moves.some(m => m.file === f)) moves.push({ file: f, savedAt: fs.statSync(p).mtimeMs, by: "" });
+  });
+  if (moves.length) {
+    const dir = path.join(SHEET_HIST, id), hIndex = path.join(dir, "index.json");
+    fs.mkdirSync(dir, { recursive: true });
+    const list = readJson(hIndex, []);
+    moves.forEach(m => {
+      const name = `${new Date(m.savedAt || Date.now()).toISOString().slice(0, 19).replace(/[T:]/g, "-")}_${m.file}`;
+      fs.renameSync(path.join(SETUPSHEETS_DIR, m.file), path.join(dir, name));
+      list.push({ file: name, savedAt: m.savedAt || null, by: m.by, archivedAt: Date.now(), archivedBy: by || "", reason });
+    });
+    writeJson(hIndex, list);
+  }
+  if (cur) { delete index[id]; writeJson(SHEET_INDEX, index); }
+}
+
 // ── POST /api/setupsheet-pdf ──────────────────────────────
-// Called automatically whenever a setup sheet is saved.
-// Generates a formatted PDF and writes it to setupsheets/.
+// Called automatically whenever a setup sheet is saved ({ sheet, prev, by }).
+// The new PDF is made first; only when it is written is the old one moved to history.
 app.post("/api/setupsheet-pdf", (req, res) => {
   try {
-    const { sheet } = req.body;
-    if (!sheet) return res.status(400).json({ error: "No sheet data" });
+    const { sheet, prev, by } = req.body;
+    if (!sheet || !safeId(sheet.id)) return res.status(400).json({ error: "No sheet data" });
+    const id = safeId(sheet.id);
 
-    const safe = s => (s || "").replace(/[^a-z0-9]/gi, "_").slice(0, 60);
     const rc   = pos => (sheet.restartPrefix || "NAT") + String(pos).padStart(sheet.restartPad || 2, "0");
-    const filename = `${safe(sheet.partNumber)}_${safe(sheet.machine)}.pdf`;
-    const filePath = path.join(SETUPSHEETS_DIR, filename);
+    const filename = `${safeName(sheet.partNumber) || "ark"}_${safeName(sheet.machine)}_${id}.pdf`;
+    const tmpPath  = path.join(SETUPSHEETS_DIR, `${id}.tmp`);
 
     const doc = new PDFDocument({ margin: 45, size: "A4" });
-    const out = fs.createWriteStream(filePath);
+    const out = fs.createWriteStream(tmpPath);
     doc.pipe(out);
 
     const W = doc.page.width - 90; // usable width
@@ -912,15 +953,48 @@ app.post("/api/setupsheet-pdf", (req, res) => {
     doc.moveTo(45, footerY - 6).lineTo(45 + W, footerY - 6).strokeColor(LINE).stroke();
     const stamp = new Date().toLocaleDateString("da-DK", { day: "2-digit", month: "short", year: "numeric" });
     doc.fillColor(GREY).fontSize(7).font("Helvetica")
-       .text(`ShopTrack opstillingsark  ·  Lavet ${stamp}  ·  ${sheet.partNumber || ""} / ${sheet.machine || ""}`,
+       .text(`ShopTrack opstillingsark  ·  Lavet ${stamp}${by ? `  ·  Gemt af ${by}` : ""}  ·  ${sheet.partNumber || ""} / ${sheet.machine || ""}`,
              45, footerY, { width: W, align: "center" });
 
     doc.end();
-    out.on("finish", () => res.json({ ok: true, url: `/setupsheets/${filename}` }));
-    out.on("error",  e  => res.status(500).json({ error: e.message }));
+    out.on("finish", () => {
+      try {
+        archiveSheetPdf(id, "rettet", by, prev ? [prev] : []); // a new sheet has no old-style PDF of its own
+        fs.renameSync(tmpPath, path.join(SETUPSHEETS_DIR, filename));
+        const index = readJson(SHEET_INDEX, {});
+        index[id] = { file: filename, savedAt: Date.now(), by: by || "" };
+        writeJson(SHEET_INDEX, index);
+        res.json({ ok: true, url: `/setupsheets/${filename}` });
+      } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+    out.on("error",  e  => { try { fs.unlinkSync(tmpPath); } catch {} res.status(500).json({ error: e.message }); });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
+});
+
+// ── POST /api/setupsheet-pdf-delete ── a sheet was deleted: its PDF goes to history
+app.post("/api/setupsheet-pdf-delete", (req, res) => {
+  try {
+    const { sheet, by } = req.body || {};
+    const id = safeId(sheet?.id);
+    if (!id) return res.status(400).json({ error: "No sheet" });
+    archiveSheetPdf(id, "slettet", by, [sheet]);
+    res.json({ ok: true });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── GET /api/setupsheet-history/:id ── current PDF + older versions, newest first
+app.get("/api/setupsheet-history/:id", (req, res) => {
+  const id = safeId(req.params.id);
+  const cur = readJson(SHEET_INDEX, {})[id];
+  const list = readJson(path.join(SHEET_HIST, id, "index.json"), [])
+    .map(h => ({ ...h, url: `/setupsheets/historik/${id}/${encodeURIComponent(h.file)}` }))
+    .sort((a, b) => (b.savedAt || 0) - (a.savedAt || 0));
+  res.json({
+    current: cur && fs.existsSync(path.join(SETUPSHEETS_DIR, cur.file)) ? { ...cur, url: `/setupsheets/${encodeURIComponent(cur.file)}` } : null,
+    history: list,
+  });
 });
 
 // ── POST /api/photo ───────────────────────────────────────
