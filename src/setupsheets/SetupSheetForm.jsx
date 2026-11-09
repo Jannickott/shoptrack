@@ -2,13 +2,13 @@ import { useState, useEffect, useRef } from "react";
 import { C, inp, sel, btn, label, errMsg } from "../lib/theme";
 import { saveDraft, clearDraft } from "./sheetDraft";
 import { PdfDrawings } from "../components/PdfDrawings";
-import { ERIKS_BLANK } from "./SetupSheetDetail";
+import { ERIKS_BLANK, UnusedCross } from "./SetupSheetDetail";
 import { resizeImage } from "../lib/api";
 
 export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
   const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
-  const MZ_BLANK={fraesForlaenger:"",fraesMn:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneUdhaeng:"",pinoldokUdhaeng:""};
+  const MZ_BLANK={fraesForlaenger:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneafstand:"",emneUdhaeng:"",pinoldokUdhaeng:""};
   const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{},mzAdvanced:{schnecke:{},werkstuck:{},entgratenVorne:{},entgratenHinten:{}},eriksSetup:{}};
   const baseForm=()=>sheet?{...blank,...sheet,department:sheet.department||getDept(sheet?.machine||""),subDepartment:sheet.subDepartment||"",params:migrateParams(sheet)}
     :prefill?{...blank,partNumber:prefill.partNumber||"",machine:prefill.machine||"",customer:prefill.customer||"",department:getDept(prefill.machine||"")}
@@ -61,6 +61,17 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
   const deptCabinets=(cabinets||[]).filter(c=>!(c.departments||[]).length||(c.departments||[]).includes(form.department));
   const deptCabinetIds=new Set(deptCabinets.map(c=>String(c.id)));
   const activeCabinetTools=(tools||[]).filter(t=>t.active!==false&&t.name&&deptCabinetIds.has(String(t.cabinetId)));
+  // How many parts a tool makes before it is changed or reground (optional). Picking a
+  // cabinet tool brings the tool's own number over, unless one is typed already.
+  const lifeOf=id=>{const ct=(tools||[]).find(x=>String(x.id)===String(id));return ct?.toolLife?String(ct.toolLife):"";};
+  const pickTool=(setId,setLife,t,val)=>{const id=val||null;setId(id);if(id&&!t.toolLife){const l=lifeOf(id);if(l)setLife(l);}};
+  const lifeInput=(t,onChange)=>(
+    <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+      <span style={{fontSize:13,color:C.muted}}><i className="ti ti-refresh"/> Emner før skift / slibning</span>
+      <input inputMode="numeric" style={{...inp(),width:110,textAlign:"center",fontFamily:"'Share Tech Mono',monospace",fontWeight:700}} value={t.toolLife||""} onChange={e=>onChange(e.target.value.replace(/\D/g,""))} placeholder="—"/>
+      <span style={{fontSize:13,color:C.muted}}>stk · valgfrit</span>
+    </div>
+  );
   const toolListEditor=(listKey,accent)=>{
     const listTools=form[listKey]||[];
     const used=new Set(listTools.map(t=>t.position));
@@ -89,11 +100,12 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
               </select>
               <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
                 <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Beskrivelse af værktøj — skal udfyldes"/>
-                <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool(t.position,"toolId",e.target.value||null)}>
+                <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>pickTool(id=>setTool(t.position,"toolId",id),v=>setTool(t.position,"toolLife",v),t,e.target.value)}>
                   <option value="">— Intet værktøj fra skab —</option>
                   {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
                 </select>
                 <input style={{...inp(),fontSize:14}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Noter — valgfrit"/>
+                {lifeInput(t,v=>setTool(t.position,"toolLife",v))}
               </div>
               <button style={{background:"none",border:"none",minWidth:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",color:C.red,cursor:"pointer",fontSize:18,padding:"4px 2px",flexShrink:0,marginTop:4}} onClick={()=>removeTool(t.position)}><i className="ti ti-x"/></button>
             </div>
@@ -129,11 +141,12 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
               </div>
               <div style={{padding:"4px 14px 10px",display:"flex",flexDirection:"column",gap:6}}>
                 <input style={inp()} value={t.description||""} onChange={e=>setTool(pos,"description",e.target.value)} placeholder="Beskrivelse af værktøj — valgfrit"/>
-                <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool(pos,"toolId",e.target.value||null)}>
+                <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>pickTool(id=>setTool(pos,"toolId",id),v=>setTool(pos,"toolLife",v),t,e.target.value)}>
                   <option value="">— Intet værktøj fra skab —</option>
                   {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
                 </select>
                 <input style={{...inp(),fontSize:14}} value={t.label||""} onChange={e=>setTool(pos,"label",e.target.value)} placeholder="Noter — valgfrit"/>
+                {lifeInput(t,v=>setTool(pos,"toolLife",v))}
               </div>
             </div>
           );
@@ -158,11 +171,12 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
         </div>
         <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
           <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Beskrivelse af fræser — valgfrit"/>
-          <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool("toolId",e.target.value||null)}>
+          <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>pickTool(id=>setTool("toolId",id),v=>setTool("toolLife",v),t,e.target.value)}>
             <option value="">— Intet værktøj fra skab —</option>
             {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
           </select>
           <input style={{...inp(),fontSize:14}} value={t.label||""} onChange={e=>setTool("label",e.target.value)} placeholder="Noter — valgfrit"/>
+          {lifeInput(t,v=>setTool("toolLife",v))}
         </div>
       </div>
     );
@@ -312,10 +326,16 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
             const isDark=document.documentElement.dataset.theme==="dark"||(!document.documentElement.dataset.theme&&window.matchMedia("(prefers-color-scheme:dark)").matches);
             return(
               <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-                {[["fraesLagerLinks","Oben Links / Øverst venstre",0,0],["fraesLagerRechts","Oben Rechts / Øverst højre",1,0],["fraesLag3","Unten Links / Nederst venstre",0,1],["fraesLag4","Unten Rechts / Nederst højre",1,1]].map(([k,lbl,xi,yi])=>(
+                {[["fraesLagerLinks","Oben Links / Øverst venstre",0,0],["fraesLagerRechts","Oben Rechts / Øverst højre",1,0],["fraesLag3","Unten Links / Nederst venstre",0,1],["fraesLag4","Unten Rechts / Nederst højre",1,1]].map(([k,lbl,xi,yi],_i,all)=>{
+                  // Only one position is used: once an angle is typed, the others get a red X
+                  const unused=!e[k]&&all.some(([o])=>e[o]);
+                  return(
                   <div key={k} style={{display:"flex",flexDirection:"column",gap:0,border:`2px solid ${e[k]?C.amber:C.border}`,borderRadius:10,overflow:"hidden",background:C.surface}}>
                     {/* image quadrant */}
-                    <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none"}}/>
+                    <div style={{position:"relative"}}>
+                      <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none",opacity:unused?.45:1}}/>
+                      {unused&&<UnusedCross/>}
+                    </div>
                     {/* label + input row */}
                     <div style={{padding:"8px 10px",borderTop:`1px solid ${C.border}`,background:C.raised}}>
                       <div style={{fontSize:13,color:C.amber,fontWeight:700,letterSpacing:.5,marginBottom:4}}>{lbl}</div>
@@ -325,7 +345,8 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             );
           })()}
@@ -372,11 +393,12 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
         </div>
         <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
           <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Beskrivelse af værktøj — valgfrit"/>
-          <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>setTool("toolId",e.target.value||null)}>
+          <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>pickTool(id=>setTool("toolId",id),v=>setTool("toolLife",v),t,e.target.value)}>
             <option value="">— Intet værktøj fra skab —</option>
             {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
           </select>
           <input style={{...inp(),fontSize:14}} value={t.label||""} onChange={e=>setTool("label",e.target.value)} placeholder="Noter — valgfrit"/>
+          {lifeInput(t,v=>setTool("toolLife",v))}
         </div>
       </div>
     );
@@ -412,7 +434,6 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
         {togRow("Forlænger","fraesForlaenger",["Kort","Mellem","Lang"])}
-        {txtRow("Fræser Mn","fraesMn","0,6 20°")}
         {txtRow("Stop Ø","stopDia","13/8/4 – 172")}
         {txtRow("Tang tryk","tangTryk","7",true,"80px")}
         {yesNoRow("Værktøj i tang","vaerktoejITang")}
@@ -422,13 +443,11 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
         {togRow("Pinoldok","pinoldokType",["Pinol","Værktøj"])}
         {txtRow("Hastighed","hastighed","2",true,"80px")}
         {yesNoRow("Luft","luft")}
+        {txtRow("Emneafstand (Tang + målklods)","emneafstand","",false)}
+        {txtRow("Emne udhæng","emneUdhaeng","42 mm til forkant",false)}
+        {txtRow("Pinoldok udhæng","pinoldokUdhaeng","",false)}
         {txtRow("Spindel","spindel","",false)}
         {txtRow("Olie","olie","",false)}
-        {txtRow("Emne udhæng","emneUdhaeng","42 mm til forkant",false)}
-        <div style={{display:"grid",gridTemplateColumns:"120px 1fr",gap:8,alignItems:"center",padding:"9px 14px"}}>
-          <div style={{fontSize:13,color:C.muted,fontWeight:600,letterSpacing:.4}}>Pinoldok udhæng</div>
-          <input style={{...inp(),width:"100%"}} value={mz.pinoldokUdhaeng||""} onChange={e=>setMz("pinoldokUdhaeng",e.target.value)} placeholder=""/>
-        </div>
       </div>
     );
   };

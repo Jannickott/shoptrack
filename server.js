@@ -375,7 +375,9 @@ app.post("/api/verify-pin", (req, res) => {
 
 // ── POST /api/data — queued safe merge, then atomic write ─
 // tools are not in here: the server owns them and they only change through /api/tool-op
-const ARRAY_KEYS  = ["users","machines","departments","cabinets","setupSheets","workShifts"];
+// setupSheets are not here: they merge per sheet (below), so a tablet with an older
+// list can never wipe out a sheet another tablet just saved
+const ARRAY_KEYS  = ["users","machines","departments","cabinets","workShifts"];
 const OBJECT_KEYS = ["workHours","efficiencyGoals","planSettings"];
 
 // Logs are append-only, so merge by id instead of letting the last tablet to save
@@ -474,6 +476,8 @@ function mergeAndWrite(incoming) {
   // Maintenance (Vedligehold): points per machine + the record of every check — same rule
   merged.maintTasks    = unionById(server.maintTasks, incoming.maintTasks);
   merged.maintLog      = unionById(server.maintLog, incoming.maintLog);
+  // Setup sheets: per sheet, newest updatedAt wins (deleting sets deleted:true)
+  merged.setupSheets   = unionById(server.setupSheets, incoming.setupSheets);
   merged.machineIssues = mergeIssues(server.machineIssues, incoming.machineIssues, merged.downtimeLog);
 
   merged.settingsVersion = Math.max(serverSV, incomingSV);
@@ -816,7 +820,7 @@ app.post("/api/setupsheet-pdf", (req, res) => {
         doc.fillColor(DARK).fontSize(9).font("Helvetica-Bold")
            .text(String(t.position), 45, y, { width: 30 });
         doc.font("Helvetica").text(t.description || "", 80, y, { width: 195 });
-        doc.fillColor(GREY).text(t.label || "", 280, y, { width: 145 });
+        doc.fillColor(GREY).text([t.label, t.toolLife ? `${t.toolLife} stk før skift` : ""].filter(Boolean).join(" · "), 280, y, { width: 145 });
         doc.fillColor(AMBER).font("Helvetica-Bold")
            .text(rc(t.position), 430, y, { width: 80 });
         y += 16;
@@ -839,7 +843,7 @@ app.post("/api/setupsheet-pdf", (req, res) => {
         doc.fillColor(DARK).fontSize(9).font("Helvetica-Bold")
            .text(String(t.position), 45, y, { width: 30 });
         doc.font("Helvetica").text(t.description || "", 80, y, { width: 195 });
-        doc.fillColor(GREY).text(t.label || "", 280, y, { width: 145 });
+        doc.fillColor(GREY).text([t.label, t.toolLife ? `${t.toolLife} stk før skift` : ""].filter(Boolean).join(" · "), 280, y, { width: 145 });
         doc.fillColor("#1a6eb5").font("Helvetica-Bold")
            .text(rc(t.position), 430, y, { width: 80 });
         y += 16;
@@ -862,7 +866,7 @@ app.post("/api/setupsheet-pdf", (req, res) => {
         doc.fillColor(DARK).fontSize(9).font("Helvetica-Bold")
            .text(String(t.position), 45, y, { width: 30 });
         doc.font("Helvetica").text(t.description || "", 80, y, { width: 195 });
-        doc.fillColor(GREY).text(t.label || "", 280, y, { width: 145 });
+        doc.fillColor(GREY).text([t.label, t.toolLife ? `${t.toolLife} stk før skift` : ""].filter(Boolean).join(" · "), 280, y, { width: 145 });
         doc.fillColor("#1a8c55").font("Helvetica-Bold")
            .text(rc(t.position), 430, y, { width: 80 });
         y += 16;

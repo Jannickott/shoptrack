@@ -10,9 +10,9 @@ export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,on
   const [lightboxPhoto,setLightboxPhoto]=useState(null);
   const [mzDetOpen,setMzDetOpen]=useState({schnecke:false,werkstuck:false,entgraten:false});
   const rc=pos=>{if(!pos)return"";return(sheet.restartPrefix||"NAT")+String(pos).padStart(sheet.restartPad||2,"0");};
-  const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label);
-  const filledTools2=(sheet.tools2||[]).filter(t=>t.description||t.label);
-  const filledTools3=(sheet.tools3||[]).filter(t=>t.description||t.label);
+  const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label||t.toolId||t.toolLife);
+  const filledTools2=(sheet.tools2||[]).filter(t=>t.description||t.label||t.toolId||t.toolLife);
+  const filledTools3=(sheet.tools3||[]).filter(t=>t.description||t.label||t.toolId||t.toolLife);
   const findLoc=toolId=>{if(!toolId)return null;const t=(tools||[]).find(x=>String(x.id)===String(toolId));if(!t)return null;const cab=(cabinets||[]).find(c=>String(c.id)===String(t.cabinetId));const drw=cab?.drawers?.find(d=>String(d.id)===String(t.drawerId));if(!cab)return null;return{cab:cab.name,drw:drw?`Drawer ${drw.number}${drw.label?` — ${drw.label}`:""}`:null};};
   const opColors={"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber};
   const opColor=opColors[sheet.operation]||C.muted;
@@ -38,6 +38,7 @@ export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,on
                 </button>
               )}
               {t.label&&<div style={{fontSize:13,color:C.muted}}>{t.label}</div>}
+              {t.toolLife&&<div style={{fontSize:13,color:C.amber}}><i className="ti ti-refresh"/> {t.toolLife} emner før skift / slibning</div>}
             </div>
             <div style={{fontSize:13,color:C.muted,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{rc(t.position)}</div>
           </div>
@@ -51,7 +52,7 @@ export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,on
   const printPdf=()=>{
     const w=window.open("","_blank","width=860,height=1100");
     if(!w) return;
-    const rows=t=>`<tr><td class="mono">${t.position}</td><td>${t.description||""}</td><td class="grey">${t.label||""}</td><td class="mono amber">${rc(t.position)}</td></tr>`;
+    const rows=t=>`<tr><td class="mono">${t.position}</td><td>${t.description||""}</td><td class="grey">${t.label||""}${t.toolLife?`${t.label?" · ":""}${t.toolLife} stk før skift`:""}</td><td class="mono amber">${rc(t.position)}</td></tr>`;
     const toolTable=(title,accent,toolArr)=>{const filled=(toolArr||[]).filter(t=>t.description);if(!filled.length)return"";return`<h2 style="color:${accent}">${title}</h2><table><thead><tr><th>Pos.</th><th>Beskrivelse</th><th>Mærkat</th><th>Genstart</th></tr></thead><tbody>${filled.map(rows).join("")}</tbody></table>`;};
     const pdfParams=params;
     w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${sheet.partNumber} — opstillingsark</title><style>
@@ -148,6 +149,7 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
                   {t.description&&<div style={{fontSize:16,fontWeight:600,color:C.text,marginBottom:4}}>{t.description}</div>}
                   {cabTool&&(<button onClick={()=>onGoToTool&&onGoToTool(t.toolId)} style={{background:C.blue+"18",border:`1px solid ${C.blue}44`,borderRadius:7,padding:"5px 10px",cursor:"pointer",textAlign:"left",display:"flex",alignItems:"center",gap:8,marginBottom:4}}><i className="ti ti-map-pin" style={{fontSize:15,color:C.blue}}/><div><div style={{fontSize:14,fontWeight:700,color:C.blue}}>{cabTool.name}</div>{loc&&<div style={{fontSize:12,color:C.muted}}>{loc.cab}{loc.drw?` · ${loc.drw}`:""}</div>}</div><i className="ti ti-arrow-right" style={{fontSize:14,color:C.blue,marginLeft:4}}/></button>)}
                   {t.label&&<div style={{fontSize:13,color:C.muted}}>{t.label}</div>}
+                  {t.toolLife&&<div style={{fontSize:13,color:C.amber}}><i className="ti ti-refresh"/> {t.toolLife} emner før skift / slibning</div>}
                 </div>
               );
             })}
@@ -162,7 +164,6 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
         const bool=v=>(v===true||v==="Ja")?"Ja":"Nej";
         const items=[
           ["Forlænger",mz.fraesForlaenger||null],
-          ["Fræser Mn",mz.fraesMn||null],
           ["Stop Ø",mz.stopDia||null],
           ["Tang tryk",mz.tangTryk!=null&&mz.tangTryk!==""?String(mz.tangTryk):null],
           ["Værktøj i tang",mz.vaerktoejITang!=null?bool(mz.vaerktoejITang):null],
@@ -172,10 +173,11 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
           ["Pinoldok",mz.pinoldokType||null],
           ["Hastighed",mz.hastighed!=null&&mz.hastighed!==""?String(mz.hastighed):null],
           ["Luft",mz.luft!=null?bool(mz.luft):null],
-          ["Spindel",mz.spindel||null],
-          ["Olie",mz.olie||null],
+          ["Emneafstand (Tang + målklods)",mz.emneafstand||null],
           ["Emne udhæng",mz.emneUdhaeng||null],
           ["Pinoldok udhæng",mz.pinoldokUdhaeng||null],
+          ["Spindel",mz.spindel||null],
+          ["Olie",mz.olie||null],
         ].filter(([,v])=>v!==null);
         if(!items.length) return null;
         return(
@@ -272,7 +274,11 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
                       {[["fraesLagerLinks",e.fraesLagerLinks,0,0],["fraesLagerRechts",e.fraesLagerRechts,1,0],["fraesLag3",e.fraesLag3,0,1],["fraesLag4",e.fraesLag4,1,1]].map(([k,val,xi,yi])=>(
                         <div key={k} style={{display:"flex",flexDirection:"column",gap:0,border:`2px solid ${val?C.amber:C.border}`,borderRadius:10,overflow:"hidden"}}>
-                          <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none"}}/>
+                          {/* Positions without an angle are not used — red X (the block only shows when one has an angle) */}
+                          <div style={{position:"relative"}}>
+                            <div style={{aspectRatio:"4/3",backgroundImage:"url(/eriks-fraeslager-grid.png)",backgroundSize:"200% 200%",backgroundPosition:`${xi*100}% ${yi*100}%`,backgroundRepeat:"no-repeat",backgroundColor:isDark?C.raised:"#fff",filter:isDark?"invert(1)":"none",opacity:val?1:.45}}/>
+                            {!val&&<UnusedCross/>}
+                          </div>
                           <div style={{padding:"6px 10px",background:C.raised,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"baseline",justifyContent:"center",gap:4}}>
                             <span style={{...mono,fontSize:24,color:val?C.green:C.muted}}>{val||"—"}</span>
                             {val&&<span style={{fontSize:18,color:C.amber,fontWeight:700}}>°</span>}
@@ -376,5 +382,15 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
           </div>}
       </div>
     </div>
+  );
+}
+
+// Big red X over a Fräslagerstellung picture that isn't used (another position has the angle)
+export function UnusedCross(){
+  return(
+    <svg viewBox="0 0 100 75" preserveAspectRatio="none" style={{position:"absolute",inset:0,width:"100%",height:"100%",pointerEvents:"none"}}>
+      <line x1="10" y1="8" x2="90" y2="67" stroke="#e74c3c" strokeWidth="6" strokeLinecap="round"/>
+      <line x1="90" y1="8" x2="10" y2="67" stroke="#e74c3c" strokeWidth="6" strokeLinecap="round"/>
+    </svg>
   );
 }

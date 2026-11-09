@@ -558,6 +558,8 @@ export default function App(){
 
   // Exclude soft-deleted jobs from all display — they stay in state/stateRef for server sync
   const visibleJobs=jobs.filter(j=>!j.deleted);
+  // Deleted setup sheets stay in the list (deleted:true) so every tablet learns of it
+  const liveSheets=setupSheets.filter(s=>!s.deleted);
   const activeCnt=visibleJobs.filter(j=>j.status!=="done"&&j.operatorId===user.id).length;
   // Task jobs stay out of efficiency figures; badges for tasks waiting on someone
   const statJobs=statJobsOf(visibleJobs);
@@ -629,7 +631,7 @@ export default function App(){
               </button>
             );
           })}
-          <AdminSearch jobs={visibleJobs} setupSheets={setupSheets} tasks={tasks} onOpen={openSearchHit}/>
+          <AdminSearch jobs={visibleJobs} setupSheets={liveSheets} tasks={tasks} onOpen={openSearchHit}/>
         </div>
       )}
 
@@ -641,7 +643,7 @@ export default function App(){
 
       {/* CONTENT */}
       {user.role==="requester"?<RequesterTasksTab user={user} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} saveNow={saveNow}/>:<>
-      {tab==="new"      &&<NewJobTab         maintItems={myMaintItems} onOpenMaint={openMaintFor} user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={setupSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
+      {tab==="new"      &&<NewJobTab         maintItems={myMaintItems} onOpenMaint={openMaintFor} user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={liveSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
       {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} focusTaskId={focusTaskId} setFocusTaskId={setFocusTaskId} departments={departments} setCompleteId={setCompleteId} saveNow={saveNow}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} jobs={visibleJobs} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
       {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
@@ -654,7 +656,7 @@ export default function App(){
       {tab==="planning" &&<PlanningTab       jobs={visibleJobs} setJobs={setJobs} user={user} machineIssues={machineIssues} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} planSettings={planSettings} setPlanSettings={setPlanSettings} saveNow={saveNow}/>}
       {tab==="reports"  &&<ReportsTab       jobs={statJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={setupSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
+      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={liveSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
       </>}
 

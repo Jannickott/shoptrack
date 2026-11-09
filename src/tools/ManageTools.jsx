@@ -20,7 +20,7 @@ export function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,mac
   }},[focusToolId]);
   const [toolFilter,setToolFilter]=useState("all");
   const [deleteConfirm,setDeleteConfirm]=useState(false);
-  const blank={name:"",toolType:"",returnable:false,regrindable:false,hasConditionRating:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
+  const blank={name:"",toolType:"",returnable:false,regrindable:false,hasConditionRating:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",toolLife:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
   const photoRef=useRef();
@@ -28,7 +28,7 @@ export function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,mac
 
   const openAdd=()=>{setForm(blank);setEditId(null);setErrs({});setSubview("form");};
   const openEdit=t=>{
-    setForm({...blank,...t,quantity:String(t.quantity),minQuantity:String(t.minQuantity||0),
+    setForm({...blank,...t,quantity:String(t.quantity),minQuantity:String(t.minQuantity||0),toolLife:t.toolLife?String(t.toolLife):"",
       material:Array.isArray(t.material)?t.material:[],
       photoData:t.photoData||null,
     });
@@ -50,9 +50,9 @@ export function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,mac
     if(Object.keys(e).length){setErrs(e);return;}
     const now=Date.now();
     if(editId){
-      updateTool(editId,{...form,quantity:parseInt(form.quantity),minQuantity:parseInt(form.minQuantity)||0});
+      updateTool(editId,{...form,quantity:parseInt(form.quantity),minQuantity:parseInt(form.minQuantity)||0,toolLife:parseInt(form.toolLife)||null});
     } else {
-      const tool={id:now,...form,quantity:parseInt(form.quantity),minQuantity:parseInt(form.minQuantity)||0,active:true};
+      const tool={id:now,...form,quantity:parseInt(form.quantity),minQuantity:parseInt(form.minQuantity)||0,toolLife:parseInt(form.toolLife)||null,active:true};
       setTools(prev=>[...prev,tool]);
       sendToolOp({type:"add",tool});
     }
@@ -194,6 +194,11 @@ export function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,mac
           <label style={label}>Genbestil under (stk)</label>
           <input type="number" min="0" style={{...fi("minQuantity"),textAlign:"center",fontSize:20,color:C.red}} value={form.minQuantity} onChange={e=>setForm(p=>({...p,minQuantity:e.target.value}))} placeholder="0"/>
         </div>
+      </div>
+      <div style={{marginBottom:10}}>
+        <label style={label}>Emner før skift / slibning <span style={{textTransform:"none",letterSpacing:0,color:C.muted}}>· valgfrit</span></label>
+        <input inputMode="numeric" style={{...fi("toolLife"),maxWidth:220}} value={form.toolLife} onChange={e=>setForm(p=>({...p,toolLife:e.target.value.replace(/\D/g,"")}))} placeholder="f.eks. 500"/>
+        <div style={{fontSize:13,color:C.muted,marginTop:4}}>Hvor mange emner værktøjet kan lave, før det skal skiftes eller slibes. Kommer med over i opstillingsarket, når værktøjet vælges.</div>
       </div>
       <div style={{marginBottom:10}}>
         <label style={label}>Beskrivelse</label>
@@ -469,6 +474,7 @@ export function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,mac
                       <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>På lager</div><div style={{fontSize:20,fontWeight:700,color:selectedTool.quantity<=(selectedTool.minQuantity||0)?C.amber:C.green,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.quantity}<span style={{fontSize:13,fontWeight:400,color:C.muted}}> stk</span></div></div>
                     )}
                     <div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Genbestil under</div><div style={{fontSize:16,fontWeight:700,color:C.red,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.minQuantity||0}<span style={{fontSize:13,fontWeight:400,color:C.muted}}> stk</span></div></div>
+                    {selectedTool.toolLife&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Emner før skift</div><div style={{fontSize:16,fontWeight:700,color:C.text,fontFamily:"'Share Tech Mono',monospace"}}>{selectedTool.toolLife} stk</div></div>}
                     {selectedTool.recommendedSpeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Hastighed</div><div style={{fontSize:15,color:C.text}}>{selectedTool.recommendedSpeed}</div></div>}
                     {selectedTool.recommendedFeed&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Tilspænding</div><div style={{fontSize:15,color:C.text}}>{selectedTool.recommendedFeed}</div></div>}
                     {selectedTool.supplier&&<div style={{background:C.raised,borderRadius:8,padding:"8px 10px"}}><div style={{fontSize:11,color:C.muted,letterSpacing:1,textTransform:"uppercase",marginBottom:3}}>Leverandør</div><div style={{fontSize:15,color:C.text}}>{selectedTool.supplier}</div></div>}
