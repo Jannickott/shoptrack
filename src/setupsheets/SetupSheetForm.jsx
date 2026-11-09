@@ -7,7 +7,7 @@ import { ERIKS_BLANK, UnusedCross } from "./SetupSheetDetail";
 import { resizeImage } from "../lib/api";
 
 export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
-  const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Chuck Name",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Chuck Overhang",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Clamping Pressure",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Zero Point",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Workpiece Stop",value:s.workpieceStop});return p;};
+  const migrateParams=s=>{if(!s)return[];if(s.params)return s.params;const p=[];if(s.chuckName)p.push({key:"Patron",value:s.chuckName});if(s.chuckOverhang)p.push({key:"Patron udhæng",value:s.chuckOverhang});if(s.clampingPressure)p.push({key:"Spændetryk",value:s.clampingPressure});if(s.zeroPoint)p.push({key:"Nulpunkt",value:s.zeroPoint});if(s.workpieceStop)p.push({key:"Emnestop",value:s.workpieceStop});return p;};
   const getDept=machineName=>(machines||[]).find(m=>m.name===machineName)?.department||"";
   const MZ_BLANK={fraesForlaenger:"",stopDia:"",tangTryk:"",vaerktoejITang:false,tangNummer:"",tangForm:"Spids",pinoltryk:"",pinoldokType:"Pinol",hastighed:"",luft:false,spindel:"",olie:"",emneafstand:"",emneUdhaeng:"",pinoldokUdhaeng:""};
   const blank={id:null,partNumber:"",customer:"",machine:"",department:"",subDepartment:"",material:"",revision:"",operation:"",subProgram:"",planProgram:"",restartPrefix:"NAT",restartPad:2,tools:[],tools2:[],tools3:[],params:[],notes:"",toolModul:"",mzSetup:{},mzAdvanced:{schnecke:{},werkstuck:{},entgratenVorne:{},entgratenHinten:{}},eriksSetup:{}};
@@ -126,7 +126,7 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,overflow:"hidden",marginBottom:14}}>
         <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
           <div style={{fontSize:14,fontWeight:700,color:C.amber,flexShrink:0,minWidth:80}}>Modul</div>
-          <input style={{...inp(),flex:1,fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="e.g. 0,9"/>
+          <input style={{...inp(),flex:1,fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="f.eks. 0,9"/>
         </div>
         {[1,2].map(pos=>{
           const t=fTools.find(x=>x.position===pos);
@@ -162,7 +162,7 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,overflow:"hidden",marginBottom:14}}>
         <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
           <div style={{fontSize:14,fontWeight:700,color:C.amber,flexShrink:0,minWidth:80}}>Modul</div>
-          <input style={{...inp(),flex:1,fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="e.g. 0,8"/>
+          <input style={{...inp(),flex:1,fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="f.eks. 0,8"/>
         </div>
         <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
           <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Beskrivelse af fræser — valgfrit"/>
@@ -308,7 +308,7 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
           </div>
           <div style={{display:"flex",alignItems:"center",gap:8}}>
             <div style={{fontSize:12,color:C.muted,fontWeight:600,flexShrink:0}}>Fräser Ø</div>
-            <input style={{...inp(),...mono,flex:1}} value={e.fraeserDia||""} onChange={ev=>setE("fraeserDia",ev.target.value)} placeholder="e.g. 20 H55"/>
+            <input style={{...inp(),...mono,flex:1}} value={e.fraeserDia||""} onChange={ev=>setE("fraeserDia",ev.target.value)} placeholder="f.eks. 20 H55"/>
           </div>
         </div>
         {/* Fräslagerstellung — 4-position image grid, no white background */}
@@ -381,7 +381,7 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.amber}`,overflow:"hidden",marginBottom:14}}>
         <div style={{padding:"10px 14px",borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10}}>
           <div style={{fontSize:14,fontWeight:700,color:C.amber,flexShrink:0,minWidth:80}}>Modul</div>
-          <input style={{...inp(),flex:1,fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="e.g. 0,9"/>
+          <input style={{...inp(),flex:1,fontSize:18,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber}} value={form.toolModul||""} onChange={e=>setF("toolModul",e.target.value)} placeholder="f.eks. 0,9"/>
         </div>
         <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
           <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Beskrivelse af værktøj — valgfrit"/>
@@ -542,7 +542,7 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
     if(!showList3) out.tools3=[];
     clearDraft(user.id,draftId);
     setBaseline(JSON.stringify(form)); // saved — nothing left to keep
-    onSave({...out,id:out.id||now,createdAt:out.createdAt||now,updatedAt:now,createdBy:out.createdBy||user.name});
+    onSave({...out,id:out.id||now,createdAt:out.createdAt||now,updatedAt:now,updatedBy:user.name,createdBy:out.createdBy||user.name});
   };
   return(
     <div style={{padding:"14px 16px"}}>
@@ -576,8 +576,8 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
         <div style={{marginBottom:10}}><label style={label}>Maskine *</label><select style={sel(errs.machine)} value={form.machine} onChange={e=>{const d=getDept(e.target.value);setForm(p=>({...p,machine:e.target.value,department:d||p.department}));}}><option value="">— Vælg maskine —</option>{(machines||[]).filter(m=>m.active).map(m=><option key={m.id}>{m.name}</option>)}</select>{errs.machine&&<div style={errMsg}>{errs.machine}</div>}</div>
         <div style={{marginBottom:10}}><label style={label}><i className="ti ti-building" style={{fontSize:14}}/> Afdeling *</label><select style={sel(errs.department)} value={form.department||""} onChange={e=>setForm(p=>({...p,department:e.target.value,subDepartment:"",params:[]}))}><option value="">— Vælg afdeling —</option>{[...new Set([...Object.keys(subDepartments||{}),...Object.keys(setupDeptParams||{}).filter(k=>!Object.values(subDepartments||{}).flat().includes(k))])].sort().map(d=><option key={d} value={d}>{d}</option>)}</select>{errs.department&&<div style={errMsg}>{errs.department}</div>}</div>
         {deptSubDepts.length>0&&<div style={{marginBottom:10}}><label style={label}><i className="ti ti-git-branch" style={{fontSize:14}}/> Underafdeling *</label><select style={sel(errs.subDepartment)} value={form.subDepartment||""} onChange={e=>{const sd=e.target.value;const autoParams=((setupDeptParams||{})[sd]||[]).map(k=>({key:k,value:""}));setForm(p=>({...p,subDepartment:sd,params:autoParams}));}}><option value="">— Vælg underafdeling —</option>{deptSubDepts.map(sd=><option key={sd} value={sd}>{sd}</option>)}</select>{errs.subDepartment&&<div style={errMsg}>{errs.subDepartment}</div>}</div>}
-        <div style={{marginBottom:10}}><label style={{...label,color:C.amber}}>Programnavn</label><input style={{...inp(),fontSize:20,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber,letterSpacing:1}} value={form.subProgram||""} onChange={e=>setF("subProgram",e.target.value)} placeholder="e.g. O1234"/></div>
-        {[["customer","Kunde","f.eks. SPX"],["material","Materiale","f.eks. JM3"],["revision","Revision","e.g. A"],...(deptSubDepts.length===0?[["planProgram","Planprogram",""]]:[])] .map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
+        <div style={{marginBottom:10}}><label style={{...label,color:C.amber}}>Programnavn</label><input style={{...inp(),fontSize:20,fontWeight:700,fontFamily:"'Share Tech Mono',monospace",color:C.amber,letterSpacing:1}} value={form.subProgram||""} onChange={e=>setF("subProgram",e.target.value)} placeholder="f.eks. O1234"/></div>
+        {[["customer","Kunde","f.eks. SPX"],["material","Materiale","f.eks. JM3"],["revision","Revision","f.eks. A"],...(deptSubDepts.length===0?[["planProgram","Planprogram",""]]:[])] .map(([k,lbl,ph])=>(<div key={k} style={{marginBottom:10}}><label style={label}>{lbl}</label><input style={inp()} value={form[k]||""} onChange={e=>setF(k,e.target.value)} placeholder={ph}/></div>))}
         <div style={{marginBottom:10}}>
           <label style={{...label,color:{" Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[form.operation]||undefined}}>Operation</label>
           <select style={{...sel(),fontWeight:700,color:{"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber}[form.operation]||C.text}} value={form.operation||""} onChange={e=>setF("operation",e.target.value)}>

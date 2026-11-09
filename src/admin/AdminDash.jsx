@@ -4,7 +4,7 @@ import { fmtHM, fmtDate, toDateInput, jRunAll, jSetupAll, liveTime, calcAvailabl
 import { jobProgress, normPart } from "../planning/planEngine";
 import { visibleTasks, taskState } from "../tasks/taskUtil";
 import { machineMaint, machineOperator, dueText } from "../maintenance/maintUtil";
-import { jobToolWarnings } from "../tools/toolLife";
+import { jobToolWarnings, sheetsOfJob } from "../tools/toolLife";
 
 // ═══════════════════════════════════════════════════════
 // ADMIN DASHBOARD
@@ -164,6 +164,8 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
   const toolOut=toolWarn.filter(x=>x.usage.pct>=1), toolSoon=toolWarn.filter(x=>x.usage.pct<1);
   const toolTxt=x=>`${x.tool.name} på ${x.machine} (${x.usage.used}/${x.usage.limit})`;
   const byMachine=list=>Object.entries(list.reduce((a,x)=>{a[x.machine]=(a[x.machine]||0)+1;return a;},{})).map(([m,n])=>`${m} (${n})`).join(", ");
+  // Jobs under way with no setup sheet — remind the operator while the setup is fresh (tasks are one-offs)
+  const noSheet=running.filter(j=>!j.taskId&&!sheetsOfJob(j,sheets).length);
   const noCount=running.filter(j=>(j.status==="run"||j.status==="side2_run")&&(j.createdAt||0)<todayStart&&!progress[j.id]?.countedToday);
   const longSetup=running.filter(j=>{const lt=liveTime(j);return (j.status==="setup"&&lt.setup>8*3600)||(j.status==="side2_setup"&&lt.setup2>8*3600);});
   const srvProblem=srv&&(()=>{
@@ -185,6 +187,7 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
     waitingTasks.length&&{color:C.amber,icon:"clipboard-check",text:`${waitingTasks.length} opgave${waitingTasks.length>1?"r":""} venter på at blive givet til en operatør`,tab:"tasks"},
     toOrder.length&&{color:C.amber,icon:"package",text:`${toOrder.length} værktøj skal bestilles: ${toOrder.slice(0,3).map(t=>t.name).join(", ")}${toOrder.length>3?" …":""}`,tab:"admintools"},
     longSetup.length&&{color:C.amber,icon:"clock-exclamation",text:`${longSetup.length} job har stået i opstilling i over 8 timer — glemt at trykke Start produktion? ${longSetup.map(j=>j.machine).join(", ")}`,tab:"alljobs"},
+    noSheet.length&&{color:C.amber,icon:"clipboard-x",text:`${noSheet.length} job kører uden opstillingsark: ${noSheet.slice(0,4).map(j=>`${j.job} (${j.machine}${j.operatorName?` · ${j.operatorName}`:""})`).join(", ")}${noSheet.length>4?" …":""}`,tab:"alljobs"},
     noCount.length&&{color:C.muted,icon:"123",text:`${noCount.length} job i produktion uden antal i dag`,tab:"planning"},
   ].filter(Boolean);
 

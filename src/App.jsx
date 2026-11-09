@@ -82,8 +82,8 @@ export default function App(){
   const [departments,setDepartments]   =useState([]);
   const [setupSheets,setSetupSheets]   =useState([]);
   const DEFAULT_DEPT_PARAMS={
-    "Turning":["Chuck Name","Chuck Overhang","Clamping Pressure","Zero Point","Workpiece Stop","Spindle Speed","Feed Rate","Coolant Pressure","Tool Offset","Bar Diameter","Chuck Jaw","RPM","Cutting Speed","DOC"],
-    "Affolter":["Modul","Fræser nummer","Fræser diameter","Cycle tid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
+    "Turning":["Patron","Patron udhæng","Spændetryk","Nulpunkt","Emnestop","Spindelhastighed","Tilspænding","Køletryk","Værktøjsoffset","Stangdiameter","Patronbakker","Omdr./min","Skærehastighed","Skæredybde"],
+    "Affolter":["Modul","Fræser nummer","Fræser diameter","Cyklustid","Måleprogram","Opspændningsværktøj top","Opspændningsværktøj bund","Griber 1","Griber 2","Emnegriber","Skinne"],
   };
   const DEFAULT_SUB_DEPTS={"Fortanding":["Affolter","MZ","150"]};
   const [setupDeptParams,setSetupDeptParams]=useState(DEFAULT_DEPT_PARAMS);
@@ -659,7 +659,7 @@ export default function App(){
       {tab==="planning" &&<PlanningTab       jobs={visibleJobs} setJobs={setJobs} user={user} machineIssues={machineIssues} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} planSettings={planSettings} setPlanSettings={setPlanSettings} saveNow={saveNow}/>}
       {tab==="reports"  &&<ReportsTab       jobs={statJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
-      {tab==="setup"    &&<SetupSheetsTab    prep={{user,setTools,setToolLog,jobs:visibleJobs,sheets:liveSheets,toolChanges,setToolChanges,saveNow}} user={user} setupSheets={liveSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
+      {tab==="setup"    &&<SetupSheetsTab    allSheets={setupSheets} prep={{user,setTools,setToolLog,jobs:visibleJobs,sheets:liveSheets,toolChanges,setToolChanges,saveNow}} user={user} setupSheets={liveSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
       </>}
 

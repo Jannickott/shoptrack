@@ -3,11 +3,12 @@ import { C, btn } from "../lib/theme";
 import { PdfDrawings } from "../components/PdfDrawings";
 import { PrepareTools } from "./PrepareTools";
 import { SheetHistory } from "./SheetHistory";
+import { shortDate } from "./sheetUse";
 
 // Blank Eriks/150 setup values — used by both the detail view and the form
 export const ERIKS_BLANK={mn:"",z:"",beta:"",dk:"",uo:"",df:"",fraeserDia:"",fraesLagerLinks:"",fraesLagerRechts:"",fraesLag3:"",fraesLag4:"",richtung:"Gegenlauf",differential:"ausgerastet",zahnzahl:"",zahnzahlRatio:"",zahnD:"",zahnZw:"",zahnC:"",zahnB:"",zahnA:"",steigung:"",steigA:"",steigZw:"",steigB:"",steigC:"",steigD:"",fraesDrehzahl:"",fraesA:"",fraesB:"",fraesC:"",fraesD:"",laengs:"",laengsA:"",laengsB:"",laengsC:"",laengsZw:"",laengsD:"",schalterA2:"",schalterA3:"",schalterA4:"",schalterA5:"",tauchsteuerung:"",eingang:"m. Zwischenrad",stckStd:"",stckSpannung:""};
 
-export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool,onDuplicate,prep,isAdmin}){
+export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool,onDuplicate,prep,isAdmin,use}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const [lightboxPhoto,setLightboxPhoto]=useState(null);
   const [mzDetOpen,setMzDetOpen]=useState({schnecke:false,werkstuck:false,entgraten:false});
@@ -15,7 +16,7 @@ export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,on
   const filledTools=(sheet.tools||[]).filter(t=>t.description||t.label||t.toolId||t.toolLife);
   const filledTools2=(sheet.tools2||[]).filter(t=>t.description||t.label||t.toolId||t.toolLife);
   const filledTools3=(sheet.tools3||[]).filter(t=>t.description||t.label||t.toolId||t.toolLife);
-  const findLoc=toolId=>{if(!toolId)return null;const t=(tools||[]).find(x=>String(x.id)===String(toolId));if(!t)return null;const cab=(cabinets||[]).find(c=>String(c.id)===String(t.cabinetId));const drw=cab?.drawers?.find(d=>String(d.id)===String(t.drawerId));if(!cab)return null;return{cab:cab.name,drw:drw?`Drawer ${drw.number}${drw.label?` — ${drw.label}`:""}`:null};};
+  const findLoc=toolId=>{if(!toolId)return null;const t=(tools||[]).find(x=>String(x.id)===String(toolId));if(!t)return null;const cab=(cabinets||[]).find(c=>String(c.id)===String(t.cabinetId));const drw=cab?.drawers?.find(d=>String(d.id)===String(t.drawerId));if(!cab)return null;return{cab:cab.name,drw:drw?`Skuffe ${drw.number}${drw.label?` — ${drw.label}`:""}`:null};};
   const opColors={"Side 1":"#3b82f6","Side 2":C.green,"Finish Part":C.amber};
   const opColor=opColors[sheet.operation]||C.muted;
   const renderToolList=(toolArr,accent)=>(
@@ -48,7 +49,7 @@ export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,on
       );})}
     </div>
   );
-  const sheetParams=(sheet.params&&sheet.params.length)?sheet.params:[["Chuck Name",sheet.chuckName],["Chuck Overhang",sheet.chuckOverhang],["Clamping Pressure",sheet.clampingPressure],["Zero Point",sheet.zeroPoint],["Workpiece Stop",sheet.workpieceStop]].filter(([,v])=>v).map(([k,v])=>({key:k,value:v}));
+  const sheetParams=(sheet.params&&sheet.params.length)?sheet.params:[["Patron",sheet.chuckName],["Patron udhæng",sheet.chuckOverhang],["Spændetryk",sheet.clampingPressure],["Nulpunkt",sheet.zeroPoint],["Emnestop",sheet.workpieceStop]].filter(([,v])=>v).map(([k,v])=>({key:k,value:v}));
   const params=sheetParams.filter(p=>p.value);
 
   const printPdf=()=>{
@@ -113,6 +114,11 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
         <div style={{flex:1,minWidth:0}}><div style={{fontSize:20,fontWeight:700,color:C.text}}>{sheet.partNumber}</div><div style={{fontSize:14,color:C.muted}}>{[sheet.customer,sheet.machine,sheet.operation&&`Op ${sheet.operation}`].filter(Boolean).join(" · ")}</div></div>
         {onDuplicate&&<button style={{...btn("outline",false,true),padding:"10px 16px",flexShrink:0,fontSize:24}} title="Kopier ark" onClick={onDuplicate}><i className="ti ti-copy"/></button>}
         <button style={{...btn("outline",false,true),padding:"10px 16px",flexShrink:0,fontSize:24}} onClick={onEdit}><i className="ti ti-edit"/></button>
+      </div>
+      <div style={{fontSize:14,color:C.muted,marginBottom:10,display:"flex",gap:14,flexWrap:"wrap"}}>
+        {use?<span style={{color:C.text}}><i className="ti ti-player-play"/> Sidst brugt {shortDate(use.at)}{use.by?` af ${use.by}`:""} · {use.count} job i alt</span>
+          :<span><i className="ti ti-player-play"/> Ikke brugt til et job endnu</span>}
+        {sheet.updatedAt&&<span><i className="ti ti-pencil"/> Rettet {shortDate(sheet.updatedAt)}{sheet.updatedBy?` af ${sheet.updatedBy}`:""}</span>}
       </div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:10}}>
         {sheet.department&&<span style={{fontSize:13,fontWeight:700,color:C.blue,background:"rgba(59,130,246,.12)",border:"1px solid rgba(59,130,246,.3)",borderRadius:6,padding:"3px 10px"}}><i className="ti ti-building" style={{fontSize:13}}/> {sheet.department}</span>}

@@ -5,7 +5,7 @@ import { C, btn } from "../lib/theme";
 // in setupsheets/historik/<id>/. Loaded when opened, newest first.
 const when=t=>t?new Date(t).toLocaleString("da-DK",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"}):"ukendt dato";
 
-export function SheetHistory({sheetId}){
+export function SheetHistory({sheetId,deleted}){
   const [open,setOpen]=useState(false);
   const [data,setData]=useState(null); // {current,history} | "error"
   const load=()=>{
@@ -35,7 +35,7 @@ export function SheetHistory({sheetId}){
         data===null?<div style={{padding:14,color:C.muted,fontSize:14}}>Henter…</div>
         :data==="error"?<div style={{padding:14,color:C.red,fontSize:14}}>Kunne ikke hente historikken fra serveren. <button style={btn("outline",false,true)} onClick={load}>Prøv igen</button></div>
         :<>
-          {data.current?row(data.current,"Nuværende version",C.green)
+          {data.current?row(data.current,"Nuværende version",C.green):deleted?null
             :<div style={{padding:"12px 14px",fontSize:14,color:C.muted}}>Ingen PDF af den nuværende version endnu — den laves næste gang arket gemmes.</div>}
           {hist.map(h=>row(h,h.reason==="slettet"?`Sidste version før arket blev slettet${h.archivedBy?` af ${h.archivedBy}`:""}`:`Tidligere version · erstattet ${when(h.archivedAt)}${h.archivedBy?` af ${h.archivedBy}`:""}`,C.muted))}
           {!hist.length&&<div style={{padding:"12px 14px",fontSize:13,color:C.muted,borderTop:`1px solid ${C.border}`}}>Ingen tidligere versioner endnu. Hver gang arket gemmes, gemmes den forrige version her.</div>}

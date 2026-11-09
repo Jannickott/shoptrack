@@ -160,6 +160,38 @@ if (fs.existsSync(DATA_FILE)) {
   } catch (e) { console.error("  ✗ Tool type rename failed:", e.message); }
 }
 
+// Setup sheet parameters from the old English preset list → Danish, in the department
+// lists and in every sheet. Sheets get a new updatedAt and the settings a new version,
+// so tablets that still hold the English names take the Danish ones instead of sending them back.
+const PARAM_DA = { "Chuck Name": "Patron", "Chuck Overhang": "Patron udhæng", "Clamping Pressure": "Spændetryk",
+  "Zero Point": "Nulpunkt", "Workpiece Stop": "Emnestop", "Spindle Speed": "Spindelhastighed", "Feed Rate": "Tilspænding",
+  "Coolant Pressure": "Køletryk", "Tool Offset": "Værktøjsoffset", "Bar Diameter": "Stangdiameter", "Chuck Jaw": "Patronbakker",
+  "RPM": "Omdr./min", "Cutting Speed": "Skærehastighed", "DOC": "Skæredybde", "Cycle tid": "Cyklustid" };
+if (fs.existsSync(DATA_FILE)) {
+  try {
+    const data = JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+    let lists = 0, sheets = 0;
+    const now = Date.now();
+    Object.keys(data.setupDeptParams || {}).forEach(k => {
+      const arr = data.setupDeptParams[k];
+      if (Array.isArray(arr) && arr.some(n => PARAM_DA[n])) { data.setupDeptParams[k] = [...new Set(arr.map(n => PARAM_DA[n] || n))]; lists++; }
+    });
+    (data.setupSheets || []).forEach(s => {
+      if (Array.isArray(s.params) && s.params.some(p => PARAM_DA[p.key])) {
+        s.params = s.params.map(p => PARAM_DA[p.key] ? { ...p, key: PARAM_DA[p.key] } : p);
+        s.updatedAt = (s.updatedAt || 0) + 1; sheets++; // just newer than the copies on the tablets — "Rettet" date stays
+      }
+    });
+    if (lists || sheets) {
+      if (lists) data.settingsVersion = Math.max(now, (data.settingsVersion || 0) + 1);
+      const tmp = DATA_FILE + ".tmp";
+      fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
+      fs.renameSync(tmp, DATA_FILE);
+      console.log(`  ✓ Setup parameters in Danish: ${lists} department list${lists === 1 ? "" : "s"}, ${sheets} sheet${sheets === 1 ? "" : "s"}`);
+    }
+  } catch (e) { console.error("  ✗ Setup parameter rename failed:", e.message); }
+}
+
 // Move any inline photos out of the data file (runs after the startup backup)
 if (fs.existsSync(DATA_FILE)) {
   try {
@@ -922,9 +954,9 @@ app.post("/api/setupsheet-pdf", (req, res) => {
     // Support new dynamic params array and old individual fields
     let rawParams = (sheet.params && sheet.params.length)
       ? sheet.params.filter(p => p.value)
-      : [["Chuck Name", sheet.chuckName], ["Chuck Overhang", sheet.chuckOverhang],
-         ["Clamping Pressure", sheet.clampingPressure],
-         ["Zero Point", sheet.zeroPoint], ["Workpiece Stop", sheet.workpieceStop]]
+      : [["Patron", sheet.chuckName], ["Patron udhæng", sheet.chuckOverhang],
+         ["Spændetryk", sheet.clampingPressure],
+         ["Nulpunkt", sheet.zeroPoint], ["Emnestop", sheet.workpieceStop]]
         .filter(([, v]) => v)
         .map(([k, v]) => ({ key: k, value: v }));
     if (rawParams.length) {

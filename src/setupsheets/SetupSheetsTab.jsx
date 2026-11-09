@@ -5,13 +5,36 @@ import { C, inp, btn } from "../lib/theme";
 import { fmtDate } from "../lib/util";
 import { SetupSheetDetail } from "./SetupSheetDetail";
 import { SetupSheetForm } from "./SetupSheetForm";
+import { SheetHistory } from "./SheetHistory";
+import { sheetUseMap, lastUse, shortDate } from "./sheetUse";
 
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,subDepartments,setSubDepartments,tools,cabinets,setTab,setFocusToolId,focusSheetId,setFocusSheetId,newSheetFor,setNewSheetFor}){
+export function SetupSheetsTab({prep,allSheets,user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,subDepartments,setSubDepartments,tools,cabinets,setTab,setFocusToolId,focusSheetId,setFocusSheetId,newSheetFor,setNewSheetFor}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
+  const [showDeleted,setShowDeleted]=useState(false);
+  const [restoreId,setRestoreId]=useState(null);
+  const isAdmin=user?.role==="admin";
+  // The list shown here has no deleted sheets — keep them when storing (they're the history)
+  const withDeleted=list=>[...list,...(allSheets||[]).filter(x=>x.deleted&&!list.some(y=>y.id===x.id))];
+  // "Sidst brugt": newest job per sheet
+  const useMap=useMemo(()=>sheetUseMap(prep?.jobs),[prep?.jobs]);
+  // Admin: deleted sheets (kept on the server with their PDF history) — newest first
+  const deletedSheets=isAdmin?(allSheets||[]).filter(s=>s.deleted).sort((a,b)=>(b.deletedAt||b.updatedAt||0)-(a.deletedAt||a.updatedAt||0)):[];
+  const restoreSheet=s=>{
+    const now=Date.now();
+    const back={...s,deleted:false,deletedAt:null,deletedBy:null,updatedAt:now};
+    let updated=[back,...(setupSheets||[]).filter(x=>x.id!==s.id)];
+    updated=withDeleted(updated);
+    setSetupSheets(updated);
+    if(stateRef) stateRef.current={...stateRef.current,setupSheets:updated};
+    saveNow&&saveNow();
+    backupPdf(back,null);
+    setRestoreId(null);
+    notify(`Opstillingsark ${s.partNumber} er gendannet`);
+  };
   useEffect(()=>{if(focusSheetId){setSelectedId(focusSheetId);setView("detail");setFocusSheetId&&setFocusSheetId(null);}},[focusSheetId]);
   // Started a job with no sheet → open a new sheet with the job filled in
   const [prefill,setPrefill]=useState(null);
@@ -65,6 +88,7 @@ export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,sa
     return true;
   }).sort((a,b)=>(b.updatedAt||b.createdAt||0)-(a.updatedAt||a.createdAt||0));
   const saveSheets=(updated)=>{
+    updated=withDeleted(updated);
     setSetupSheets(updated);
     if(stateRef) stateRef.current={...stateRef.current,setupSheets:updated};
     saveNow&&saveNow();
@@ -110,7 +134,8 @@ export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,sa
   const duplicateSheet=sheet=>{
     const now=Date.now();
     const copy={...sheet,id:now,partNumber:sheet.partNumber+" (kopi)",createdAt:now,updatedAt:now,createdBy:user?.name||""};
-    const updated=[copy,...(setupSheets||[])];
+    let updated=[copy,...(setupSheets||[])];
+    updated=withDeleted(updated);
     setSetupSheets(updated);
     if(stateRef) stateRef.current={...stateRef.current,setupSheets:updated};
     openEdit(now,null);
@@ -129,7 +154,7 @@ export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,sa
   const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
   if(view==="edit") return(<SetupSheetForm draftKey={draftKey} sheet={selected} prefill={selected?null:prefill} draft={resume} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setResume(null);setDraftsVer(v=>v+1);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet,selected);setPrefill(null);setResume(null);setDraftsVer(v=>v+1);notify("Opstillingsark gemt");setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
-  if(view==="detail"&&selected) return(<SetupSheetDetail prep={prep} isAdmin={user?.role==="admin"} sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>openEdit(selected.id)} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).map(s=>s.id===selected.id?{...s,deleted:true,updatedAt:Date.now()}:s));archivePdf(selected);setView("list");setSelectedId(null);}}/>);
+  if(view==="detail"&&selected) return(<SetupSheetDetail use={lastUse(selected,useMap)} prep={prep} isAdmin={user?.role==="admin"} sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>openEdit(selected.id)} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).map(s=>s.id===selected.id?{...s,deleted:true,deletedAt:Date.now(),deletedBy:user?.name||"",updatedAt:Date.now()}:s));archivePdf(selected);setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
@@ -254,12 +279,41 @@ export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,sa
             <div style={{display:"flex",gap:12,fontSize:12,color:C.muted,letterSpacing:.5}}>
               <span><i className="ti ti-tool"/> {(s.tools||[]).filter(t=>t.description).length} værktøj</span>
               {(s.tools2||[]).filter(t=>t.description).length>0&&<span><i className="ti ti-tool"/> {(s.tools2||[]).filter(t=>t.description).length} sub</span>}
-              <span><i className="ti ti-calendar"/> {fmtDate(s.updatedAt||s.createdAt)}</span>
+              {(()=>{const u=lastUse(s,useMap);return u
+                ?<span style={{color:C.text}}><i className="ti ti-player-play"/> Sidst brugt {shortDate(u.at)}{u.by?` · ${u.by}`:""}</span>
+                :<span><i className="ti ti-player-play"/> Ikke brugt endnu</span>;})()}
+              <span><i className="ti ti-pencil"/> Rettet {fmtDate(s.updatedAt||s.createdAt)}</span>
               {s.createdBy&&<span><i className="ti ti-user"/> {s.createdBy}</span>}
             </div>
           </div>
         ))}
       </div>
+      {/* Admin: deleted sheets — see their PDFs or bring one back */}
+      {deletedSheets.length>0&&<div style={{marginTop:22}}>
+        <button style={{...btn("outline",true,true),color:C.muted}} onClick={()=>setShowDeleted(v=>!v)}>
+          <i className="ti ti-trash"/> Slettede ark ({deletedSheets.length}) · kun admin <i className={`ti ti-chevron-${showDeleted?"up":"down"}`}/>
+        </button>
+        {showDeleted&&<div style={{display:"flex",flexDirection:"column",gap:10,marginTop:10}}>
+          {deletedSheets.map(d=>(
+            <div key={d.id} style={{background:C.surface,borderRadius:10,border:`1px dashed ${C.border}`,padding:"12px 14px"}}>
+              <div style={{display:"flex",alignItems:"center",gap:10,flexWrap:"wrap",marginBottom:10}}>
+                <div style={{flex:"1 1 200px",minWidth:0}}>
+                  <div style={{fontSize:17,fontWeight:700,color:C.text}}>{d.partNumber} <span style={{fontSize:13,color:C.amber,fontWeight:700}}>{d.machine}</span></div>
+                  <div style={{fontSize:13,color:C.muted}}>Slettet {fmtDate(d.deletedAt||d.updatedAt)}{d.deletedBy?` af ${d.deletedBy}`:""}{d.customer?` · ${d.customer}`:""}</div>
+                </div>
+                {restoreId!==d.id
+                  ?<button style={btn("outline",false,true)} onClick={()=>setRestoreId(d.id)}><i className="ti ti-restore"/> Gendan</button>
+                  :<div style={{display:"flex",gap:6,alignItems:"center"}}>
+                    <span style={{fontSize:14,color:C.text}}>Gendan arket?</span>
+                    <button style={btn("success",false,true)} onClick={()=>restoreSheet(d)}>Ja, gendan</button>
+                    <button style={btn("outline",false,true)} onClick={()=>setRestoreId(null)}>Annuller</button>
+                  </div>}
+              </div>
+              <SheetHistory sheetId={d.id} deleted/>
+            </div>
+          ))}
+        </div>}
+      </div>}
     </div>
   );
 }
