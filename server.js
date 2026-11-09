@@ -478,6 +478,8 @@ function mergeAndWrite(incoming) {
   merged.maintLog      = unionById(server.maintLog, incoming.maintLog);
   // Setup sheets: per sheet, newest updatedAt wins (deleting sets deleted:true)
   merged.setupSheets   = unionById(server.setupSheets, incoming.setupSheets);
+  // Tool changes (tool life: "Nyt værktøj sat i" / "Slebet" per machine) — same rule
+  merged.toolChanges   = unionById(server.toolChanges, incoming.toolChanges);
   merged.machineIssues = mergeIssues(server.machineIssues, incoming.machineIssues, merged.downtimeLog);
 
   merged.settingsVersion = Math.max(serverSV, incomingSV);

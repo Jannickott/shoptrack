@@ -9,7 +9,7 @@ import { SetupSheetForm } from "./SetupSheetForm";
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
 // ═══════════════════════════════════════════════════════
-export function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,subDepartments,setSubDepartments,tools,cabinets,setTab,setFocusToolId,focusSheetId,setFocusSheetId,newSheetFor,setNewSheetFor}){
+export function SetupSheetsTab({prep,user,setupSheets,setSetupSheets,machines,saveNow,stateRef,setupDeptParams,setSetupDeptParams,subDepartments,setSubDepartments,tools,cabinets,setTab,setFocusToolId,focusSheetId,setFocusSheetId,newSheetFor,setNewSheetFor}){
   const [view,setView]=useState("list");
   const [selectedId,setSelectedId]=useState(null);
   useEffect(()=>{if(focusSheetId){setSelectedId(focusSheetId);setView("detail");setFocusSheetId&&setFocusSheetId(null);}},[focusSheetId]);
@@ -121,7 +121,7 @@ export function SetupSheetsTab({user,setupSheets,setSetupSheets,machines,saveNow
   const formParamOptions=(setupDeptParams||{})[sheetDept]||(setupDeptParams||{})[""]||[];
   if(view==="edit") return(<SetupSheetForm sheet={selected} prefill={selected?null:prefill} draft={resume} machines={machines} user={user} setupDeptParams={setupDeptParams||{}} subDepartments={subDepartments||{}} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>{setPrefill(null);setResume(null);setDraftsVer(v=>v+1);setView(selected?"detail":"list");}} onSave={sheet=>{const updated=selected?(setupSheets||[]).map(s=>s.id===sheet.id?sheet:s):[sheet,...(setupSheets||[])];saveSheets(updated);backupPdf(sheet);setPrefill(null);setResume(null);setDraftsVer(v=>v+1);notify("Opstillingsark gemt");setSelectedId(sheet.id);setView("detail");}}/>);
   const onGoToTool=toolId=>{setFocusToolId&&setFocusToolId(toolId);setTab&&setTab("tools");};
-  if(view==="detail"&&selected) return(<SetupSheetDetail sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>openEdit(selected.id)} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).map(s=>s.id===selected.id?{...s,deleted:true,updatedAt:Date.now()}:s));setView("list");setSelectedId(null);}}/>);
+  if(view==="detail"&&selected) return(<SetupSheetDetail prep={prep} sheet={selected} tools={tools||[]} cabinets={cabinets||[]} onBack={()=>setView("list")} onEdit={()=>openEdit(selected.id)} onGoToTool={onGoToTool} onDuplicate={()=>duplicateSheet(selected)} onDelete={()=>{saveSheets((setupSheets||[]).map(s=>s.id===selected.id?{...s,deleted:true,updatedAt:Date.now()}:s));setView("list");setSelectedId(null);}}/>);
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>

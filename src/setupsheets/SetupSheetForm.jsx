@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { C, inp, sel, btn, label, errMsg } from "../lib/theme";
 import { saveDraft, clearDraft } from "./sheetDraft";
 import { PdfDrawings } from "../components/PdfDrawings";
+import { ToolPickerField } from "../tools/ToolPicker";
 import { ERIKS_BLANK, UnusedCross } from "./SetupSheetDetail";
 import { resizeImage } from "../lib/api";
 
@@ -100,10 +101,7 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
               </select>
               <div style={{flex:1,display:"flex",flexDirection:"column",gap:6}}>
                 <input style={inp()} value={t.description||""} onChange={e=>setTool(t.position,"description",e.target.value)} placeholder="Beskrivelse af værktøj — skal udfyldes"/>
-                <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>pickTool(id=>setTool(t.position,"toolId",id),v=>setTool(t.position,"toolLife",v),t,e.target.value)}>
-                  <option value="">— Intet værktøj fra skab —</option>
-                  {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
-                </select>
+                <ToolPickerField value={t.toolId} tools={activeCabinetTools} cabinets={cabinets} onPick={id=>pickTool(id=>setTool(t.position,"toolId",id),v=>setTool(t.position,"toolLife",v),t,id)}/>
                 <input style={{...inp(),fontSize:14}} value={t.label||""} onChange={e=>setTool(t.position,"label",e.target.value)} placeholder="Noter — valgfrit"/>
                 {lifeInput(t,v=>setTool(t.position,"toolLife",v))}
               </div>
@@ -141,10 +139,7 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
               </div>
               <div style={{padding:"4px 14px 10px",display:"flex",flexDirection:"column",gap:6}}>
                 <input style={inp()} value={t.description||""} onChange={e=>setTool(pos,"description",e.target.value)} placeholder="Beskrivelse af værktøj — valgfrit"/>
-                <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>pickTool(id=>setTool(pos,"toolId",id),v=>setTool(pos,"toolLife",v),t,e.target.value)}>
-                  <option value="">— Intet værktøj fra skab —</option>
-                  {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
-                </select>
+                <ToolPickerField value={t.toolId} tools={activeCabinetTools} cabinets={cabinets} onPick={id=>pickTool(id=>setTool(pos,"toolId",id),v=>setTool(pos,"toolLife",v),t,id)}/>
                 <input style={{...inp(),fontSize:14}} value={t.label||""} onChange={e=>setTool(pos,"label",e.target.value)} placeholder="Noter — valgfrit"/>
                 {lifeInput(t,v=>setTool(pos,"toolLife",v))}
               </div>
@@ -171,10 +166,7 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
         </div>
         <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
           <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Beskrivelse af fræser — valgfrit"/>
-          <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>pickTool(id=>setTool("toolId",id),v=>setTool("toolLife",v),t,e.target.value)}>
-            <option value="">— Intet værktøj fra skab —</option>
-            {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
-          </select>
+          <ToolPickerField value={t.toolId} tools={activeCabinetTools} cabinets={cabinets} onPick={id=>pickTool(id=>setTool("toolId",id),v=>setTool("toolLife",v),t,id)}/>
           <input style={{...inp(),fontSize:14}} value={t.label||""} onChange={e=>setTool("label",e.target.value)} placeholder="Noter — valgfrit"/>
           {lifeInput(t,v=>setTool("toolLife",v))}
         </div>
@@ -393,10 +385,7 @@ export function SetupSheetForm({sheet,prefill,draft,machines,user,setupDeptParam
         </div>
         <div style={{padding:"10px 14px",display:"flex",flexDirection:"column",gap:6}}>
           <input style={inp()} value={t.description||""} onChange={e=>setTool("description",e.target.value)} placeholder="Beskrivelse af værktøj — valgfrit"/>
-          <select style={sel()} value={t.toolId!=null?String(t.toolId):""} onChange={e=>pickTool(id=>setTool("toolId",id),v=>setTool("toolLife",v),t,e.target.value)}>
-            <option value="">— Intet værktøj fra skab —</option>
-            {activeCabinetTools.map(ct=>{const ctCab=(cabinets||[]).find(c=>String(c.id)===String(ct.cabinetId));const ctDrw=ctCab?.drawers?.find(d=>String(d.id)===String(ct.drawerId));return(<option key={ct.id} value={ct.id}>{ct.name}{ctCab?` (${ctCab.name}${ctDrw?`, Drawer ${ctDrw.number}`:""})`:""}  </option>);})}
-          </select>
+          <ToolPickerField value={t.toolId} tools={activeCabinetTools} cabinets={cabinets} onPick={id=>pickTool(id=>setTool("toolId",id),v=>setTool("toolLife",v),t,id)}/>
           <input style={{...inp(),fontSize:14}} value={t.label||""} onChange={e=>setTool("label",e.target.value)} placeholder="Noter — valgfrit"/>
           {lifeInput(t,v=>setTool("toolLife",v))}
         </div>

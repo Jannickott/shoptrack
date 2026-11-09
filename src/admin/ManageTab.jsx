@@ -4,6 +4,7 @@ import { ManageOperators, ManageMachines } from "./ManagePeople";
 import { WorkHoursSettings, ManageEfficiencyGoals, ManageDepartments } from "./ManageSettings";
 import { C, btn, tag } from "../lib/theme";
 import { ManageTools } from "../tools/ManageTools";
+import { OrderList } from "../tools/OrderList";
 import { ServerStatus } from "./ServerStatus";
 
 // ═══════════════════════════════════════════════════════
@@ -153,13 +154,16 @@ export function ManageTab({users,setUsers,machines,setMachines,workHours,setWork
 export function AdminToolsTab({tools,setTools,toolLog,setToolLog,cabinets,setCabinets,departments,users,machines,saveNow,focusToolId,setFocusToolId}){
   const [view,setView]=useState("tools");
   useEffect(()=>{if(focusToolId) setView("tools");},[focusToolId]);
+  const orderCnt=(tools||[]).filter(t=>t.active!==false&&(t.broken||(!t.returnable&&t.quantity<=(t.minQuantity||0)))).length;
   return(
     <div style={{padding:"14px 16px"}}>
       <div style={{display:"flex",gap:8,marginBottom:16}}>
         <button style={tag(view==="tools")}    onClick={()=>setView("tools")}   ><i className="ti ti-package"/> Værktøj</button>
         <button style={tag(view==="cabinets")} onClick={()=>setView("cabinets")}><i className="ti ti-archive"/> Skabe</button>
+        <button style={tag(view==="orders")}   onClick={()=>setView("orders")}  ><i className="ti ti-shopping-cart"/> Indkøbsliste{orderCnt>0&&<span style={{marginLeft:6,background:C.red,color:"#fff",borderRadius:20,fontSize:12,padding:"0 6px",fontWeight:700}}>{orderCnt}</span>}</button>
       </div>
       {view==="tools"    &&<ManageTools    tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} saveNow={saveNow} users={users} machines={machines} cabinets={cabinets} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
+      {view==="orders"   &&<OrderList tools={tools} setTools={setTools} setToolLog={setToolLog} cabinets={cabinets}/>}
       {view==="cabinets" &&<ManageCabinets cabinets={cabinets} setCabinets={setCabinets} departments={departments} saveNow={saveNow}/>}
     </div>
   );

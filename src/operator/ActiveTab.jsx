@@ -3,11 +3,15 @@ import { notify } from "../components/Feedback";
 import { C, inp, btn, badge, tag } from "../lib/theme";
 import { fmtHM, fmtDetail, liveTime } from "../lib/util";
 import { StartRunModal } from "./JobModals";
+import { jobToolWarnings } from "../tools/toolLife";
+import { ToolLifeRow } from "../tools/ToolLifeRow";
 
 // ═══════════════════════════════════════════════════════
 // ACTIVE
 // ═══════════════════════════════════════════════════════
-export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,pauseJob,resumeJob}){
+export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,pauseJob,resumeJob,life}){
+    // Tools on this job's setup sheet that are nearly or fully used up (tool life)
+    const toolWarns=life?jobToolWarnings(j,life.ctx):[];
     const [nmForm,setNmForm]=useState(false);
     const [nmH,setNmH]=useState(""); const [nmM,setNmM]=useState("");
     const [pauseConfirm,setPauseConfirm]=useState(false);
@@ -84,6 +88,12 @@ export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,paus
             </div>
           </div>
         )}
+        {toolWarns.map(({row,tool,usage,machine})=>(
+          <div key={tool.id} style={{background:usage.pct>=1?"rgba(231,76,60,.1)":"rgba(240,165,0,.1)",border:`1px solid ${usage.pct>=1?C.red:C.amber}`,borderRadius:8,padding:"8px 10px"}}>
+            <div style={{fontSize:14,fontWeight:700,color:C.text,marginBottom:4}}><i className="ti ti-tool"/> Pos. {row.position} · {tool.name}</div>
+            <ToolLifeRow tool={tool} usage={usage} machine={machine} user={life.user} setToolChanges={life.setToolChanges} saveNow={life.saveNow} compact/>
+          </div>
+        ))}
         {/* Side 1 summary row (when on side 2) */}
         {isSide2&&(
           <div style={{background:"rgba(39,174,96,.08)",border:`1px solid rgba(39,174,96,.2)`,borderRadius:6,padding:"6px 8px",display:"flex",gap:10,marginBottom:2,justifyContent:"center"}}>
@@ -186,7 +196,7 @@ export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,paus
     );
 }
 
-export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
+export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef,life}){
   const [machineFilt,setMachineFilt]=useState("all");
   const [startRunId,setStartRunId]=useState(null);
   const active=jobs.filter(j=>j.status!=="done"&&j.operatorId===user.id);
@@ -251,7 +261,7 @@ export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
             <i className="ti ti-tool"/> Afgratning · {deburJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {deburJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
+            {deburJobs.map(j=><JobCard key={j.id} life={life} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}
@@ -261,7 +271,7 @@ export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
             <i className="ti ti-settings"/> Opstilling · {setupJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-            {setupJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
+            {setupJobs.map(j=><JobCard key={j.id} life={life} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}
@@ -271,7 +281,7 @@ export function ActiveTab({user,jobs,setJobs,setCompleteId,saveNow,stateRef}){
             <i className="ti ti-player-play"/> Produktion · {runJobs.length}
           </div>
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            {runJobs.map(j=><JobCard key={j.id} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
+            {runJobs.map(j=><JobCard key={j.id} life={life} j={j} setJobs={setJobs} startRun={startRun} setCompleteId={setCompleteId} completeDeburring={completeDeburring} pauseJob={pauseJob} resumeJob={resumeJob}/>)}
           </div>
         </>
       )}

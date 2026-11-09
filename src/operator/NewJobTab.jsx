@@ -66,9 +66,9 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
   };
 
   const matchingSheets=job.trim()&&machine?(setupSheets||[]).filter(s=>s.partNumber.trim().toLowerCase()===job.trim().toLowerCase()&&s.machine===machine):[];
-  const createJob=()=>{
+  const createJob=(sheetId=null)=>{ // sheetId: the setup sheet the job runs with (tool life)
     const now=Date.now();
-    setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,targetQty:parseInt(qty,10)||null,lastModifiedAt:now,...(picked?{taskId:picked.task.id,taskStepId:picked.step.id}:{})},...prev]);
+    setJobs(prev=>[{id:now,customer:customer.trim(),job:job.trim(),machine,op:op.trim(),operatorId:user.id,operatorName:user.name,status:"setup",setupSec:0,runSec:0,phaseStartedAt:now,createdAt:now,pieces:0,photoData:null,photoData2:null,twoSided,targetQty:parseInt(qty,10)||null,setupSheetId:sheetId,lastModifiedAt:now,...(picked?{taskId:picked.task.id,taskStepId:picked.step.id}:{})},...prev]);
     if(picked) setTasks(prev=>prev.map(t=>t.id===picked.task.id?withStep(t,picked.step.id,{jobId:now,startedAt:now}):t));
     setCustomer("");setJob("");setMachine(defaultMachine);setOp("");setErrs({});setTwoSided(false);setShowSuggestions(true);setSheetPickerOpen(false);setPicked(null);setQty("");
     notify(`${task?"Opgave startet":"Job startet"} — opstilling kører på ${machine}`);
@@ -80,8 +80,8 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
     const e={};if(!customer.trim())e.customer="Skal udfyldes";if(!job.trim())e.job="Skal udfyldes";if(!machine)e.machine="Skal udfyldes";
     if(Object.keys(e).length){setErrs(e);return;}
     if(chosenSheetId===undefined&&matchingSheets.length>1){setSheetPickerOpen(true);return;}
-    createJob();
     const sheetId=chosenSheetId!=null?chosenSheetId:matchingSheets.length===1?matchingSheets[0].id:null;
+    createJob(sheetId);
     if(sheetId) goToSheet(sheetId);
     else if(!matchingSheets.length&&!task) goToNewSheet(); // tasks are one-offs — no sheet forced
   };

@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { sendToolOp, resizeImage } from "../lib/api";
+import { supplierHref } from "./toolOps";
 import { C, ISO_MAT, DRAWER_ROWS, DRAWER_COLS, card, inp, btn, badge, label, errMsg } from "../lib/theme";
 import { fmtDate, TOOL_ACTION_NAME } from "../lib/util";
 
@@ -20,7 +21,7 @@ export function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,mac
   }},[focusToolId]);
   const [toolFilter,setToolFilter]=useState("all");
   const [deleteConfirm,setDeleteConfirm]=useState(false);
-  const blank={name:"",toolType:"",returnable:false,regrindable:false,hasConditionRating:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",toolLife:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",photoData:null};
+  const blank={name:"",toolType:"",returnable:false,regrindable:false,hasConditionRating:false,cabinetId:"",drawerId:"",drawerPosition:"",quantity:"",minQuantity:"",toolLife:"",description:"",material:[],recommendedSpeed:"",recommendedFeed:"",supplier:"",articleNumber:"",supplierUrl:"",photoData:null};
   const [form,setForm]=useState(blank);
   const [errs,setErrs]=useState({});
   const photoRef=useRef();
@@ -80,7 +81,7 @@ export function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,mac
         <i className="ti ti-arrow-left"/> Tilbage
       </button>
       <div style={{fontSize:13,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:14}}>{editId?"Rediger værktøj":"Tilføj nyt værktøj"}</div>
-      {[["name","Værktøjets navn *","f.eks. CNMG 120408 skær"],["articleNumber","Varenr. / bestillingsnr.","f.eks. 979002-SG11M"],["supplier","Leverandør","f.eks. Hoffmann Group"]].map(([k,lbl,ph])=>(
+      {[["name","Værktøjets navn *","f.eks. CNMG 120408 skær"],["articleNumber","Varenr. / bestillingsnr.","f.eks. 979002-SG11M"],["supplier","Leverandør","f.eks. Hoffmann Group"],["supplierUrl","Link til varen hos leverandøren","Kopier adressen fra leverandørens hjemmeside"]].map(([k,lbl,ph])=>(
         <div key={k} style={{marginBottom:10}}>
           <label style={label}>{lbl}</label>
           <input style={fi(k)} value={form[k]} onChange={e=>setForm(p=>({...p,[k]:e.target.value}))} placeholder={ph}/>
@@ -411,6 +412,7 @@ export function ManageTools({tools,setTools,toolLog,setToolLog,saveNow,users,mac
               {selectedTool.toolType&&<span style={{fontSize:14,fontWeight:600,color:"#94a3b8",background:"rgba(148,163,184,.15)",padding:"3px 9px",borderRadius:20,border:"1px solid rgba(148,163,184,.25)",whiteSpace:"nowrap"}}>{selectedTool.toolType}</span>}
             </div>
             {selectedTool.articleNumber&&<div style={{fontSize:14,color:C.muted,marginBottom:6}}>{selectedTool.articleNumber}</div>}
+            {supplierHref(selectedTool.supplierUrl)&&<a href={supplierHref(selectedTool.supplierUrl)} target="_blank" rel="noreferrer" style={{display:"inline-flex",alignItems:"center",gap:6,fontSize:14,color:C.blue,textDecoration:"none",marginBottom:8,padding:"6px 10px",border:`1px solid ${C.blue}55`,borderRadius:8}}><i className="ti ti-external-link"/> Åbn hos {selectedTool.supplier||"leverandøren"}</a>}
             {!selectedTool.active&&<div style={{...badge("down"),display:"inline-flex",marginBottom:8,fontSize:12}}>SKJULT FOR OPERATØRER</div>}
             {Array.isArray(selectedTool.material)&&selectedTool.material.length>0&&(
               <div style={{marginBottom:12}}>

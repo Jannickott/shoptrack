@@ -94,6 +94,7 @@ export default function App(){
   const [tasks,setTasks]=useState([]); // Opgaver — see tasks/taskUtil.js
   const [maintTasks,setMaintTasks]=useState([]); // Vedligehold — see maintenance/maintUtil.js
   const [maintLog,setMaintLog]=useState([]);
+  const [toolChanges,setToolChanges]=useState([]); // tool life — see tools/toolLife.js
 
   // New version on the server? The first /api/data response tells us which build
   // this page is; a different X-App-Version later means the server was updated.
@@ -161,6 +162,7 @@ export default function App(){
           if(data.tasks) setTasks(data.tasks);
           if(data.maintTasks) setMaintTasks(data.maintTasks);
           if(data.maintLog) setMaintLog(data.maintLog);
+          if(data.toolChanges) setToolChanges(data.toolChanges);
           if(data.settingsVersion) settingsVersionRef.current=data.settingsVersion;
           // Still logged in on this tablet (page reloaded, app reopened) → carry on without the PIN
           const s=readSession();
@@ -184,7 +186,7 @@ export default function App(){
             planOrders:data.planOrders,
             planSettings:data.planSettings,
             tasks:data.tasks,
-            maintTasks:data.maintTasks,maintLog:data.maintLog,
+            maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges,
           };
         }
       })
@@ -203,8 +205,8 @@ export default function App(){
   const doSaveRef=useRef(null);         // doSave, for the 3 s loop (defined further down)
   const [serverOnline,setServerOnline]=useState(true);
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog]);
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges};
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges]);
 
   // Save to server every 3 seconds — only when data has changed, with retry on failure
   useEffect(()=>{
@@ -264,6 +266,7 @@ export default function App(){
         mergeById("tasks",setTasks);
         mergeById("maintTasks",setMaintTasks);
         mergeById("maintLog",setMaintLog);
+        mergeById("toolChanges",setToolChanges);
         // Settings: only apply if the server value actually changed (another device saved it)
         const s=JSON.stringify;
         if(data.workHours  &&s(data.workHours) !==s(last.workHours)) {setWorkHours(data.workHours);workHoursRef.current=data.workHours;}
@@ -301,7 +304,7 @@ export default function App(){
         // Keep settingsVersion in sync with server (take the max — never go backwards)
         if((data.settingsVersion||0)>settingsVersionRef.current) settingsVersionRef.current=data.settingsVersion;
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders,planSettings:data.planSettings,tasks:data.tasks,maintTasks:data.maintTasks,maintLog:data.maintLog};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders,planSettings:data.planSettings,tasks:data.tasks,maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges};
       }).catch(()=>setServerOnline(false));
     },5000);
     return()=>clearInterval(t);
@@ -332,7 +335,7 @@ export default function App(){
     if(!savePendingRef.current) return;
     savePendingRef.current=false;
     doSave();
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog]);
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges]);
 
   // ── Refresh immediately when tab becomes visible again ────
   useEffect(()=>{
@@ -646,17 +649,17 @@ export default function App(){
       {tab==="new"      &&<NewJobTab         maintItems={myMaintItems} onOpenMaint={openMaintFor} user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={liveSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
       {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} focusTaskId={focusTaskId} setFocusTaskId={setFocusTaskId} departments={departments} setCompleteId={setCompleteId} saveNow={saveNow}/>}
       {tab==="quick"    &&<QuickEntryTab     user={user} machines={machines} jobs={visibleJobs} setJobs={setJobs} setTab={setTab} saveNow={saveNow}/>}
-      {tab==="active"   &&<ActiveTab         user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
+      {tab==="active"   &&<ActiveTab         life={{ctx:{tools,jobs:visibleJobs,sheets:liveSheets,changes:toolChanges},user,setToolChanges,saveNow}} user={user} jobs={visibleJobs} setJobs={setJobs} setCompleteId={setCompleteId} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machines" &&<MachineStatusTab  focusMaint={focusMaint} setFocusMaint={setFocusMaint} user={user} machines={machines} jobs={visibleJobs} machineIssues={machineIssues} reportIssue={reportIssue} resolveIssue={resolveIssue} maintTasks={maintTasks} maintLog={maintLog} setMaintLog={setMaintLog} saveNow={saveNow}/>}
       {tab==="tools"    &&<ToolsTab          user={user} tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="history"  &&<HistoryTab        user={user} jobs={visibleJobs}/>}
-      {tab==="admin"    &&<AdminDash         maintTasks={maintTasks} maintLog={maintLog} onOpenMaint={()=>{setMachView("maint");setTab("machdata");}} tasks={tasks} planOrders={planOrders} setTab={setTab} onOpenJob={j=>{setFocusJob(j);setTab("alljobs");}} jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
+      {tab==="admin"    &&<AdminDash         sheets={liveSheets} toolChanges={toolChanges} maintTasks={maintTasks} maintLog={maintLog} onOpenMaint={()=>{setMachView("maint");setTab("machdata");}} tasks={tasks} planOrders={planOrders} setTab={setTab} onOpenJob={j=>{setFocusJob(j);setTab("alljobs");}} jobs={visibleJobs} machineIssues={machineIssues} downtimeLog={downtimeLog} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} tools={tools} efficiencyGoals={efficiencyGoals} workHours={workHours}/>}
       {tab==="alljobs"  &&<AllJobsTab        jobs={visibleJobs} focusJob={focusJob} setFocusJob={setFocusJob} setJobs={setJobs} setCompleteId={setCompleteId} users={users} machines={machines} machineIssues={machineIssues} setMachineIssues={setMachineIssues} resolveIssue={resolveIssue} downtimeLog={downtimeLog} setDowntimeLog={setDowntimeLog} saveNow={saveNow} stateRef={stateRef}/>}
       {tab==="machdata" &&<MachinesAdminTab   key={machView} initialView={machView} user={user} allJobs={visibleJobs} maintTasks={maintTasks} setMaintTasks={setMaintTasks} maintLog={maintLog} setMaintLog={setMaintLog} saveNow={saveNow} reportIssue={reportIssue} jobs={statJobs} machines={machines} downtimeLog={downtimeLog} machineIssues={machineIssues} efficiencyGoals={efficiencyGoals} workHours={workHours} clock={clock}/>}
       {tab==="planning" &&<PlanningTab       jobs={visibleJobs} setJobs={setJobs} user={user} machineIssues={machineIssues} machines={machines} departments={departments} workHours={workHours} planOrders={planOrders} setPlanOrders={setPlanOrders} planSettings={planSettings} setPlanSettings={setPlanSettings} saveNow={saveNow}/>}
       {tab==="reports"  &&<ReportsTab       jobs={statJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
-      {tab==="setup"    &&<SetupSheetsTab    user={user} setupSheets={liveSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
+      {tab==="setup"    &&<SetupSheetsTab    prep={{user,setTools,setToolLog,jobs:visibleJobs,sheets:liveSheets,toolChanges,setToolChanges,saveNow}} user={user} setupSheets={liveSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
       </>}
 

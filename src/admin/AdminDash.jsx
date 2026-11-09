@@ -4,6 +4,7 @@ import { fmtHM, fmtDate, toDateInput, jRunAll, jSetupAll, liveTime, calcAvailabl
 import { jobProgress, normPart } from "../planning/planEngine";
 import { visibleTasks, taskState } from "../tasks/taskUtil";
 import { machineMaint, machineOperator, dueText } from "../maintenance/maintUtil";
+import { jobToolWarnings } from "../tools/toolLife";
 
 // ═══════════════════════════════════════════════════════
 // ADMIN DASHBOARD
@@ -123,7 +124,7 @@ const Title=({children,color=C.muted,right})=>(
 );
 const PHASE={setup:["Opstilling",C.amber],side2_setup:["Opstilling S2",C.blue],run:["Produktion",C.green],side2_run:["Produktion S2",C.blue],deburring:["Afgratning",C.deburr]};
 
-export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficiencyGoals,workHours,tasks,planOrders,setTab,onOpenJob,maintTasks,maintLog,onOpenMaint}){
+export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficiencyGoals,workHours,tasks,planOrders,setTab,onOpenJob,maintTasks,maintLog,onOpenMaint,sheets,toolChanges}){
   const [period,setPeriod]=useState("week");
   const [srv,setSrv]=useState(null);
   useEffect(()=>{
@@ -158,6 +159,10 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
   // Maintenance: late points (red, by name) apart from points due today (yellow)
   const maintAll=machines.filter(m=>m.active&&!m.removed).flatMap(m=>machineMaint(m.name,maintTasks,maintLog,jobs).filter(x=>x.st.state==="due").map(x=>({...x,machine:m.name})));
   const maintLate=maintAll.filter(x=>x.st.late), maintToday=maintAll.filter(x=>!x.st.late);
+  // Tool life on running jobs: used up (red) and nearly (yellow)
+  const toolWarn=running.flatMap(j=>jobToolWarnings(j,{tools,jobs,sheets,changes:toolChanges}));
+  const toolOut=toolWarn.filter(x=>x.usage.pct>=1), toolSoon=toolWarn.filter(x=>x.usage.pct<1);
+  const toolTxt=x=>`${x.tool.name} på ${x.machine} (${x.usage.used}/${x.usage.limit})`;
   const byMachine=list=>Object.entries(list.reduce((a,x)=>{a[x.machine]=(a[x.machine]||0)+1;return a;},{})).map(([m,n])=>`${m} (${n})`).join(", ");
   const noCount=running.filter(j=>(j.status==="run"||j.status==="side2_run")&&(j.createdAt||0)<todayStart&&!progress[j.id]?.countedToday);
   const longSetup=running.filter(j=>{const lt=liveTime(j);return (j.status==="setup"&&lt.setup>8*3600)||(j.status==="side2_setup"&&lt.setup2>8*3600);});
@@ -174,6 +179,8 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
     lateJobs.length&&{color:C.red,icon:"alarm",text:`${lateJobs.length} job bliver ikke færdig${lateJobs.length>1?"e":""} til leveringsdatoen: ${lateJobs.map(j=>j.job).join(", ")}`,tab:"planning"},
     srvProblem&&{color:C.red,icon:"server",text:`Server: ${srvProblem} — se Administration → Server`,tab:"manage"},
     maintLate.length&&{color:C.red,icon:"tool",text:`Forsinket vedligehold: ${maintLate.slice(0,3).map(x=>`${x.t.title} på ${x.machine} (${dueText(x.t,x.st)}${machineOperator(jobs,x.machine)?`, ${machineOperator(jobs,x.machine).name}`:""})`).join("; ")}${maintLate.length>3?` + ${maintLate.length-3} mere`:""}`,go:onOpenMaint},
+    toolOut.length&&{color:C.red,icon:"tool",text:`Værktøj skal skiftes: ${toolOut.map(toolTxt).join("; ")}`,tab:"alljobs"},
+    toolSoon.length&&{color:C.amber,icon:"tool",text:`Værktøj skal snart skiftes: ${toolSoon.map(toolTxt).join("; ")}`,tab:"alljobs"},
     maintToday.length&&{color:C.amber,icon:"tool",text:`Vedligehold skal gøres i dag: ${byMachine(maintToday)}`,go:onOpenMaint},
     waitingTasks.length&&{color:C.amber,icon:"clipboard-check",text:`${waitingTasks.length} opgave${waitingTasks.length>1?"r":""} venter på at blive givet til en operatør`,tab:"tasks"},
     toOrder.length&&{color:C.amber,icon:"package",text:`${toOrder.length} værktøj skal bestilles: ${toOrder.slice(0,3).map(t=>t.name).join(", ")}${toOrder.length>3?" …":""}`,tab:"admintools"},

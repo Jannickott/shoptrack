@@ -1,11 +1,12 @@
 import { useState } from "react";
 import { C, btn } from "../lib/theme";
 import { PdfDrawings } from "../components/PdfDrawings";
+import { PrepareTools } from "./PrepareTools";
 
 // Blank Eriks/150 setup values — used by both the detail view and the form
 export const ERIKS_BLANK={mn:"",z:"",beta:"",dk:"",uo:"",df:"",fraeserDia:"",fraesLagerLinks:"",fraesLagerRechts:"",fraesLag3:"",fraesLag4:"",richtung:"Gegenlauf",differential:"ausgerastet",zahnzahl:"",zahnzahlRatio:"",zahnD:"",zahnZw:"",zahnC:"",zahnB:"",zahnA:"",steigung:"",steigA:"",steigZw:"",steigB:"",steigC:"",steigD:"",fraesDrehzahl:"",fraesA:"",fraesB:"",fraesC:"",fraesD:"",laengs:"",laengsA:"",laengsB:"",laengsC:"",laengsZw:"",laengsD:"",schalterA2:"",schalterA3:"",schalterA4:"",schalterA5:"",tauchsteuerung:"",eingang:"m. Zwischenrad",stckStd:"",stckSpannung:""};
 
-export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool,onDuplicate}){
+export function SetupSheetDetail({sheet,tools,cabinets,onBack,onEdit,onDelete,onGoToTool,onDuplicate,prep}){
   const [deleteConfirmSS,setDeleteConfirmSS]=useState(false);
   const [lightboxPhoto,setLightboxPhoto]=useState(null);
   const [mzDetOpen,setMzDetOpen]=useState({schnecke:false,werkstuck:false,entgraten:false});
@@ -134,6 +135,8 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
           {[["Maskine",sheet.machine],["Materiale",sheet.material],["Revision",sheet.revision],...(sheet.subDepartment?[]:[["Planprogram",sheet.planProgram]])].filter(([,v])=>v).map(([k,v])=>(<div key={k}><div style={{fontSize:11,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:2}}>{k}</div><div style={{fontSize:16,fontWeight:600,color:C.text}}>{v}</div></div>))}
         </div>
       </div>
+      {/* The cabinet tools this sheet needs: where they are, take them, their life on this machine */}
+      <PrepareTools {...(prep||{})} sheet={sheet} tools={tools} cabinets={cabinets}/>
       {sheet.subDepartment&&filledTools.length>0&&(
         <div style={{marginBottom:14}}>
           <div style={{fontSize:11,color:C.amber,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Opspændingsværktøj</div>
