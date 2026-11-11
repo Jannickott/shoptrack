@@ -4,6 +4,7 @@ import { saveDraft, clearDraft } from "./sheetDraft";
 import { PdfDrawings } from "../components/PdfDrawings";
 import { ToolPickerField } from "../tools/ToolPicker";
 import { SwitchDial, SWITCHES } from "./SwitchDial";
+import { GearTrains } from "./GearTrain";
 import { ERIKS_BLANK, UnusedCross } from "./SetupSheetDetail";
 import { resizeImage } from "../lib/api";
 
@@ -180,98 +181,9 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
     const mono={fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:17};
     const numInp=(k,ph="—")=>(<input style={{...inp(),...mono,width:"100%",textAlign:"right",fontSize:18}} value={e[k]||""} onChange={ev=>setE(k,ev.target.value)} placeholder={ph}/>);
     const secHdr=(t)=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:12,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
-    // Gear section: two color groups (amber/blue) matching the paper.
-    // Circles OVERLAP where gears mesh. The "inner" gear of a compound pair
-    // (e.g. c inside b) shares the shaft — drawn as a smaller circle inside
-    // the larger one. Amber group drawn first so blue renders on top.
-    // Input column on right, color-coded to match, space-evenly distributed.
-    // Gear section: full-width SVG shows circles + leader lines + letter labels only.
-    // Input fields are rendered below the SVG so circles get the full width (matching reference).
-    // flip=false: circles on left, lines go right. flip=true: circles on right, lines go left.
-    const gearSvgSection=(title,totalKey,totalPh,ratioKey,gears,flip=false)=>{
-      const VW=300;
-      const LINE_END=flip?125:165;
-      const LABEL_X=flip?90:170;
-      const INPUT_X=flip?5:215;
-      const INPUT_W=80;
-      const INPUT_H=20;
-      const maxY=Math.max(...gears.map(g=>g.cy+g.r))+15;
-      return(
-        <div style={{padding:"8px 10px 10px"}}>
-          <div style={{fontSize:15,color:C.amber,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:5}}>{title}</div>
-          {(totalKey||ratioKey)&&<div style={{display:"flex",gap:8,marginBottom:6}}>
-            {totalKey&&<div style={{flex:1}}><div style={{fontSize:13,color:C.muted,marginBottom:2}}>{title.split("/")[0].trim()} =</div>{numInp(totalKey,totalPh)}</div>}
-            {ratioKey&&<div style={{flex:1}}><div style={{fontSize:13,color:C.muted,marginBottom:2}}>i =</div>{numInp(ratioKey,"2:45")}</div>}
-          </div>}
-          <svg viewBox={`0 0 ${VW} ${maxY}`} style={{width:"100%",display:"block"}} overflow="visible">
-            {[...gears].sort((a,b)=>b.r-a.r).map(g=>{
-              const stroke=g.color==="blue"?C.blue:C.amber;
-              const fill=stroke+"1a";
-              const edy=g.exitDy||0;
-              const edx=Math.sqrt(Math.max(0,g.r*g.r-edy*edy));
-              const ex=flip?g.cx-edx:g.cx+edx;
-              const ey=g.cy+edy;
-              return(
-                <g key={g.label}>
-                  <circle cx={g.cx} cy={g.cy} r={g.r} fill={fill} stroke={stroke} strokeWidth="2"/>
-                  <line x1={g.cx-g.r*0.38} y1={g.cy} x2={g.cx+g.r*0.38} y2={g.cy} stroke={stroke} strokeWidth="0.9" strokeDasharray="2,1.5"/>
-                  <line x1={g.cx} y1={g.cy-g.r*0.38} x2={g.cx} y2={g.cy+g.r*0.38} stroke={stroke} strokeWidth="0.9" strokeDasharray="2,1.5"/>
-                  <line x1={ex} y1={ey} x2={LINE_END} y2={ey} stroke={stroke} strokeWidth="1.3"/>
-                  <text x={LABEL_X} y={ey+5} textAnchor="start" fontSize="14" fontWeight="700" fill={stroke} fontFamily="monospace">{g.label} =</text>
-                  <foreignObject x={INPUT_X} y={ey-INPUT_H/2} width={INPUT_W} height={INPUT_H}>
-                    <input
-                      style={{width:"100%",height:"100%",background:C.raised,border:`1px solid ${stroke}55`,borderRadius:"4px",color:C.green,fontSize:"13px",fontWeight:"700",textAlign:"right",padding:"0 4px",fontFamily:"'Share Tech Mono',monospace",outline:"none",boxSizing:"border-box"}}
-                      value={e[g.inputKey]||""}
-                      onChange={ev=>setE(g.inputKey,ev.target.value)}
-                    />
-                  </foreignObject>
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-      );
-    };
     // Rotary switch selector
     // Several eriksSetup fields at once (a switch keeps its number and the position tapped)
     const setEMany=obj=>setF("eriksSetup",{...(form.eriksSetup||{}),...obj});
-    // ── Gear circle positions ─────────────────────────────────────────────
-    // Compound pairs share the SAME cx,cy (concentric circles): outer amber ring (b),
-    // inner blue circle (c). exitDy splits their leader lines above/below center.
-    // flip=true: circles RIGHT side (cx ~200-255), lines LEFT.
-    // flip=false: circles LEFT side (cx ≤ 85), lines RIGHT.
-    //
-    // Steigung (flip=true, circles right): a→Zw→b[outer]/c[inner]→d
-    const steigungGears=[
-      {label:"a",  inputKey:"steigA",  cx:252, cy:33,  r:24, color:"amber"},
-      {label:"Zw", inputKey:"steigZw", cx:229, cy:88,  r:37, color:"amber"},
-      {label:"b",  inputKey:"steigB",  cx:183, cy:163, r:51, color:"amber", exitDy:-30},
-      {label:"c",  inputKey:"steigC",  cx:183, cy:163, r:37, color:"blue",  exitDy:+30},
-      {label:"d",  inputKey:"steigD",  cx:167, cy:224, r:26, color:"blue"},
-    ];
-    // Zahnzahl (flip=false, circles left): d→Zw→b[outer]/c[inner]→a
-    const zahnzahlGears=[
-      {label:"d",  inputKey:"zahnD",  cx:124, cy:42,  r:37, color:"amber"},
-      {label:"Zw", inputKey:"zahnZw", cx:92,  cy:94,  r:24, color:"amber"},
-      {label:"c",  inputKey:"zahnC",  cx:113, cy:163, r:48, color:"amber", exitDy:-30},
-      {label:"b",  inputKey:"zahnB",  cx:113, cy:163, r:35, color:"blue",  exitDy:+30},
-      {label:"a",  inputKey:"zahnA",  cx:62,  cy:224, r:44, color:"blue"},
-    ];
-    // Fräserdrehzahl (flip=true, circles right): a→b[outer]/c[inner]→d
-    const fraesDrehzahlGears=[
-      {label:"a",  inputKey:"fraesA",  cx:234, cy:34,  r:33, color:"amber"},
-      {label:"b",  inputKey:"fraesB",  cx:197, cy:106, r:48, color:"amber", exitDy:-30},
-      {label:"c",  inputKey:"fraesC",  cx:197, cy:106, r:35, color:"blue",  exitDy:+30},
-      {label:"d",  inputKey:"fraesD",  cx:173, cy:177, r:40, color:"blue"},
-    ];
-    // Längsvorschub (flip=false, circles left): a→b[outer]/c[inner]→Zw→d
-    const laengsGears=[
-      {label:"a",  inputKey:"laengsA",  cx:70, cy:37,  r:29, color:"amber"},
-      {label:"b",  inputKey:"laengsB",  cx:70, cy:95,  r:29, color:"amber", exitDy:-16},
-      {label:"c",  inputKey:"laengsC",  cx:70, cy:95,  r:20, color:"blue",  exitDy:+16},
-      {label:"Zw", inputKey:"laengsZw", cx:70, cy:143, r:18, color:"blue"},
-      {label:"d",  inputKey:"laengsD",  cx:70, cy:201, r:40, color:"blue"},
-    ];
     return(
       <div style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,overflow:"hidden",marginBottom:14}}>
         {/* Cutter parameters */}
@@ -329,12 +241,7 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
           {["ausgerastet","eingerastet"].map(v=>{const a=e.differential===v;const lbl=v==="ausgerastet"?"Diff.-Indexbolzen ausgerastet":"Diff.-Indexbolzen eingerastet";return(<button key={v} type="button" style={{padding:"7px 14px",borderRadius:20,border:`1px solid ${a?C.blue:C.border}`,background:a?"rgba(59,130,246,.15)":C.raised,color:a?C.blue:C.muted,fontSize:14,fontWeight:a?700:400,cursor:"pointer"}} onClick={()=>setE("differential",v)}>{lbl}</button>);})}
         </div>
         {/* Gear trains — 2×2 grid, each cell matches the paper layout */}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",borderBottom:`1px solid ${C.border}`}}>
-          <div style={{borderRight:`1px solid ${C.border}`,borderBottom:`1px solid ${C.border}`}}>{gearSvgSection("Zahnzahl / Antal tænder","zahnzahl","80","zahnzahlRatio",zahnzahlGears,false)}</div>
-          <div style={{borderBottom:`1px solid ${C.border}`}}>{gearSvgSection("Steigung / Stigning","steigung","","",steigungGears,true)}</div>
-          <div style={{borderRight:`1px solid ${C.border}`}}>{gearSvgSection("Fräserdrehzahl / Fræser omdr.","fraesDrehzahl","1312","",fraesDrehzahlGears,true)}</div>
-          <div>{gearSvgSection("Längsvorschub / Langs tilsp.","laengs","0,7","",laengsGears,false)}</div>
-        </div>
+        <GearTrains e={e} onChange={setE}/>
         {/* Switch positions */}
         {secHdr("Schalterstellungen / Kontaktstillinger — auf rot einstellen")}
         <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>

@@ -3,6 +3,7 @@ import { C, btn } from "../lib/theme";
 import { PdfDrawings } from "../components/PdfDrawings";
 import { PrepareTools } from "./PrepareTools";
 import { SwitchDial, SWITCHES } from "./SwitchDial";
+import { GearTrains } from "./GearTrain";
 import { SheetHistory } from "./SheetHistory";
 import { shortDate } from "./sheetUse";
 
@@ -251,11 +252,6 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
         const mono={fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:17};
         const kv=(lbl,val,unit)=>val?(<div style={{display:"flex",alignItems:"center",gap:8,padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}><div style={{fontSize:13,color:C.muted,fontWeight:600,minWidth:130}}>{lbl}</div><div style={{...mono,flex:1}}>{val}</div>{unit&&<div style={{fontSize:12,color:C.muted}}>{unit}</div>}</div>):null;
         const secH=(t)=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:12,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);
-        const gearRow=(label,fields)=>{
-          const vals=fields.filter(([,v])=>v);
-          if(!vals.length) return null;
-          return(<div style={{padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}><span style={{fontSize:13,color:C.muted,fontWeight:600}}>{label}: </span>{vals.map(([k,v])=><span key={k} style={{marginRight:12}}><span style={{fontSize:12,color:C.muted}}>{k}=</span><span style={{...mono,fontSize:16}}>{v}</span></span>)}</div>);
-        };
         const fraesImg=(side)=>(
           <svg width="90" height="80" viewBox="0 0 100 90">
             <rect x="5" y="72" width="90" height="6" rx="1" fill="none" stroke={C.muted} strokeWidth="1.2"/>
@@ -306,19 +302,7 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
               <span style={{fontSize:15,fontWeight:700,color:C.amber}}>{e.richtung}</span>
               <span style={{fontSize:15,color:C.blue}}>Diff. {e.differential}</span>
             </div>
-            {secH("Zahnzahl / Antal tænder")}
-            {kv("Zahnzahl",e.zahnzahl,"")}
-            {kv("i",e.zahnzahlRatio,"")}
-            {gearRow("Räder",[["d",e.zahnD],["Zw",e.zahnZw],["c",e.zahnC],["b",e.zahnB],["a",e.zahnA]])}
-            {secH("Steigung / Stigning")}
-            {kv("Steigung",e.steigung,"")}
-            {gearRow("Räder",[["a",e.steigA],["Zw",e.steigZw],["b",e.steigB],["C",e.steigC],["d",e.steigD]])}
-            {secH("Fräserdrehzahl / Fræser omdr.")}
-            {kv("Fräserdrehzahl",e.fraesDrehzahl,"")}
-            {gearRow("Räder",[["a",e.fraesA],["b",e.fraesB],["c",e.fraesC],["d",e.fraesD]])}
-            {secH("Längsvorschub / Langsgående tilspænding")}
-            {kv("Längsvorschub",e.laengs,"")}
-            {gearRow("Räder",[["a",e.laengsA],["b",e.laengsB],["c",e.laengsC],["Zw",e.laengsZw],["d",e.laengsD]])}
+            <GearTrains e={e}/>
             {(e.schalterA2||e.schalterA3||e.schalterA4||e.schalterA5)&&(<>
               {secH("Schalterstellungen / Kontaktstillinger")}
               <div style={{padding:"10px 14px",display:"flex",gap:12,flexWrap:"wrap",justifyContent:"space-around",borderBottom:`1px solid ${C.border}`}}>
