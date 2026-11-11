@@ -40,7 +40,8 @@ export const GEAR_TRAINS=[
 const mono={fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:17};
 
 export function GearTrain({train,e,onChange}){
-  const {title,totalKey,totalPh,ratioKey,gears,flip}=train;
+  const {key,title,totalKey,totalPh,ratioKey,gears,flip}=train;
+  const offKey=key+"Off", off=!!e[offKey]; // "Ikke i brug": the train is faded on the sheet
   const VW=300, LINE_END=flip?125:165, LABEL_X=flip?90:170, INPUT_X=flip?5:215, INPUT_W=80, INPUT_H=20;
   const maxY=Math.max(...gears.map(g=>g.cy+g.r))+15;
   const edit=!!onChange;
@@ -54,8 +55,15 @@ export function GearTrain({train,e,onChange}){
     </div>
   );
   return(
-    <div style={{padding:"8px 10px 10px"}}>
-      <div style={{fontSize:15,color:C.amber,fontWeight:700,letterSpacing:.8,textTransform:"uppercase",marginBottom:5}}>{title}</div>
+    <div style={{padding:"8px 10px 10px",position:"relative"}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",gap:8,marginBottom:5,minHeight:edit?40:0}}>
+        <div style={{fontSize:15,color:off?C.muted:C.amber,fontWeight:700,letterSpacing:.8,textTransform:"uppercase"}}>{title}</div>
+        {edit&&<label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"6px 10px",borderRadius:8,border:`1px solid ${off?C.amber:C.border}`,background:off?C.amber+"22":"transparent",color:off?C.amber:C.muted,fontSize:14,fontWeight:700,flexShrink:0,userSelect:"none"}}>
+          <input type="checkbox" checked={off} onChange={ev=>onChange(offKey,ev.target.checked)} style={{width:22,height:22,accentColor:C.amber,margin:0}}/>
+          Ikke i brug
+        </label>}
+      </div>
+      <div style={{opacity:off?(edit?.45:.3):1,transition:"opacity .15s"}}>
       {(totalKey||ratioKey)&&<div style={{display:"flex",gap:8,marginBottom:6}}>
         {totalKey&&top(totalKey,title.split("/")[0].trim(),totalPh)}
         {ratioKey&&top(ratioKey,"i","2:45")}
@@ -87,6 +95,10 @@ export function GearTrain({train,e,onChange}){
           );
         })}
       </svg>
+      </div>
+      {off&&!edit&&<div style={{position:"absolute",inset:0,display:"flex",alignItems:"center",justifyContent:"center",pointerEvents:"none"}}>
+        <div style={{padding:"8px 18px",borderRadius:8,border:`2px solid ${C.muted}`,background:C.surface,color:C.text,fontSize:18,fontWeight:800,letterSpacing:2,textTransform:"uppercase"}}>Ikke i brug</div>
+      </div>}
     </div>
   );
 }
