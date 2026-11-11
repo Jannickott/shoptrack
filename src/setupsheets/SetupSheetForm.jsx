@@ -3,6 +3,7 @@ import { C, inp, sel, btn, label, errMsg } from "../lib/theme";
 import { saveDraft, clearDraft } from "./sheetDraft";
 import { PdfDrawings } from "../components/PdfDrawings";
 import { ToolPickerField } from "../tools/ToolPicker";
+import { SwitchDial, SWITCHES } from "./SwitchDial";
 import { ERIKS_BLANK, UnusedCross } from "./SetupSheetDetail";
 import { resizeImage } from "../lib/api";
 
@@ -232,31 +233,8 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
       );
     };
     // Rotary switch selector
-    const switchDial=(k,label,opts={})=>{
-      const labels=opts.labels||[1,2,3];
-      const n=labels.length;
-      const step=n>1?120/(n-1):0;
-      const cx=40,cy=40,r=26;
-      const pos=labels.map((lbl,i)=>{const a=(-150+i*step)*Math.PI/180;return{lbl:String(lbl),x:cx+r*Math.cos(a),y:cy+r*Math.sin(a)};});
-      const val=e[k]!=null&&e[k]!==""?String(e[k]):null;
-      const selPos=val!=null?pos.find(p=>p.lbl===val):null;
-      return(
-        <div style={{display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-          <div style={{fontSize:12,color:C.amber,fontWeight:700,letterSpacing:.5}}>{label}</div>
-          <svg width="80" height="80" viewBox="0 0 80 80">
-            <circle cx={cx} cy={cy} r={r+10} fill="none" stroke={C.border} strokeWidth="1.5"/>
-            <circle cx={cx} cy={cy} r={4} fill={C.muted}/>
-            {selPos&&<line x1={cx} y1={cy} x2={selPos.x} y2={selPos.y} stroke="#e53e3e" strokeWidth="3" strokeLinecap="round"/>}
-            {pos.map((p,i)=>{const sel=val===p.lbl;return(
-              <g key={i} onClick={()=>setE(k,sel?"":p.lbl)} style={{cursor:"pointer"}}>
-                <circle cx={p.x} cy={p.y} r={10} fill={sel?"#e53e3e":C.raised} stroke={sel?"#e53e3e":C.border} strokeWidth="1.5"/>
-                <text x={p.x} y={p.y+4} textAnchor="middle" fontSize="11" fontWeight="800" fill={sel?"#fff":C.muted}>{p.lbl}</text>
-              </g>
-            );})}
-          </svg>
-        </div>
-      );
-    };
+    // Several eriksSetup fields at once (a switch keeps its number and the position tapped)
+    const setEMany=obj=>setF("eriksSetup",{...(form.eriksSetup||{}),...obj});
     // ── Gear circle positions ─────────────────────────────────────────────
     // Compound pairs share the SAME cx,cy (concentric circles): outer amber ring (b),
     // inner blue circle (c). exitDy splits their leader lines above/below center.
@@ -360,7 +338,7 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
         {/* Switch positions */}
         {secHdr("Schalterstellungen / Kontaktstillinger — auf rot einstellen")}
         <div style={{padding:"12px 14px",display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-          {[["schalterA2","a2",{}],["schalterA3","a3",{labels:[0,1,2,3]}],["schalterA4","a4",{labels:[1,2,2,1]}],["schalterA5","a5",{}]].map(([k,lbl,opts])=>switchDial(k,lbl,opts))}
+          {SWITCHES.map(([k,lbl,labels])=><SwitchDial key={k} label={lbl} labels={labels} value={e[k]} pos={e[k+"Pos"]} onPick={(i,v)=>setEMany({[k]:v,[k+"Pos"]:i})}/>)}
         </div>
         {/* Tauchsteuerung + production */}
         {secHdr("Tauchsteuerung / Indstik + produktion")}
@@ -458,7 +436,7 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
       <div style={{display:"grid",gridTemplateColumns:"1fr auto 88px",gap:6,alignItems:"center",padding:"7px 14px",borderBottom:`1px solid ${C.border}`}}>
         <div><div style={{fontSize:14,fontWeight:600,color:C.text}}>{de}</div><div style={{fontSize:12,color:C.muted}}>{en}</div></div>
         {unit?<div style={{fontSize:12,color:C.muted,whiteSpace:"nowrap",textAlign:"right"}}>{unit}</div>:<div/>}
-        <input style={{...inp(),fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:16,textAlign:"right"}} value={d[k]||""} onChange={e=>setMzAdv(sec,k,e.target.value)} placeholder="—"/>
+        <input inputMode="decimal" style={{...inp(),fontFamily:"'Share Tech Mono',monospace",fontWeight:700,color:C.green,fontSize:16,textAlign:"right"}} value={d[k]||""} onChange={e=>setMzAdv(sec,k,e.target.value)} placeholder="—"/>
       </div>
     );};
     const subHdr=t=>(<div style={{padding:"7px 14px",background:C.raised,fontSize:12,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",borderBottom:`1px solid ${C.border}`}}>{t}</div>);

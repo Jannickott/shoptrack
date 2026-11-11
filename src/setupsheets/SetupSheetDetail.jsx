@@ -2,6 +2,7 @@ import { useState } from "react";
 import { C, btn } from "../lib/theme";
 import { PdfDrawings } from "../components/PdfDrawings";
 import { PrepareTools } from "./PrepareTools";
+import { SwitchDial, SWITCHES } from "./SwitchDial";
 import { SheetHistory } from "./SheetHistory";
 import { shortDate } from "./sheetUse";
 
@@ -320,8 +321,8 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
             {gearRow("Räder",[["a",e.laengsA],["b",e.laengsB],["c",e.laengsC],["Zw",e.laengsZw],["d",e.laengsD]])}
             {(e.schalterA2||e.schalterA3||e.schalterA4||e.schalterA5)&&(<>
               {secH("Schalterstellungen / Kontaktstillinger")}
-              <div style={{padding:"8px 14px",display:"flex",gap:16,flexWrap:"wrap",borderBottom:`1px solid ${C.border}`}}>
-                {[["a2",e.schalterA2],["a3",e.schalterA3],["a4",e.schalterA4],["a5",e.schalterA5]].filter(([,v])=>v).map(([lbl,v])=>(<span key={lbl}><span style={{fontSize:12,color:C.muted}}>{lbl}=</span><span style={{...mono,fontSize:16}}>{v}</span></span>))}
+              <div style={{padding:"10px 14px",display:"flex",gap:12,flexWrap:"wrap",justifyContent:"space-around",borderBottom:`1px solid ${C.border}`}}>
+                {SWITCHES.map(([k,lbl,labels])=><SwitchDial key={k} label={lbl} labels={labels} value={e[k]} pos={e[k+"Pos"]}/>)}
               </div>
             </>)}
             {kv("Tauchsteuerung",e.tauchsteuerung,"")}
