@@ -3,6 +3,7 @@ import { C, card, inp, btn, badge } from "../lib/theme";
 import { fmtHM, fmtDate, liveTime } from "../lib/util";
 import { machineMaint } from "../maintenance/maintUtil";
 import { MaintChecklist, maintSummary } from "../maintenance/MaintChecklist";
+import { ResolveIssueModal } from "../components/ResolveIssue";
 
 // ═══════════════════════════════════════════════════════
 // MACHINE STATUS (operator)
@@ -29,6 +30,7 @@ export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,r
     return()=>clearTimeout(t);
   },[focusMaint]);
   const [reporting,setReporting]=useState(null);
+  const [resolving,setResolving]=useState(null); // machine name — "Kører igen" window open
   const [issueType,setIssueType]=useState("repair");
   const [note,setNote]=useState("");
 
@@ -39,6 +41,7 @@ export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,r
 
   return(
     <div style={{padding:"14px 16px"}}>
+      {resolving&&machineIssues[resolving]&&<ResolveIssueModal machine={resolving} issue={machineIssues[resolving]} onClose={()=>setResolving(null)} onResolve={x=>{resolveIssue(resolving,x);setResolving(null);}}/>}
       <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:16}}>Maskinstatus</div>
       {machines.filter(m=>{
         if(!m.active) return false;
@@ -81,7 +84,7 @@ export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,r
                 </button>
               )}
               {issue&&(
-                <button style={btn("success",false,true)} onClick={()=>resolveIssue(m.name)}>
+                <button style={btn("success",false,true)} onClick={()=>setResolving(m.name)}>
                   <i className="ti ti-check"/> Kører igen
                 </button>
               )}

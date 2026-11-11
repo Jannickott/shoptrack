@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DonutChart } from "./AdminDash";
 import { C, card, inp, badge } from "../lib/theme";
 import { fmtHM, fmtDetail, fmtDate, jRunAll, jSetupAll, jobEfficiency, liveTime, calcAvailableWorkSec } from "../lib/util";
+import { topicLabel, topicIcon, repeatNumber, REPEAT_DAYS } from "../lib/issueTopics";
 
 // ═══════════════════════════════════════════════════════
 // MACHINE DATA TAB
@@ -187,15 +188,18 @@ export function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficien
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:8}}>
                         <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
                           <span style={{...badge("down"),fontSize:12}}>{d.status==="down"?"Maskine nede":"Skal repareres"}</span>
+                          {d.topic&&<span style={{...badge(""),fontSize:12,color:C.text}}><i className={`ti ti-${topicIcon(d.topic)}`}/> {topicLabel(d.topic)}</span>}
+                          {(()=>{const n=repeatNumber(d,downtimeLog);return n>=2&&<span style={{...badge(n>=3?"down":"repair"),fontSize:12}} title={`Samme emne på maskinen ${n} gange inden for ${REPEAT_DAYS} dage`}><i className="ti ti-repeat"/> {n}. gang på {REPEAT_DAYS} dage</span>;})()}
                           {d.reason&&<span style={{fontSize:15,color:C.text}}>{d.reason}</span>}
                         </div>
                         <span style={{fontSize:15,color:C.red,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{fmtHM(d.downtimeSec)}</span>
                       </div>
+                      {d.fixDescription&&<div style={{fontSize:14,color:C.text}}><i className="ti ti-tools" style={{color:C.muted}}/> {d.fixDescription}</div>}
                       <div style={{fontSize:13,color:C.muted}}>
-                        Reported by {d.reportedBy} · {fmtDate(d.reportedAt)}
+                        Meldt af {d.reportedBy} · {fmtDate(d.reportedAt)}
                       </div>
                       <div style={{fontSize:13,color:C.muted}}>
-                        Resolved by {d.resolvedBy} · {fmtDate(d.resolvedAt)}
+                        Løst af {d.resolvedBy} · {fmtDate(d.resolvedAt)}
                       </div>
                     </div>
                   ))}

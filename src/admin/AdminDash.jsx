@@ -5,6 +5,7 @@ import { jobProgress, normPart } from "../planning/planEngine";
 import { visibleTasks, taskState } from "../tasks/taskUtil";
 import { machineMaint, machineOperator, dueText } from "../maintenance/maintUtil";
 import { jobToolWarnings, sheetsOfJob } from "../tools/toolLife";
+import { topicLabel, repeatFaults, REPEAT_DAYS } from "../lib/issueTopics";
 
 // ═══════════════════════════════════════════════════════
 // ADMIN DASHBOARD
@@ -166,6 +167,10 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
   const byMachine=list=>Object.entries(list.reduce((a,x)=>{a[x.machine]=(a[x.machine]||0)+1;return a;},{})).map(([m,n])=>`${m} (${n})`).join(", ");
   // Jobs under way with no setup sheet — remind the operator while the setup is fresh (tasks are one-offs)
   const noSheet=running.filter(j=>!j.taskId&&!sheetsOfJob(j,sheets).length);
+  // The same fault topic on the same machine again and again (last 30 days) — 3+ red, 2 yellow
+  const repeats=repeatFaults(downtimeLog);
+  const repTxt=list=>list.slice(0,3).map(r=>`${r.machine} · ${r.label} ${r.count}× (${fmtHM(r.sec)})`).join("; ")+(list.length>3?` + ${list.length-3} mere`:"");
+  const rep3=repeats.filter(r=>r.count>=3), rep2=repeats.filter(r=>r.count===2);
   const noCount=running.filter(j=>(j.status==="run"||j.status==="side2_run")&&(j.createdAt||0)<todayStart&&!progress[j.id]?.countedToday);
   const longSetup=running.filter(j=>{const lt=liveTime(j);return (j.status==="setup"&&lt.setup>8*3600)||(j.status==="side2_setup"&&lt.setup2>8*3600);});
   const srvProblem=srv&&(()=>{
@@ -181,6 +186,8 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
     lateJobs.length&&{color:C.red,icon:"alarm",text:`${lateJobs.length} job bliver ikke færdig${lateJobs.length>1?"e":""} til leveringsdatoen: ${lateJobs.map(j=>j.job).join(", ")}`,tab:"planning"},
     srvProblem&&{color:C.red,icon:"server",text:`Server: ${srvProblem} — se Administration → Server`,tab:"manage"},
     maintLate.length&&{color:C.red,icon:"tool",text:`Forsinket vedligehold: ${maintLate.slice(0,3).map(x=>`${x.t.title} på ${x.machine} (${dueText(x.t,x.st)}${machineOperator(jobs,x.machine)?`, ${machineOperator(jobs,x.machine).name}`:""})`).join("; ")}${maintLate.length>3?` + ${maintLate.length-3} mere`:""}`,go:onOpenMaint},
+    rep3.length&&{color:C.red,icon:"repeat",text:`Samme fejl igen og igen (${REPEAT_DAYS} dage): ${repTxt(rep3)}`,tab:"reports"},
+    rep2.length&&{color:C.amber,icon:"repeat",text:`Samme fejl to gange (${REPEAT_DAYS} dage): ${repTxt(rep2)}`,tab:"reports"},
     toolOut.length&&{color:C.red,icon:"tool",text:`Værktøj skal skiftes: ${toolOut.map(toolTxt).join("; ")}`,tab:"alljobs"},
     toolSoon.length&&{color:C.amber,icon:"tool",text:`Værktøj skal snart skiftes: ${toolSoon.map(toolTxt).join("; ")}`,tab:"alljobs"},
     maintToday.length&&{color:C.amber,icon:"tool",text:`Vedligehold skal gøres i dag: ${byMachine(maintToday)}`,go:onOpenMaint},
@@ -394,11 +401,12 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
       {downtimeLog.length>0&&<>
         <Title>Seneste nedetid</Title>
         <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
-          <thead><tr>{["Maskine","Type","Varighed","Meldt af","Løst af","Dato"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+          <thead><tr>{["Maskine","Type","Emne","Varighed","Meldt af","Løst af","Dato"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
           <tbody>{[...downtimeLog].sort((a,b)=>(b.resolvedAt||0)-(a.resolvedAt||0)).slice(0,5).map(d=>(
             <tr key={d.id}>
               <td style={td}>{d.machineName}</td>
               <td style={td}><span style={badge(d.status)}>{d.status==="down"?"Nede":"Reparation"}</span></td>
+              <td style={td}>{topicLabel(d.topic)||<span style={{color:C.muted}}>—</span>}</td>
               <td style={{...td,color:C.amber}}>{fmtHM(d.downtimeSec)}</td>
               <td style={td}>{d.reportedBy}</td>
               <td style={td}>{d.resolvedBy}</td>

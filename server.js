@@ -5,6 +5,7 @@ import os from "os";
 import { fileURLToPath } from "url";
 import PDFDocument from "pdfkit";
 import crypto from "crypto";
+import { topicLabel, byTopic, repeatFaults, REPEAT_DAYS } from "./src/lib/issueTopics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app  = express();
@@ -597,6 +598,7 @@ function weekReportData(data, monday) {
     week: isoWeek(monday), year: mondayOf(monday).getFullYear(), start, end, target,
     eff: totalAvail > 0 ? Math.round(run / totalAvail * 100) : null, run, setup,
     downtime: downtime.reduce((s, d) => s + (d.downtimeSec || 0), 0), downtimeList: downtime,
+    downtimeTopics: byTopic(downtime), repeats: repeatFaults(data.downtimeLog, Math.min(end, Date.now())), // 30 days back from the week end (or today, this week)
     finished: jobs.filter(j => j.status === "done"), started: jobs.length,
     perMachine, operators: Object.values(ops).sort((a, b) => b.run - a.run), lowTools,
   };
@@ -641,9 +643,22 @@ function writeWeekReport(doc, r) {
   y += 6;
 
   section("MASKINFEJL");
-  const fx = [45, 130, 330, 420, 480];
+  const fx = [45, 120, 235, 305, 385, 455];
   if (!r.downtimeList.length) row(["Ingen fejl løst denne uge"], fx);
-  else { row(["Maskine", "Fejl", "Meldt af", "Løst", "Nedetid"], fx, true); r.downtimeList.forEach(d => row([d.machineName, d.reason || (d.status === "down" ? "Maskine nede" : "Reparation"), d.reportedBy || "", dk(d.resolvedAt), hm(d.downtimeSec)], fx)); }
+  else {
+    // A wrapped grey line under a row (what was wrong / what was done)
+    const note = (text, x, color = GREY) => { const w = 45 + W - x; doc.fillColor(color).fontSize(8.5).font("Helvetica"); const h = doc.heightOfString(text, { width: w }); if (y + h > 790) { doc.addPage(); y = 50; } doc.text(text, x, y, { width: w }); y += h + 3; };
+    // Downtime per topic, most first
+    note("Nedetid efter emne:  " + r.downtimeTopics.map(t => `${t.label} ${hm(t.sec)} (${t.count})`).join("   ·   "), 45);
+    if (r.repeats.length) { note(`Gentagne fejl (sidste ${REPEAT_DAYS} dage):  ` + r.repeats.map(x => `${x.machine} – ${x.label} ${x.count} gange (${hm(x.sec)})`).join("   ·   "), 45, "#c0392b"); }
+    y += 4;
+    row(["Maskine", "Emne", "Status", "Meldt af", "Løst", "Nedetid"], fx, true);
+    r.downtimeList.forEach(d => {
+      row([d.machineName, topicLabel(d.topic) || "–", d.status === "down" ? "Nede" : "Reparation", d.reportedBy || "", dk(d.resolvedAt), hm(d.downtimeSec)], fx);
+      const lines = [d.reason && `Fejl: ${d.reason}`, d.fixDescription && `Lavet / manglede: ${d.fixDescription}`, d.fixCost && `Pris: ${d.fixCost}`].filter(Boolean);
+      if (lines.length) note(lines.join("   ·   "), fx[1]);
+    });
+  }
   y += 6;
 
   section("AFSLUTTEDE JOB");

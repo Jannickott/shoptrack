@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { C, card, inp, sel, btn, label, th, td } from "../lib/theme";
 import { fmtHM, fmtDate, jRunAll, jSetupAll, calcAvailableWorkSec } from "../lib/util";
+import { DowntimeTopics } from "./DowntimeTopics";
 
 // ═══════════════════════════════════════════════════════
 // REPORTS — date range + filters + export
@@ -171,6 +172,7 @@ export function ReportsTab({jobs,machines,departments,efficiencyGoals,workHours,
         </select>
         <button style={btn('primary',false,true)} onClick={()=>window.open(`/api/report/week?start=${reportStart}`,'_blank')}><i className="ti ti-download"/> Hent PDF</button>
       </div>
+      <DowntimeTopics downtimeLog={dl} machines={machines}/>
       {/* Mode + period controls */}
       <div style={{display:'flex',gap:6,marginBottom:12,flexWrap:'wrap',alignItems:'center'}}>
         {[['machine','ti-robot','Maskine'],['department','ti-tag','Afdeling'],['job','ti-search','Job / tegningsnr.']].map(([m,ic,lb])=>(
