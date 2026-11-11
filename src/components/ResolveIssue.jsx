@@ -1,20 +1,8 @@
 import { useState } from "react";
 import { C, btn, inp, label } from "../lib/theme";
 
-// What a machine fault was about — picked when the machine runs again, so the downtime
-// can be counted per topic. "Andet" when nothing fits (then the text says what it was).
-export const ISSUE_TOPICS=[
-  {key:"mekanisk",    label:"Mekanisk",               icon:"settings"},
-  {key:"elektrisk",   label:"Elektrisk",              icon:"bolt"},
-  {key:"hydraulik",   label:"Hydraulik / olie",       icon:"droplet"},
-  {key:"koeling",     label:"Køling / kølevæske",     icon:"snowflake"},
-  {key:"styring",     label:"Styring / alarm",        icon:"alert-octagon"},
-  {key:"spaending",   label:"Spænding / værktøj",     icon:"tool"},
-  {key:"reservedel",  label:"Manglede reservedel",    icon:"package"},
-  {key:"andet",       label:"Andet",                  icon:"dots"},
-];
-export const topicLabel=k=>ISSUE_TOPICS.find(t=>t.key===k)?.label||"";
-export const topicIcon=k=>ISSUE_TOPICS.find(t=>t.key===k)?.icon||"alert-circle";
+import { ISSUE_TOPICS } from "../lib/issueTopics";
+export { ISSUE_TOPICS, topicLabel, topicIcon } from "../lib/issueTopics";
 
 // "Kører igen": what was it, what was done / missing, and was it really "nede" or "skal repareres"
 export function ResolveIssueModal({machine,issue,onResolve,onClose}){
