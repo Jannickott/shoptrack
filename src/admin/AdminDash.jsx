@@ -5,6 +5,7 @@ import { jobProgress, normPart } from "../planning/planEngine";
 import { visibleTasks, taskState } from "../tasks/taskUtil";
 import { machineMaint, machineOperator, dueText } from "../maintenance/maintUtil";
 import { jobToolWarnings, sheetsOfJob } from "../tools/toolLife";
+import { topicLabel } from "../components/ResolveIssue";
 
 // ═══════════════════════════════════════════════════════
 // ADMIN DASHBOARD
@@ -394,11 +395,12 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
       {downtimeLog.length>0&&<>
         <Title>Seneste nedetid</Title>
         <div style={{overflowX:"auto"}}><table style={{width:"100%",borderCollapse:"collapse",fontSize:14}}>
-          <thead><tr>{["Maskine","Type","Varighed","Meldt af","Løst af","Dato"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
+          <thead><tr>{["Maskine","Type","Emne","Varighed","Meldt af","Løst af","Dato"].map(h=><th key={h} style={th}>{h}</th>)}</tr></thead>
           <tbody>{[...downtimeLog].sort((a,b)=>(b.resolvedAt||0)-(a.resolvedAt||0)).slice(0,5).map(d=>(
             <tr key={d.id}>
               <td style={td}>{d.machineName}</td>
               <td style={td}><span style={badge(d.status)}>{d.status==="down"?"Nede":"Reparation"}</span></td>
+              <td style={td}>{topicLabel(d.topic)||<span style={{color:C.muted}}>—</span>}</td>
               <td style={{...td,color:C.amber}}>{fmtHM(d.downtimeSec)}</td>
               <td style={td}>{d.reportedBy}</td>
               <td style={td}>{d.resolvedBy}</td>

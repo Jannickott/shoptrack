@@ -484,11 +484,12 @@ export default function App(){
     }));
     saveNow();
   };
-  const resolveIssue=(machineName)=>{
+  // extra: {status, topic, fixDescription} from the "Kører igen" window
+  const resolveIssue=(machineName,extra={})=>{
     const issue=machineIssues[machineName]; if(!issue) return;
     const resolvedAt=Date.now();
     const downtimeSec=issue.downtimeSec||0; // work-hours-only counter
-    setDowntimeLog(prev=>[...prev,{id:resolvedAt,machineName,...issue,resolvedBy:user.name,resolvedAt,downtimeSec}]);
+    setDowntimeLog(prev=>[...prev,{id:resolvedAt,machineName,...issue,...extra,resolvedBy:user.name,resolvedAt,downtimeSec}]);
     notify(`${machineName} kører igen`);
     setMachineIssues(prev=>{const n={...prev};delete n[machineName];return n;});
     setJobs(prev=>prev.map(j=>j.machine===machineName&&j.paused?{...j,paused:false,phaseStartedAt:Date.now(),lastModifiedAt:Date.now()}:j));

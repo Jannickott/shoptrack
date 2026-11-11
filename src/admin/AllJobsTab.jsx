@@ -3,6 +3,7 @@ import { sortActive, ActiveJobsGrid } from "./AdminDash";
 import { notify } from "../components/Feedback";
 import { C, inp, sel, btn, badge, tag, label, errMsg } from "../lib/theme";
 import { fmtHM, fmtDetail, fmtDate, liveTime } from "../lib/util";
+import { ResolveIssueModal, ISSUE_TOPICS, topicLabel, topicIcon } from "../components/ResolveIssue";
 
 // ═══════════════════════════════════════════════════════
 // ALL JOBS (ADMIN)
@@ -396,6 +397,7 @@ export function IssueCard({name,issue,setMachineIssues,resolveIssue,saveNow}){
   const [status,setStatus]=useState(issue.status);
   const [fixDescription,setFixDescription]=useState(issue.fixDescription||"");
   const [fixCost,setFixCost]=useState(issue.fixCost||"");
+  const [resolving,setResolving]=useState(false); // "Kører igen" window
   const accentColor=issue.status==="down"?C.red:C.amber;
   const save=()=>{
     setMachineIssues(prev=>({...prev,[name]:{...prev[name],status,reason,fixDescription:fixDescription.trim(),fixCost:fixCost.trim(),updatedAt:Date.now()}}));
@@ -458,7 +460,8 @@ export function IssueCard({name,issue,setMachineIssues,resolveIssue,saveNow}){
           <span style={{fontSize:17,color:C.red,fontFamily:"'Share Tech Mono',monospace",fontWeight:700}}>{fmtHM(issue.downtimeSec||0)}</span>
         </div>
       </div>
-      <button style={btn("success",true,true)} onClick={()=>resolveIssue(name)}><i className="ti ti-check"/> Løst</button>
+      <button style={btn("success",true,true)} onClick={()=>setResolving(true)}><i className="ti ti-check"/> Løst</button>
+      {resolving&&<ResolveIssueModal machine={name} issue={issue} onClose={()=>setResolving(false)} onResolve={x=>{resolveIssue(name,x);setResolving(false);}}/>}
     </div>
   );
 }
@@ -619,9 +622,11 @@ export function ResolvedIssueCard({entry,setDowntimeLog,saveNow}){
   const [reason,setReason]=useState(entry.reason||"");
   const [fixDescription,setFixDescription]=useState(entry.fixDescription||"");
   const [fixCost,setFixCost]=useState(entry.fixCost||"");
+  const [topic,setTopic]=useState(entry.topic||"");
+  const [status,setStatus]=useState(entry.status||"down");
   const accentColor=entry.status==="down"?C.red:C.amber;
   const save=()=>{
-    setDowntimeLog(prev=>prev.map(e=>e.id===entry.id?{...e,reason:reason.trim(),fixDescription:fixDescription.trim(),fixCost:fixCost.trim(),updatedAt:Date.now()}:e));
+    setDowntimeLog(prev=>prev.map(e=>e.id===entry.id?{...e,status,topic,reason:reason.trim(),fixDescription:fixDescription.trim(),fixCost:fixCost.trim(),updatedAt:Date.now()}:e));
     setEditing(false);
     saveNow&&saveNow();
     notify("Gemt");
@@ -633,13 +638,14 @@ export function ResolvedIssueCard({entry,setDowntimeLog,saveNow}){
           <div style={{fontSize:16,color:C.text,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{entry.machineName}</div>
           <div style={{fontSize:13,color:C.muted}}>{fmtDate(entry.reportedAt)}</div>
         </div>
-        <button style={{background:"none",border:"none",minWidth:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",color:C.muted,cursor:"pointer",fontSize:16,padding:2}} onClick={()=>{setReason(entry.reason||"");setFixDescription(entry.fixDescription||"");setFixCost(entry.fixCost||"");setEditing(e=>!e);}}>
+        <button style={{background:"none",border:"none",minWidth:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",color:C.muted,cursor:"pointer",fontSize:16,padding:2}} onClick={()=>{setReason(entry.reason||"");setFixDescription(entry.fixDescription||"");setFixCost(entry.fixCost||"");setTopic(entry.topic||"");setStatus(entry.status||"down");setEditing(e=>!e);}}>
           <i className={`ti ti-${editing?"x":"pencil"}`}/>
         </button>
       </div>
       <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
         <span style={badge("run")}>Løst</span>
         <span style={badge(entry.status==="down"?"down":"repair")}>{entry.status==="down"?"Var nede":"Var til reparation"}</span>
+        {entry.topic&&<span style={{...badge(""),color:C.text}}><i className={`ti ti-${topicIcon(entry.topic)}`}/> {topicLabel(entry.topic)}</span>}
       </div>
       {!editing&&(
         <div style={{fontSize:13,color:C.muted,display:"flex",flexDirection:"column",gap:3}}>
@@ -652,11 +658,25 @@ export function ResolvedIssueCard({entry,setDowntimeLog,saveNow}){
       {editing&&(
         <div style={{display:"flex",flexDirection:"column",gap:6,paddingTop:6,borderTop:`1px solid ${C.border}`}}>
           <div>
+            <div style={label}>Status</div>
+            <select style={sel()} value={status} onChange={e=>setStatus(e.target.value)}>
+              <option value="down">Maskine nede</option>
+              <option value="repair">Skal repareres</option>
+            </select>
+          </div>
+          <div>
+            <div style={label}>Hvad handlede det om?</div>
+            <select style={sel()} value={topic} onChange={e=>setTopic(e.target.value)}>
+              <option value="">— Ikke valgt —</option>
+              {ISSUE_TOPICS.map(t=><option key={t.key} value={t.key}>{t.label}</option>)}
+            </select>
+          </div>
+          <div>
             <div style={label}>Beskrivelse af fejlen</div>
             <input style={inp()} value={reason} onChange={e=>setReason(e.target.value)} placeholder="Hvad var galt?"/>
           </div>
           <div>
-            <div style={label}>Løsning</div>
+            <div style={label}>Hvad blev lavet / hvad manglede?</div>
             <input style={inp()} value={fixDescription} onChange={e=>setFixDescription(e.target.value)} placeholder="Hvad blev der gjort for at løse det?"/>
           </div>
           <div>
