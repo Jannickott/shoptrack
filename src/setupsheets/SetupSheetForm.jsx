@@ -6,6 +6,7 @@ import { ToolPickerField } from "../tools/ToolPicker";
 import { SwitchDial, SWITCHES } from "./SwitchDial";
 import { GearTrains } from "./GearTrain";
 import { ERIKS_BLANK, UnusedCross } from "./SetupSheetDetail";
+import { PhotoDraw } from "../components/PhotoDraw";
 import { resizeImage } from "../lib/api";
 
 export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
@@ -42,6 +43,7 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
   const [showList2,setShowList2]=useState(!!(init.tools2?.length));
   const [showList3,setShowList3]=useState(!!(init.tools3?.length));
   const [uploading,setUploading]=useState(false);
+  const [drawing,setDrawing]=useState(null); // index of the photo being drawn on
   // Photos from the camera or the tablet's pictures — shrunk, then added to the sheet
   const addPhotos=async e=>{
     const files=[...e.target.files];
@@ -560,6 +562,8 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
             {(form.photos||[]).map((p,i)=>(
               <div key={i} style={{position:"relative",borderRadius:8,overflow:"hidden",background:C.raised,aspectRatio:"4/3"}}>
                 <img src={p.url} style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+                {/* Draw on the photo — arrows, circles, text */}
+                <button onClick={()=>setDrawing(i)} style={{position:"absolute",top:6,left:6,background:p.marks?.length?C.amber:"rgba(0,0,0,.7)",border:"none",borderRadius:8,color:p.marks?.length?"#000":"#fff",cursor:"pointer",padding:"8px 12px",fontSize:15,fontWeight:700,display:"flex",alignItems:"center",gap:6}}><i className="ti ti-pencil" style={{fontSize:18}}/> {p.marks?.length?"Ret tegning":"Tegn"}</button>
                 <button onClick={()=>setF("photos",(form.photos||[]).filter((_,j)=>j!==i))} style={{position:"absolute",top:4,right:4,background:"rgba(0,0,0,.7)",border:"none",borderRadius:4,color:"#fff",cursor:"pointer",padding:"2px 6px",fontSize:15}}><i className="ti ti-x"/></button>
                 {p.caption!==undefined&&<input style={{position:"absolute",bottom:0,left:0,right:0,background:"rgba(0,0,0,.7)",border:"none",color:"#fff",fontSize:17,fontWeight:500,padding:"10px 10px",outline:"none"}} value={p.caption||""} onChange={e=>setF("photos",(form.photos||[]).map((x,j)=>j===i?{...x,caption:e.target.value}:x))} placeholder="Billedtekst…"/>}
               </div>
@@ -578,6 +582,8 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
               </label>
             ))}
           </div>}
+        {drawing!=null&&form.photos?.[drawing]&&<PhotoDraw photo={form.photos[drawing]} onClose={()=>setDrawing(null)}
+          onSave={x=>{const i=drawing;setForm(p=>({...p,photos:(p.photos||[]).map((ph,j)=>j===i?{...ph,...x}:ph)}));setDrawing(null);}}/>}
         {photosDropped&&<div style={{fontSize:14,color:C.amber,marginTop:8}}><i className="ti ti-alert-triangle"/> Billederne fylder for meget til at blive husket, hvis appen lukker — tryk Gem snart for at beholde dem.</div>}
       </div>
       <div style={{marginBottom:20}}>

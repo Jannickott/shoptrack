@@ -736,7 +736,7 @@ function externalizePhotos(data) {
   };
   (data.tools || []).forEach(t => { if (t.photoData) t.photoData = toFile(t.photoData); });
   (data.cabinets || []).forEach(c => { if (c.photoData) c.photoData = toFile(c.photoData); });
-  (data.setupSheets || []).forEach(s => (s.photos || []).forEach(p => { if (p.url) p.url = toFile(p.url); }));
+  (data.setupSheets || []).forEach(s => (s.photos || []).forEach(p => { if (p.url) p.url = toFile(p.url); if (p.original) p.original = toFile(p.original); }));
   (data.tasks || []).forEach(t => { if (t.photo) t.photo = toFile(t.photo); });
   (data.jobs || []).forEach(j => {
     if (j.photoData)  j.photoData  = toFile(j.photoData);
