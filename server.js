@@ -738,6 +738,10 @@ function externalizePhotos(data) {
   (data.cabinets || []).forEach(c => { if (c.photoData) c.photoData = toFile(c.photoData); });
   (data.setupSheets || []).forEach(s => (s.photos || []).forEach(p => { if (p.url) p.url = toFile(p.url); if (p.original) p.original = toFile(p.original); }));
   (data.tasks || []).forEach(t => { if (t.photo) t.photo = toFile(t.photo); });
+  // Machine faults: photos / sketches from "Meld fejl"
+  const faultPhotos = x => (x && x.photos || []).forEach(p => { if (p.url) p.url = toFile(p.url); if (p.original) p.original = toFile(p.original); });
+  Object.values(data.machineIssues || {}).forEach(faultPhotos);
+  (data.downtimeLog || []).forEach(faultPhotos);
   (data.jobs || []).forEach(j => {
     if (j.photoData)  j.photoData  = toFile(j.photoData);
     if (j.photoData2) j.photoData2 = toFile(j.photoData2);

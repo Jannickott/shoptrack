@@ -4,6 +4,7 @@ import { fmtHM, fmtDate, liveTime } from "../lib/util";
 import { machineMaint } from "../maintenance/maintUtil";
 import { MaintChecklist, maintSummary } from "../maintenance/MaintChecklist";
 import { ResolveIssueModal } from "../components/ResolveIssue";
+import { PhotoAttach, PhotoStrip } from "../components/PhotoAttach";
 
 // ═══════════════════════════════════════════════════════
 // MACHINE STATUS (operator)
@@ -33,10 +34,11 @@ export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,r
   const [resolving,setResolving]=useState(null); // machine name — "Kører igen" window open
   const [issueType,setIssueType]=useState("repair");
   const [note,setNote]=useState("");
+  const [photos,setPhotos]=useState([]); // optional pictures / sketches on the report
 
   const submit=(machineName)=>{
-    reportIssue(machineName,issueType,note.trim());
-    setReporting(null);setNote("");
+    reportIssue(machineName,issueType,note.trim(),photos);
+    setReporting(null);setNote("");setPhotos([]);
   };
 
   return(
@@ -79,7 +81,7 @@ export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,r
                 );})}
               </div>
               {!issue&&!isReporting&&(
-                <button style={btn("outline",false,true)} onClick={()=>{setReporting(m.name);setIssueType("repair");setNote("");}}>
+                <button style={btn("outline",false,true)} onClick={()=>{setReporting(m.name);setIssueType("repair");setNote("");setPhotos([]);}}>
                   <i className="ti ti-alert-triangle"/> Meld fejl
                 </button>
               )}
@@ -93,6 +95,7 @@ export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,r
               <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,fontSize:14,color:C.muted}}>
                 {issue.reason&&<div style={{color:C.text,marginBottom:4}}>{issue.reason}</div>}
                 <div>Meldt af <span style={{color:C.text}}>{issue.reportedBy}</span> · {fmtDate(issue.reportedAt)}</div>
+                <PhotoStrip photos={issue.photos}/>
               </div>
             )}
             {/* Maintenance (ISO 9001) — what the admin has set up for this machine */}
@@ -120,11 +123,13 @@ export function MachineStatusTab({user,machines,jobs,machineIssues,reportIssue,r
                   <button style={btn(issueType==="down"?"danger":"outline",true)} onClick={()=>setIssueType("down")}>Maskine nede</button>
                 </div>
                 <input style={{...inp(),marginBottom:10}} value={note} onChange={e=>setNote(e.target.value)} placeholder="Beskriv problemet (valgfrit)"/>
+                <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Billede eller skitse (valgfrit)</div>
+                <div style={{marginBottom:12}}><PhotoAttach photos={photos} onChange={setPhotos} color={issueType==="down"?C.red:C.amber}/></div>
                 <div style={{display:"flex",gap:8}}>
                   <button style={btn(issueType==="down"?"danger":"primary",true)} onClick={()=>submit(m.name)}>
                     <i className="ti ti-send"/> Send melding
                   </button>
-                  <button style={btn("outline",false,true)} onClick={()=>setReporting(null)}>Annuller</button>
+                  <button style={btn("outline",false,true)} onClick={()=>{setReporting(null);setPhotos([]);}}>Annuller</button>
                 </div>
               </div>
             )}

@@ -470,12 +470,12 @@ export default function App(){
     }catch{/* storage or full screen not available */}
   };
 
-  const reportIssue=(machineName,status,reason)=>{
+  const reportIssue=(machineName,status,reason,photos)=>{
     const now=new Date();
     const hhmm=`${String(now.getHours()).padStart(2,"0")}:${String(now.getMinutes()).padStart(2,"0")}`;
     const dhR=todayWorkHours(workHours);
     const counting=!!(dhR&&dhR.enabled&&hhmm>=dhR.start&&hhmm<dhR.end);
-    setMachineIssues(prev=>({...prev,[machineName]:{status,reason,reportedBy:user.name,reportedAt:Date.now(),downtimeSec:0,counting}}));
+    setMachineIssues(prev=>({...prev,[machineName]:{status,reason,reportedBy:user.name,reportedAt:Date.now(),downtimeSec:0,counting,...(photos?.length?{photos}:{})}}));
     notify(`Fejl meldt på ${machineName} — job på maskinen er sat på pause`,"warn");
     setJobs(prev=>prev.map(j=>{
       if(j.machine!==machineName||j.status==="done") return j;

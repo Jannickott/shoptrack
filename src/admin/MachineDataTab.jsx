@@ -3,6 +3,7 @@ import { DonutChart } from "./AdminDash";
 import { C, card, inp, badge } from "../lib/theme";
 import { fmtHM, fmtDetail, fmtDate, jRunAll, jSetupAll, jobEfficiency, liveTime, calcAvailableWorkSec } from "../lib/util";
 import { topicLabel, topicIcon, repeatNumber, REPEAT_DAYS } from "../lib/issueTopics";
+import { PhotoStrip } from "../components/PhotoAttach";
 
 // ═══════════════════════════════════════════════════════
 // MACHINE DATA TAB
@@ -169,6 +170,7 @@ export function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficien
                 </div>
                 {iss.reason&&<div style={{fontSize:15,color:C.text,marginTop:2}}>{iss.reason}</div>}
                 <div style={{fontSize:13,color:C.muted,marginTop:2}}>Meldt af {iss.reportedBy} · {fmtDate(iss.reportedAt)}</div>
+                <PhotoStrip photos={iss.photos}/>
               </div>
             );
           })()}
@@ -195,6 +197,7 @@ export function MachineDataTab({jobs,machines,downtimeLog,machineIssues,efficien
                         <span style={{fontSize:15,color:C.red,fontFamily:"'Share Tech Mono',monospace",flexShrink:0}}>{fmtHM(d.downtimeSec)}</span>
                       </div>
                       {d.fixDescription&&<div style={{fontSize:14,color:C.text}}><i className="ti ti-tools" style={{color:C.muted}}/> {d.fixDescription}</div>}
+                      <PhotoStrip photos={d.photos} size={80}/>
                       <div style={{fontSize:13,color:C.muted}}>
                         Meldt af {d.reportedBy} · {fmtDate(d.reportedAt)}
                       </div>

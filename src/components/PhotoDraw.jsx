@@ -108,8 +108,8 @@ export function PhotoDraw({photo,onSave,onClose}){
   const [img,setImg]=useState(null);
   const [failed,setFailed]=useState(false);
   const [marks,setMarks]=useState(photo.marks||[]);
-  const [tool,setTool]=useState("arrow");
-  const [color,setColor]=useState("#e53e3e");
+  const [tool,setTool]=useState(photo.sketch?"pen":"arrow");
+  const [color,setColor]=useState(photo.sketch?"#111111":"#e53e3e");
   const [thick,setThick]=useState(false);
   const [view,setView]=useState({s:1,x:0,y:0}); // zoom and pan of the picture
   const [textAt,setTextAt]=useState(null); // [x,y] waiting for the text to be typed

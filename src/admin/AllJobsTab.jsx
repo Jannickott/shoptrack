@@ -4,6 +4,7 @@ import { notify } from "../components/Feedback";
 import { C, inp, sel, btn, badge, tag, label, errMsg } from "../lib/theme";
 import { fmtHM, fmtDetail, fmtDate, liveTime } from "../lib/util";
 import { ResolveIssueModal, ISSUE_TOPICS, topicLabel, topicIcon } from "../components/ResolveIssue";
+import { PhotoStrip } from "../components/PhotoAttach";
 
 // ═══════════════════════════════════════════════════════
 // ALL JOBS (ADMIN)
@@ -420,6 +421,7 @@ export function IssueCard({name,issue,setMachineIssues,resolveIssue,saveNow}){
         <span style={badge(issue.status==="down"?"down":"repair")}>{issue.status==="down"?"Nede":"Reparation"}</span>
         {issue.reason&&!editing&&<span style={{fontSize:13,color:C.muted,alignSelf:"center"}}>{issue.reason}</span>}
       </div>
+      {!editing&&<PhotoStrip photos={issue.photos} size={72}/>}
       {!editing&&(issue.fixDescription||issue.fixCost)&&(
         <div style={{background:C.raised,borderRadius:7,padding:"7px 10px",fontSize:13,color:C.muted}}>
           {issue.fixDescription&&<div style={{color:C.text,marginBottom:issue.fixCost?3:0}}><i className="ti ti-tools"/> {issue.fixDescription}</div>}
@@ -650,6 +652,7 @@ export function ResolvedIssueCard({entry,setDowntimeLog,saveNow}){
       {!editing&&(
         <div style={{fontSize:13,color:C.muted,display:"flex",flexDirection:"column",gap:3}}>
           {entry.reason&&<div style={{color:C.text}}><i className="ti ti-alert-circle"/> {entry.reason}</div>}
+          <PhotoStrip photos={entry.photos} size={72}/>
           {entry.fixDescription&&<div><i className="ti ti-tools"/> {entry.fixDescription}</div>}
           {entry.fixCost&&<div><i className="ti ti-coin"/> {entry.fixCost}</div>}
           <div style={{marginTop:2}}><i className="ti ti-user-check"/> Løst af {entry.resolvedBy}</div>

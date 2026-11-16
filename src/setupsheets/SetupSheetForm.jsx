@@ -7,6 +7,7 @@ import { SwitchDial, SWITCHES } from "./SwitchDial";
 import { GearTrains } from "./GearTrain";
 import { ERIKS_BLANK, UnusedCross } from "./SetupSheetDetail";
 import { PhotoDraw } from "../components/PhotoDraw";
+import { blankSketch } from "../components/PhotoAttach";
 import { resizeImage } from "../lib/api";
 
 export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setupDeptParams,subDepartments,tools,cabinets,onBack,onSave}){
@@ -44,6 +45,9 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
   const [showList3,setShowList3]=useState(!!(init.tools3?.length));
   const [uploading,setUploading]=useState(false);
   const [drawing,setDrawing]=useState(null); // index of the photo being drawn on
+  const [freshSketch,setFreshSketch]=useState(false); // a new blank sketch: dropped if closed empty
+  const startSketch=()=>{const n=(form.photos||[]).length;setForm(p=>({...p,photos:[...(p.photos||[]),{url:blankSketch(),caption:"",sketch:true}]}));setFreshSketch(true);setDrawing(n);};
+  const dropPhoto=i=>setForm(p=>({...p,photos:(p.photos||[]).filter((_,j)=>j!==i)}));
   // Photos from the camera or the tablet's pictures — shrunk, then added to the sheet
   const addPhotos=async e=>{
     const files=[...e.target.files];
@@ -574,16 +578,24 @@ export function SetupSheetForm({sheet,prefill,draft,draftKey,machines,user,setup
             (a "multiple" picker on Android goes straight to the gallery, so the camera needs its own button) */}
         {uploading
           ?<div style={{display:"flex",alignItems:"center",gap:8,background:C.raised,border:`1px dashed ${C.border}`,borderRadius:8,padding:"14px",color:C.muted,fontSize:15}}><i className="ti ti-loader" style={{animation:"spin 1s linear infinite"}}/> Uploader…</div>
-          :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          :<div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
             {[["camera","Tag foto",true],["photo","Vælg billeder",false]].map(([icon,text,camera])=>(
               <label key={icon} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,minHeight:50,background:C.raised,border:`1px dashed ${C.border}`,borderRadius:8,padding:"10px 14px",cursor:"pointer",color:C.text,fontSize:15}}>
                 <i className={`ti ti-${icon}`} style={{fontSize:20,color:C.amber}}/> {text}
                 <input type="file" accept="image/*" {...(camera?{capture:"environment"}:{multiple:true})} style={{display:"none"}} onChange={addPhotos}/>
               </label>
             ))}
+            <button onClick={startSketch} style={{display:"flex",alignItems:"center",justifyContent:"center",gap:8,minHeight:50,background:C.raised,border:"1px dashed "+C.border,borderRadius:8,padding:"10px 14px",cursor:"pointer",color:C.text,fontSize:15,fontFamily:"inherit"}}>
+              <i className="ti ti-scribble" style={{fontSize:20,color:C.amber}}/> Tegn skitse
+            </button>
           </div>}
-        {drawing!=null&&form.photos?.[drawing]&&<PhotoDraw photo={form.photos[drawing]} onClose={()=>setDrawing(null)}
-          onSave={x=>{const i=drawing;setForm(p=>({...p,photos:(p.photos||[]).map((ph,j)=>j===i?{...ph,...x}:ph)}));setDrawing(null);}}/>}
+        {drawing!=null&&form.photos?.[drawing]&&<PhotoDraw photo={form.photos[drawing]}
+          onClose={()=>{if(freshSketch) dropPhoto(drawing);setDrawing(null);setFreshSketch(false);}}
+          onSave={x=>{const i=drawing,ph=form.photos[i];
+            // A sketch with nothing drawn on it is not kept
+            if(ph.sketch&&!x.marks?.length) dropPhoto(i);
+            else setForm(p=>({...p,photos:(p.photos||[]).map((q,j)=>j===i?{...q,...x}:q)}));
+            setDrawing(null);setFreshSketch(false);}}/>}
         {photosDropped&&<div style={{fontSize:14,color:C.amber,marginTop:8}}><i className="ti ti-alert-triangle"/> Billederne fylder for meget til at blive husket, hvis appen lukker — tryk Gem snart for at beholde dem.</div>}
       </div>
       <div style={{marginBottom:20}}>

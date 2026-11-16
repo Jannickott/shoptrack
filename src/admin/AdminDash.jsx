@@ -6,6 +6,7 @@ import { visibleTasks, taskState } from "../tasks/taskUtil";
 import { machineMaint, machineOperator, dueText } from "../maintenance/maintUtil";
 import { jobToolWarnings, sheetsOfJob } from "../tools/toolLife";
 import { topicLabel, repeatFaults, REPEAT_DAYS } from "../lib/issueTopics";
+import { PhotoStrip } from "../components/PhotoAttach";
 
 // ═══════════════════════════════════════════════════════
 // ADMIN DASHBOARD
@@ -279,6 +280,7 @@ export function AdminDash({jobs,machineIssues,downtimeLog,machines,tools,efficie
             <div key={m.id} style={{...card(C.red),marginBottom:0}}>
               <div style={{display:"flex",justifyContent:"space-between",gap:6}}><b style={{fontSize:16,color:C.text}}>{m.name}</b><span style={badge(issue.status==="down"?"down":"repair")}>{issue.status==="down"?"Nede":"Reparation"}</span></div>
               {issue.reason&&<div style={{fontSize:14,color:C.text,marginTop:6}}>{issue.reason}</div>}
+              <PhotoStrip photos={issue.photos} size={64}/>
               <div style={{fontSize:13,color:C.muted,marginTop:4}}>{issue.reportedBy} · {sinceLabel(issue.reportedAt)}</div>
               <div style={{fontSize:18,color:C.red,fontFamily:"'Share Tech Mono',monospace",marginTop:6,textAlign:"right"}}>{fmtHM(issue.downtimeSec||0)}</div>
             </div>

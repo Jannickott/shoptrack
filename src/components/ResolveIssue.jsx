@@ -2,6 +2,7 @@ import { useState } from "react";
 import { C, btn, inp, label } from "../lib/theme";
 
 import { ISSUE_TOPICS } from "../lib/issueTopics";
+import { PhotoStrip } from "./PhotoAttach";
 export { ISSUE_TOPICS, topicLabel, topicIcon } from "../lib/issueTopics";
 
 // "Kører igen": what was it, what was done / missing, and was it really "nede" or "skal repareres"
@@ -22,6 +23,7 @@ export function ResolveIssueModal({machine,issue,onResolve,onClose}){
           <div style={{flex:1,fontSize:19,fontWeight:700,color:C.text}}>{machine} kører igen</div>
           <button style={{...btn("outline",false,true),padding:"6px 10px"}} onClick={onClose}><i className="ti ti-x"/></button>
         </div>
+        {issue?.photos?.length>0&&<div style={{marginBottom:8}}><PhotoStrip photos={issue.photos} size={80}/></div>}
         {issue?.reason&&<div style={{fontSize:14,color:C.muted,marginBottom:12}}>Meldt: “{issue.reason}” · {issue.reportedBy}</div>}
 
         <div style={label}>Hvad var det?</div>
