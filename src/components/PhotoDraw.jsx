@@ -3,7 +3,9 @@ import { C } from "../lib/theme";
 
 // ═══════════════════════════════════════════════════════
 // Draw on a photo: pen, line, arrow, circle, box and text in a few strong colours.
-// A text can be tapped afterwards to move it, recolour it, resize it, change or delete it.
+// Any mark can be tapped afterwards to pick it: move it, recolour it, change its size or
+// delete it (a text can also be re-typed). Text is picked as soon as a finger lands on it;
+// other marks on a tap, so an arrow can still be drawn starting on a circle.
 // The drawing is kept as a list of marks over the untouched original, so it can be
 // changed or removed later. Saving gives a flattened JPEG (shown everywhere the photo
 // is shown, PDF included) plus {original, marks, mw, mh} to edit again.
@@ -63,6 +65,39 @@ function textBox(ctx,m,W){
   return {x:m.pts[0][0]-pad,y:m.pts[0][1]-fs/2-pad,w:w+pad*2,h:fs+pad*2};
 }
 
+// Distance from a point to a segment
+function segDist(p,a,b){
+  const dx=b[0]-a[0],dy=b[1]-a[1],l=dx*dx+dy*dy;
+  const t=l?Math.max(0,Math.min(1,((p[0]-a[0])*dx+(p[1]-a[1])*dy)/l)):0;
+  return Math.hypot(p[0]-(a[0]+t*dx),p[1]-(a[1]+t*dy));
+}
+// Is the point on this mark (its stroke, not the empty inside of a circle or box)?
+function hitMark(ctx,m,W,p){
+  const tol=W/30+W/(m.thick?75:150);
+  const q=m.pts;
+  if(m.type==="text"){const b=textBox(ctx,m,W);return p[0]>=b.x&&p[0]<=b.x+b.w&&p[1]>=b.y&&p[1]<=b.y+b.h;}
+  if(m.type==="pen"){if(q.length===1)return Math.hypot(p[0]-q[0][0],p[1]-q[0][1])<tol;for(let i=1;i<q.length;i++)if(segDist(p,q[i-1],q[i])<tol)return true;return false;}
+  if(q.length<2) return false;
+  const [a,b]=[q[0],q[q.length-1]];
+  if(m.type==="line"||m.type==="arrow") return segDist(p,a,b)<tol;
+  const x0=Math.min(a[0],b[0]),y0=Math.min(a[1],b[1]),x1=Math.max(a[0],b[0]),y1=Math.max(a[1],b[1]);
+  if(m.type==="box") return [[[x0,y0],[x1,y0]],[[x1,y0],[x1,y1]],[[x1,y1],[x0,y1]],[[x0,y1],[x0,y0]]].some(([u,v])=>segDist(p,u,v)<tol);
+  if(m.type==="circle"){
+    const rx=Math.max((x1-x0)/2,1),ry=Math.max((y1-y0)/2,1),cx=x0+rx,cy=y0+ry;
+    const r=Math.hypot((p[0]-cx)/rx,(p[1]-cy)/ry);
+    return Math.abs(r-1)*Math.min(rx,ry)<tol;
+  }
+  return false;
+}
+// Frame around a picked mark
+function markBox(ctx,m,W){
+  if(m.type==="text") return textBox(ctx,m,W);
+  const pad=W/60+W/(m.thick?75:150);
+  const xs=m.pts.map(p=>p[0]),ys=m.pts.map(p=>p[1]);
+  const x=Math.min(...xs)-pad,y=Math.min(...ys)-pad;
+  return {x,y,w:Math.max(...xs)+pad-x,h:Math.max(...ys)+pad-y};
+}
+
 function loadImage(src){
   return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=src;});
 }
@@ -79,7 +114,7 @@ export function PhotoDraw({photo,onSave,onClose}){
   const [view,setView]=useState({s:1,x:0,y:0}); // zoom and pan of the picture
   const [textAt,setTextAt]=useState(null); // [x,y] waiting for the text to be typed
   const [editIdx,setEditIdx]=useState(null); // a text being re-typed
-  const [sel,setSel]=useState(null);       // index of the picked text (move / colour / size)
+  const [sel,setSel]=useState(null);       // index of the picked mark (move / colour / size / delete)
   const drag=useRef(null);
   const [text,setText]=useState("");
   const [saving,setSaving]=useState(false);
@@ -96,9 +131,9 @@ export function PhotoDraw({photo,onSave,onClose}){
     ctx.drawImage(img,0,0,W,H);
     marks.forEach(m=>drawMark(ctx,m,W));
     if(live.current) drawMark(ctx,live.current,W);
-    // The picked text gets a dashed frame (only on screen, never in the saved picture)
+    // The picked mark gets a dashed frame (only on screen, never in the saved picture)
     if(sel!=null&&marks[sel]){
-      const b=textBox(ctx,marks[sel],W);
+      const b=markBox(ctx,marks[sel],W);
       ctx.save();ctx.lineWidth=W/300;ctx.setLineDash([W/80,W/120]);
       ctx.strokeStyle="#000";ctx.strokeRect(b.x,b.y,b.w,b.h);
       ctx.strokeStyle="#fff";ctx.lineDashOffset=W/80;ctx.strokeRect(b.x,b.y,b.w,b.h);
@@ -106,15 +141,22 @@ export function PhotoDraw({photo,onSave,onClose}){
     }
   };
   useEffect(redraw,[img,marks,sel]);
-  const hitText=pt=>{
+  // Top-most mark under the point (onlyText: just texts)
+  const hitAt=(pt,onlyText)=>{
     const ctx=canvasRef.current?.getContext("2d");if(!ctx) return -1;
     for(let i=marks.length-1;i>=0;i--){
-      const m=marks[i];if(m.type!=="text") continue;
-      const b=textBox(ctx,m,W);
-      if(pt[0]>=b.x&&pt[0]<=b.x+b.w&&pt[1]>=b.y&&pt[1]<=b.y+b.h) return i;
+      const m=marks[i];if(onlyText&&m.type!=="text") continue;
+      if(hitMark(ctx,m,W,pt)) return i;
     }
     return -1;
   };
+  const pick=i=>{const m=marks[i];setSel(i);setColor(m.color);setThick(!!m.thick);};
+  const startDrag=(i,pt)=>{drag.current={idx:i,start:pt,orig:marks[i].pts};};
+  const dragTo=(pt,d)=>{
+    const dx=pt[0]-d.start[0],dy=pt[1]-d.start[1];
+    setMarks(x=>x.map((m,i)=>i===d.idx?{...m,pts:d.orig.map(p=>[p[0]+dx,p[1]+dy])}:m));
+  };
+  const delSel=()=>{setMarks(x=>x.filter((_,i)=>i!==sel));setSel(null);};
   const patchSel=obj=>{if(sel!=null) setMarks(x=>x.map((m,i)=>i===sel?{...m,...obj}:m));};
   const pickColor=c=>{setColor(c);patchSel({color:c});};
   const toggleThick=()=>{const t=!thick;setThick(t);patchSel({thick:t});};
@@ -141,14 +183,10 @@ export function PhotoDraw({photo,onSave,onClose}){
     }
     if(pointers.current.size>2) return;
     const pt=toImg(ev);
-    // Tapping a text picks it; dragging moves it
-    const hit=hitText(pt);
-    if(hit>=0){
-      const m=marks[hit];
-      setSel(hit);setColor(m.color);setThick(!!m.thick);
-      drag.current={idx:hit,dx:pt[0]-m.pts[0][0],dy:pt[1]-m.pts[0][1]};
-      return;
-    }
+    // A finger on the picked mark, or on any text, moves it
+    if(sel!=null&&marks[sel]&&hitMark(canvasRef.current.getContext("2d"),marks[sel],W,pt)){startDrag(sel,pt);return;}
+    const hit=hitAt(pt,true);
+    if(hit>=0){pick(hit);startDrag(hit,pt);return;}
     if(sel!=null){setSel(null);if(tool==="text"){pointers.current.clear();return;}}
     if(tool==="text"){setTextAt(pt);setText("");setEditIdx(null);pointers.current.clear();return;}
     live.current={type:tool,color,thick,pts:[pt]};
@@ -163,11 +201,7 @@ export function PhotoDraw({photo,onSave,onClose}){
       setView({s,x:v.x+(now.cx-st.cx),y:v.y+(now.cy-st.cy)});
       return;
     }
-    if(drag.current){
-      const pt=toImg(ev),d=drag.current;
-      setMarks(x=>x.map((m,i)=>i===d.idx?{...m,pts:[[pt[0]-d.dx,pt[1]-d.dy]]}:m));
-      return;
-    }
+    if(drag.current){dragTo(toImg(ev),drag.current);return;}
     if(!live.current) return;
     const pt=toImg(ev);
     if(live.current.type==="pen") live.current.pts.push(pt);
@@ -180,14 +214,18 @@ export function PhotoDraw({photo,onSave,onClose}){
     if(drag.current){
       // The last position can come with the release itself
       const d=drag.current;drag.current=null;
-      if(ev.type==="pointerup"){const pt=toImg(ev);setMarks(x=>x.map((m,i)=>i===d.idx?{...m,pts:[[pt[0]-d.dx,pt[1]-d.dy]]}:m));}
+      if(ev.type==="pointerup") dragTo(toImg(ev),d);
       return;
     }
     const m=live.current;live.current=null;
     if(!m) return;
-    // A tap with a shape tool makes nothing; a tap with the pen makes a dot
-    const far=m.pts.length>1&&Math.hypot(m.pts[m.pts.length-1][0]-m.pts[0][0],m.pts[m.pts.length-1][1]-m.pts[0][1])>W/80;
-    if(m.type==="pen"||far) setMarks(x=>[...x,m]); else redraw();
+    const far=m.pts.length>1&&m.pts.some(p=>Math.hypot(p[0]-m.pts[0][0],p[1]-m.pts[0][1])>W/80);
+    if(far){setMarks(x=>[...x,m]);return;}
+    // A tap on a mark picks it; a tap elsewhere makes a dot with the pen, nothing with the others
+    const hit=hitAt(m.pts[0]);
+    if(hit>=0) pick(hit);
+    else if(m.type==="pen") setMarks(x=>[...x,m]);
+    else redraw();
   };
 
   const addText=()=>{
@@ -227,7 +265,7 @@ export function PhotoDraw({photo,onSave,onClose}){
           {TOOLS.map(([k,icon,lbl])=>(
             <button key={k} style={tbtn(tool===k)} onClick={()=>setTool(k)}><i className={`ti ${icon}`} style={{fontSize:22}}/>{lbl}</button>
           ))}
-          <button style={tbtn(thick)} onClick={toggleThick} title="Tyk / tynd"><i className="ti ti-line-height" style={{fontSize:22}}/>{(tool==="text"||sel!=null)?(thick?"Stor":"Lille"):(thick?"Tyk":"Tynd")}</button>
+          <button style={tbtn(thick)} onClick={toggleThick} title="Tyk / tynd"><i className="ti ti-line-height" style={{fontSize:22}}/>{(sel!=null?marks[sel]?.type==="text":tool==="text")?(thick?"Stor":"Lille"):(thick?"Tyk":"Tynd")}</button>
         </div>
         <div style={bar}>
           {COLORS.map(([c,lbl])=>(
@@ -253,12 +291,12 @@ export function PhotoDraw({photo,onSave,onClose}){
         {sel!=null&&marks[sel]&&!textAt&&(
           <div style={{position:"absolute",top:10,left:"50%",transform:"translateX(-50%)",display:"flex",gap:8,alignItems:"center",background:"rgba(0,0,0,.8)",padding:"8px 10px",borderRadius:12,zIndex:1,whiteSpace:"nowrap"}}>
             <span style={{color:"#ddd",fontSize:14,padding:"0 4px"}}><i className="ti ti-hand-move"/> Træk for at flytte · vælg farve og størrelse</span>
-            <button style={{...abtn(),height:44,fontSize:14,padding:"0 12px"}} onClick={()=>{setEditIdx(sel);setText(marks[sel].text);setTextAt(marks[sel].pts[0]);}}><i className="ti ti-pencil"/> Ret tekst</button>
-            <button style={{...abtn(),height:44,fontSize:14,padding:"0 12px",background:"#e53e3e"}} onClick={()=>{setMarks(x=>x.filter((_,i)=>i!==sel));setSel(null);}}><i className="ti ti-trash"/> Slet</button>
+            {marks[sel].type==="text"&&<button style={{...abtn(),height:44,fontSize:14,padding:"0 12px"}} onClick={()=>{setEditIdx(sel);setText(marks[sel].text);setTextAt(marks[sel].pts[0]);}}><i className="ti ti-pencil"/> Ret tekst</button>}
+            <button style={{...abtn(),height:44,fontSize:14,padding:"0 12px",background:"#e53e3e"}} onClick={delSel}><i className="ti ti-trash"/> Slet</button>
             <button style={{...abtn("save"),height:44,fontSize:14,padding:"0 12px"}} onClick={()=>setSel(null)}><i className="ti ti-check"/> Færdig</button>
           </div>
         )}
-        {tool==="text"&&!textAt&&sel==null&&<div style={{position:"absolute",top:12,left:12,background:"rgba(0,0,0,.7)",color:"#fff",padding:"8px 12px",borderRadius:8,fontSize:14,pointerEvents:"none"}}>Tryk hvor teksten skal stå · tryk på en tekst for at flytte den</div>}
+        {tool==="text"&&!textAt&&sel==null&&<div style={{position:"absolute",top:12,left:12,background:"rgba(0,0,0,.7)",color:"#fff",padding:"8px 12px",borderRadius:8,fontSize:14,pointerEvents:"none"}}>Tryk hvor teksten skal stå</div>}
       </div>
 
       {/* Typing a text mark */}
@@ -273,7 +311,7 @@ export function PhotoDraw({photo,onSave,onClose}){
 
       {/* Save / cancel */}
       <div style={{padding:"10px 12px",display:"flex",gap:10,justifyContent:"space-between",alignItems:"center",borderTop:"1px solid rgba(255,255,255,.1)"}}>
-        <div style={{color:"#999",fontSize:13}}>To fingre: zoom og flyt billedet</div>
+        <div style={{color:"#999",fontSize:13}}>Tryk på noget tegnet for at flytte eller slette det · To fingre: zoom</div>
         <div style={{display:"flex",gap:10}}>
           <button style={abtn()} onClick={onClose}>Annuller</button>
           <button style={{...abtn("save"),opacity:img&&!saving?1:.5}} disabled={!img||saving} onClick={save}><i className="ti ti-device-floppy"/> Gem tegning</button>
