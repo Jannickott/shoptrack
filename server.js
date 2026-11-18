@@ -1068,6 +1068,22 @@ app.post("/api/photo", (req, res) => {
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
+// ── POST /api/client-error — something broke on a tablet ──
+// Written to client-errors.log next to the data file (kept under ~1 MB), so a crash
+// that only happens on a tablet can be found and fixed.
+const CLIENT_ERR_LOG = path.join(__dirname, "client-errors.log");
+app.post("/api/client-error", (req, res) => {
+  try {
+    const b = req.body || {};
+    const s = (v, n) => String(v || "").slice(0, n);
+    const line = `[${new Date().toLocaleString("da-DK")}] ${s(b.user, 40) || "(ikke logget ind)"} · ${s(b.where, 80)}\n  ${s(b.message, 500)}\n  ${s(b.ua, 200)}\n${s(b.stack, 2000)}\n${s(b.extra, 1500)}\n\n`;
+    console.log(`  ✗ Fejl på tablet (${s(b.user, 40) || "?"}, ${s(b.where, 80)}): ${s(b.message, 300)}`);
+    try { if (fs.existsSync(CLIENT_ERR_LOG) && fs.statSync(CLIENT_ERR_LOG).size > 1e6) fs.renameSync(CLIENT_ERR_LOG, CLIENT_ERR_LOG + ".old"); } catch { /* */ }
+    fs.appendFileSync(CLIENT_ERR_LOG, line);
+  } catch { /* never fail on the error reporter */ }
+  res.json({ ok: true });
+});
+
 // ── POST /api/video — a video for a guide (Vejledninger) ──
 // The raw file is streamed straight to disk (photos/videos/), so a big recording never
 // passes through memory or the 25 MB JSON limit. Written to .tmp first, renamed when

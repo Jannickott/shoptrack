@@ -90,8 +90,8 @@ export function GuideForm({guide,user,machines,onSave,onCancel}){
             <button style={{...small,color:C.red}} onClick={()=>delStep(i)} title="Slet trin"><i className="ti ti-trash"/></button>
           </div>
           <textarea style={{...inp(),minHeight:90,resize:"vertical",display:"block",fontFamily:"Arial, sans-serif",fontSize:17,marginBottom:10}} value={s.text} onChange={e=>setStep(i,"text",e.target.value)} placeholder="Hvad skal man gøre?"/>
-          <div style={{fontSize:12,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Billeder / skitse</div>
-          <div style={{marginBottom:10}}><PhotoAttach photos={s.photos} onChange={v=>setStep(i,"photos",v)}/></div>
+          <div style={{fontSize:12,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Billeder / skitse <span style={{textTransform:"none",letterSpacing:0}}>— marker GO (sådan skal det være) eller NO GO (forkert)</span></div>
+          <div style={{marginBottom:10}}><PhotoAttach goNo photos={s.photos} onChange={v=>setStep(i,"photos",v)}/></div>
           <div style={{fontSize:12,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Video</div>
           <VideoAttach videos={s.videos} onChange={v=>setStep(i,"videos",v)}/>
         </div>

@@ -23,6 +23,8 @@ import { QuickEntryTab } from "./operator/QuickEntryTab";
 import { PlanningTab } from "./planning/PlanningTab";
 import { SetupSheetsTab } from "./setupsheets/SetupSheetsTab";
 import { GuidesTab } from "./guides/GuidesTab";
+import { ErrorBoundary, installErrorReporting } from "./components/ErrorCatcher";
+installErrorReporting();
 import { ToolsTab } from "./tools/ToolsTab";
 
 // ═══════════════════════════════════════════════════════
@@ -562,6 +564,7 @@ export default function App(){
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
+  window.__stUser=user?user.name:""; // who was logged in, for error reports
   if(!user) return <LoginScreen users={users} onLogin={login}/>;
 
   // Exclude soft-deleted jobs from all display — they stay in state/stateRef for server sync
@@ -649,7 +652,8 @@ export default function App(){
         </div>
       )}
 
-      {/* CONTENT */}
+      {/* CONTENT — if a tab breaks, only the tab shows an error (switching tab resets it) */}
+      <ErrorBoundary key={tab} where={`Fane: ${tab}`}>
       {user.role==="requester"?<RequesterTasksTab user={user} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} saveNow={saveNow}/>:<>
       {tab==="new"      &&<NewJobTab         maintItems={myMaintItems} onOpenMaint={openMaintFor} user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={liveSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
       {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} focusTaskId={focusTaskId} setFocusTaskId={setFocusTaskId} departments={departments} setCompleteId={setCompleteId} saveNow={saveNow}/>}
@@ -668,6 +672,7 @@ export default function App(){
       {tab==="guides"   &&<GuidesTab         user={user} guides={guides} setGuides={setGuides} machines={machines} saveNow={saveNow}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
       </>}
+      </ErrorBoundary>
 
       <Toasts/>
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}

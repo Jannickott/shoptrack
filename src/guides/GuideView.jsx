@@ -3,6 +3,7 @@ import { C, btn, badge } from "../lib/theme";
 import { fmtDate } from "../lib/util";
 import { PdfDrawings } from "../components/PdfDrawings";
 import { VideoPlayer } from "../components/VideoAttach";
+import { VERDICT, VerdictBadge } from "../components/PhotoAttach";
 import { catLabel, catIcon } from "./guideUtil";
 
 // One guide, read on the tablet: numbered steps in big type, pictures and videos
@@ -44,7 +45,10 @@ export function GuideView({guide:g,canDelete,onBack,onEdit,onDelete}){
             {s.photos?.length>0&&(
               <div style={{display:"grid",gridTemplateColumns:s.photos.length===1?"1fr":"1fr 1fr",gap:8,marginBottom:s.videos?.length?10:0}}>
                 {s.photos.map((p,j)=>(
-                  <img key={j} src={p.url} alt="" onClick={()=>setBig(p)} style={{width:"100%",maxHeight:s.photos.length===1?480:300,objectFit:"contain",background:"#000",borderRadius:8,cursor:"zoom-in",display:"block"}}/>
+                  <div key={j} style={{position:"relative",borderRadius:10,overflow:"hidden",border:VERDICT[p.verdict]?`4px solid ${VERDICT[p.verdict].color}`:"none",background:"#000"}}>
+                    <img src={p.url} alt="" onClick={()=>setBig(p)} style={{width:"100%",maxHeight:s.photos.length===1?480:300,objectFit:"contain",background:"#000",cursor:"zoom-in",display:"block"}}/>
+                    <VerdictBadge v={p.verdict} big/>
+                  </div>
                 ))}
               </div>
             )}
@@ -66,7 +70,10 @@ export function GuideView({guide:g,canDelete,onBack,onEdit,onDelete}){
 
       {big&&(
         <div onClick={()=>setBig(null)} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.94)",zIndex:999,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:16}}>
-          <img src={big.url} alt="" style={{maxWidth:"100%",maxHeight:"calc(100vh - 100px)",objectFit:"contain",borderRadius:8}} onClick={e=>e.stopPropagation()}/>
+          <div style={{position:"relative",maxWidth:"100%",border:VERDICT[big.verdict]?`5px solid ${VERDICT[big.verdict].color}`:"none",borderRadius:10,overflow:"hidden"}} onClick={e=>e.stopPropagation()}>
+            <img src={big.url} alt="" style={{maxWidth:"100%",maxHeight:"calc(100vh - 110px)",objectFit:"contain",display:"block"}}/>
+            <VerdictBadge v={big.verdict} big/>
+          </div>
           <button onClick={()=>setBig(null)} style={{marginTop:14,background:"rgba(255,255,255,.12)",border:"1px solid rgba(255,255,255,.25)",borderRadius:8,color:"#fff",fontSize:16,fontWeight:700,padding:"10px 28px",cursor:"pointer"}}><i className="ti ti-x"/> Luk</button>
         </div>
       )}

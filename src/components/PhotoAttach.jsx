@@ -39,8 +39,20 @@ export function useDrawOnPhotos(photos,onChange){
   return {editor,draw:i=>setDrawing({i,fresh:false}),startSketch};
 }
 
-// Thumbnails with Tegn / remove, and three buttons: camera, pictures, sketch
-export function PhotoAttach({photos,onChange,color=C.amber}){
+// GO / NO GO: a picture can show the right way or the wrong way
+export const VERDICT={go:{label:"GO",icon:"check",color:"#27ae60"},nogo:{label:"NO GO",icon:"x",color:"#e53e3e"}};
+export function VerdictBadge({v,big}){
+  const d=VERDICT[v];if(!d) return null;
+  return(
+    <div style={{position:"absolute",top:big?10:6,right:big?10:undefined,left:big?undefined:6,background:d.color,color:"#fff",borderRadius:big?10:7,padding:big?"6px 14px":"3px 8px",fontSize:big?22:13,fontWeight:900,letterSpacing:1,display:"flex",alignItems:"center",gap:big?6:3,boxShadow:"0 2px 8px rgba(0,0,0,.5)",pointerEvents:"none",fontFamily:"Arial, sans-serif"}}>
+      <i className={`ti ti-${d.icon}`} style={{fontSize:big?24:14}}/>{d.label}
+    </div>
+  );
+}
+
+// Thumbnails with Tegn / remove, and three buttons: camera, pictures, sketch.
+// goNo: each picture can be marked GO or NO GO (guides)
+export function PhotoAttach({photos,onChange,color=C.amber,goNo=false}){
   const list=photos||[];
   const [busy,setBusy]=useState(false);
   const {editor,draw,startSketch}=useDrawOnPhotos(list,onChange);
@@ -56,10 +68,17 @@ export function PhotoAttach({photos,onChange,color=C.amber}){
     <div>
       {editor}
       {list.length>0&&(
-        <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(140px,1fr))",gap:8,marginBottom:8}}>
+        <div style={{display:"grid",gridTemplateColumns:`repeat(auto-fill,minmax(${goNo?180:140}px,1fr))`,gap:8,marginBottom:8}}>
           {list.map((p,i)=>(
-            <div key={i} style={{position:"relative",borderRadius:8,overflow:"hidden",background:C.raised,aspectRatio:"4/3"}}>
-              <img src={p.url} alt="" style={{width:"100%",height:"100%",objectFit:"cover",display:"block"}}/>
+            <div key={i} style={{position:"relative",borderRadius:8,overflow:"hidden",background:C.raised,aspectRatio:goNo?undefined:"4/3",border:VERDICT[p.verdict]?`3px solid ${VERDICT[p.verdict].color}`:"3px solid transparent"}}>
+              <img src={p.url} alt="" style={{width:"100%",aspectRatio:"4/3",height:goNo?undefined:"100%",objectFit:"cover",display:"block"}}/>
+              {goNo&&<div style={{display:"grid",gridTemplateColumns:"1fr 1fr"}}>
+                {Object.entries(VERDICT).map(([k,d])=>{const on=p.verdict===k;return(
+                  <button key={k} onClick={()=>onChange(list.map((x,j)=>j===i?{...x,verdict:on?undefined:k}:x))}
+                    style={{minHeight:42,border:"none",borderTop:`1px solid ${C.border}`,background:on?d.color:C.raised,color:on?"#fff":d.color,fontWeight:800,fontSize:14,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",gap:4,fontFamily:"Arial, sans-serif",whiteSpace:"nowrap"}}>
+                    <i className={`ti ti-${d.icon}`}/>{d.label}
+                  </button>);})}
+              </div>}
               <button onClick={()=>draw(i)} style={{position:"absolute",top:5,left:5,background:p.marks?.length?C.amber:"rgba(0,0,0,.7)",border:"none",borderRadius:8,color:p.marks?.length?"#000":"#fff",cursor:"pointer",padding:"7px 10px",fontSize:14,fontWeight:700,display:"flex",alignItems:"center",gap:5}}>
                 <i className="ti ti-pencil" style={{fontSize:16}}/> {p.marks?.length?"Ret":"Tegn"}
               </button>
