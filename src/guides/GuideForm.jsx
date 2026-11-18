@@ -7,8 +7,8 @@ import { GUIDE_CATS, newStep, blankGuide, loadGuideDraft, saveGuideDraft, clearG
 
 // Write or change a guide. Step by step: text, pictures (draw on them / sketch) and video.
 // What is typed is kept on the tablet as a draft until it is saved.
-export function GuideForm({guide,user,machines,onSave,onCancel}){
-  const base=()=>guide?JSON.parse(JSON.stringify({...blankGuide(),...guide,steps:guide.steps?.length?guide.steps:[newStep()]})):blankGuide();
+export function GuideForm({guide,startMachines,user,machines,onSave,onCancel}){
+  const base=()=>guide?JSON.parse(JSON.stringify({...blankGuide(),...guide,steps:guide.steps?.length?guide.steps:[newStep()]})):{...blankGuide(),machines:startMachines||[]};
   const draftId=guide?.id??null;
   const [restored]=useState(()=>{const d=loadGuideDraft(user.id,draftId);return d&&(!guide||d.savedAt>(guide.updatedAt||0))?d:null;});
   const [form,setForm]=useState(()=>restored?restored.form:base());

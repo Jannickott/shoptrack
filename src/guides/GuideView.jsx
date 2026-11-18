@@ -8,7 +8,7 @@ import { catLabel, catIcon } from "./guideUtil";
 
 // One guide, read on the tablet: numbered steps in big type, pictures and videos
 // right where they belong.
-export function GuideView({guide:g,canDelete,onBack,onEdit,onDelete}){
+export function GuideView({guide:g,backLabel,canDelete,onBack,onEdit,onDelete}){
   const [big,setBig]=useState(null);
   useEffect(()=>{window.scrollTo(0,0);},[g.id]); // open at the top
   const [confirmDel,setConfirmDel]=useState(false);
@@ -16,7 +16,7 @@ export function GuideView({guide:g,canDelete,onBack,onEdit,onDelete}){
   return(
     <div style={{padding:"14px 16px",maxWidth:980,margin:"0 auto"}}>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
-        <button style={btn("outline",false,true)} onClick={onBack}><i className="ti ti-arrow-left"/> Alle vejledninger</button>
+        <button style={btn("outline",false,true)} onClick={onBack}><i className="ti ti-arrow-left"/> {backLabel||"Tilbage"}</button>
         <div style={{flex:1}}/>
         <button style={btn("primary",false,true)} onClick={onEdit}><i className="ti ti-pencil"/> Ret</button>
         {canDelete&&<button style={btn("outline",false,true)} onClick={()=>setConfirmDel(true)} title="Slet vejledning"><i className="ti ti-trash" style={{color:C.red}}/></button>}
