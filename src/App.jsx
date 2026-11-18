@@ -22,6 +22,9 @@ import { NewJobTab } from "./operator/NewJobTab";
 import { QuickEntryTab } from "./operator/QuickEntryTab";
 import { PlanningTab } from "./planning/PlanningTab";
 import { SetupSheetsTab } from "./setupsheets/SetupSheetsTab";
+import { GuidesTab } from "./guides/GuidesTab";
+import { ErrorBoundary, installErrorReporting } from "./components/ErrorCatcher";
+installErrorReporting();
 import { ToolsTab } from "./tools/ToolsTab";
 
 // ═══════════════════════════════════════════════════════
@@ -95,6 +98,7 @@ export default function App(){
   const [maintTasks,setMaintTasks]=useState([]); // Vedligehold — see maintenance/maintUtil.js
   const [maintLog,setMaintLog]=useState([]);
   const [toolChanges,setToolChanges]=useState([]); // tool life — see tools/toolLife.js
+  const [guides,setGuides]=useState([]); // Vejledninger — see guides/guideUtil.js
 
   // New version on the server? The first /api/data response tells us which build
   // this page is; a different X-App-Version later means the server was updated.
@@ -163,6 +167,7 @@ export default function App(){
           if(data.maintTasks) setMaintTasks(data.maintTasks);
           if(data.maintLog) setMaintLog(data.maintLog);
           if(data.toolChanges) setToolChanges(data.toolChanges);
+          if(data.guides) setGuides(data.guides);
           if(data.settingsVersion) settingsVersionRef.current=data.settingsVersion;
           // Still logged in on this tablet (page reloaded, app reopened) → carry on without the PIN
           const s=readSession();
@@ -186,7 +191,7 @@ export default function App(){
             planOrders:data.planOrders,
             planSettings:data.planSettings,
             tasks:data.tasks,
-            maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges,
+            maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges,guides:data.guides,
           };
         }
       })
@@ -205,8 +210,8 @@ export default function App(){
   const doSaveRef=useRef(null);         // doSave, for the 3 s loop (defined further down)
   const [serverOnline,setServerOnline]=useState(true);
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges]);
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges,guides};
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges,guides]);
 
   // Save to server every 3 seconds — only when data has changed, with retry on failure
   useEffect(()=>{
@@ -267,6 +272,7 @@ export default function App(){
         mergeById("maintTasks",setMaintTasks);
         mergeById("maintLog",setMaintLog);
         mergeById("toolChanges",setToolChanges);
+        mergeById("guides",setGuides);
         // Settings: only apply if the server value actually changed (another device saved it)
         const s=JSON.stringify;
         if(data.workHours  &&s(data.workHours) !==s(last.workHours)) {setWorkHours(data.workHours);workHoursRef.current=data.workHours;}
@@ -304,7 +310,7 @@ export default function App(){
         // Keep settingsVersion in sync with server (take the max — never go backwards)
         if((data.settingsVersion||0)>settingsVersionRef.current) settingsVersionRef.current=data.settingsVersion;
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders,planSettings:data.planSettings,tasks:data.tasks,maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders,planSettings:data.planSettings,tasks:data.tasks,maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges,guides:data.guides};
       }).catch(()=>setServerOnline(false));
     },5000);
     return()=>clearInterval(t);
@@ -335,7 +341,7 @@ export default function App(){
     if(!savePendingRef.current) return;
     savePendingRef.current=false;
     doSave();
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges]);
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges,guides]);
 
   // ── Refresh immediately when tab becomes visible again ────
   useEffect(()=>{
@@ -558,6 +564,7 @@ export default function App(){
       <style>{`@keyframes spin{to{transform:rotate(360deg)}}`}</style>
     </div>
   );
+  window.__stUser=user?user.name:""; // who was logged in, for error reports
   if(!user) return <LoginScreen users={users} onLogin={login}/>;
 
   // Exclude soft-deleted jobs from all display — they stay in state/stateRef for server sync
@@ -612,7 +619,7 @@ export default function App(){
       {/* NAV */}
       {user.role==="operator"&&(
         <div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`}}>
-          {[["new","plus","Nyt job"],["quick","bolt","Hurtig registrering"],["active","player-play","Aktive"],["machines","alert-triangle","Maskiner"],["tools","package","Værktøj"],["setup","clipboard-list","Opstillingsark"],["history","list","Historik"]].map(([t,ic,lb])=>(
+          {[["new","plus","Nyt job"],["quick","bolt","Hurtig registrering"],["active","player-play","Aktive"],["machines","alert-triangle","Maskiner"],["tools","package","Værktøj"],["setup","clipboard-list","Opstillingsark"],["guides","book-2","Vejledninger"],["history","list","Historik"]].map(([t,ic,lb])=>(
             <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
               <i className={`ti ti-${ic}`}/> {lb}
               {t==="new"&&myTaskCnt>0&&<span style={badgeStyle(C.blue)}>{myTaskCnt}</span>}
@@ -625,7 +632,7 @@ export default function App(){
       )}
       {user.role==="admin"&&(
         <div style={{display:"flex",flexWrap:"wrap",gap:4,padding:"10px 16px",background:"#1a2535",borderBottom:`1px solid ${C.border}`}}>
-          {[["admin","layout-dashboard","Overblik"],["planning","calendar-time","Planlægning β"],["alljobs","tool","Alle job"],["tasks","clipboard-check","Opgaver"],["machdata","cpu","Maskiner"],["admintools","package","Værktøj"],["setup","clipboard-list","Opstillingsark"],["reports","chart-bar","Rapporter"],["manage","settings","Administration"]].map(([t,ic,lb])=>{
+          {[["admin","layout-dashboard","Overblik"],["planning","calendar-time","Planlægning β"],["alljobs","tool","Alle job"],["tasks","clipboard-check","Opgaver"],["machdata","cpu","Maskiner"],["admintools","package","Værktøj"],["setup","clipboard-list","Opstillingsark"],["guides","book-2","Vejledninger"],["reports","chart-bar","Rapporter"],["manage","settings","Administration"]].map(([t,ic,lb])=>{
             const lowCnt=t==="admintools"?tools.filter(tl=>tl.active&&((!tl.returnable&&tl.quantity<=(tl.minQuantity||0))||tl.broken||(tl.hasConditionRating&&(tl.conditionStars||5)<=2&&!tl.ordered))).length:0;
             return(
               <button key={t} style={navBtn(tab===t)} onClick={()=>setTab(t)}>
@@ -645,7 +652,8 @@ export default function App(){
         </div>
       )}
 
-      {/* CONTENT */}
+      {/* CONTENT — if a tab breaks, only the tab shows an error (switching tab resets it) */}
+      <ErrorBoundary key={tab} where={`Fane: ${tab}`}>
       {user.role==="requester"?<RequesterTasksTab user={user} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} saveNow={saveNow}/>:<>
       {tab==="new"      &&<NewJobTab         maintItems={myMaintItems} onOpenMaint={openMaintFor} user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={liveSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
       {tab==="tasks"    &&<AdminTasksTab     user={user} users={users} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} focusTaskId={focusTaskId} setFocusTaskId={setFocusTaskId} departments={departments} setCompleteId={setCompleteId} saveNow={saveNow}/>}
@@ -661,8 +669,10 @@ export default function App(){
       {tab==="reports"  &&<ReportsTab       jobs={statJobs} machines={machines} departments={departments} efficiencyGoals={efficiencyGoals} workHours={workHours} downtimeLog={downtimeLog}/>}
       {tab==="admintools"&&<AdminToolsTab     tools={tools} setTools={setTools} toolLog={toolLog} setToolLog={setToolLog} cabinets={cabinets} setCabinets={setCabinets} departments={departments} users={users} machines={machines} saveNow={saveNow} focusToolId={focusToolId} setFocusToolId={setFocusToolId}/>}
       {tab==="setup"    &&<SetupSheetsTab    allSheets={setupSheets} prep={{user,setTools,setToolLog,jobs:visibleJobs,sheets:liveSheets,toolChanges,setToolChanges,saveNow}} user={user} setupSheets={liveSheets} setSetupSheets={setSetupSheets} machines={machines} saveNow={saveNow} stateRef={stateRef} setupDeptParams={setupDeptParams} setSetupDeptParams={setSetupDeptParams} subDepartments={subDepartments} setSubDepartments={setSubDepartments} tools={tools} cabinets={cabinets} setTab={setTab} setFocusToolId={setFocusToolId} focusSheetId={focusSheetId} setFocusSheetId={setFocusSheetId} newSheetFor={newSheetFor} setNewSheetFor={setNewSheetFor}/>}
+      {tab==="guides"   &&<GuidesTab         user={user} guides={guides} setGuides={setGuides} machines={machines} saveNow={saveNow}/>}
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
       </>}
+      </ErrorBoundary>
 
       <Toasts/>
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}

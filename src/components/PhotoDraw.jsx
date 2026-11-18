@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { C } from "../lib/theme";
+import { ErrorBoundary } from "./ErrorCatcher";
 
 // ═══════════════════════════════════════════════════════
 // Draw on a photo: pen, line, arrow, circle, box and text in a few strong colours.
@@ -103,7 +104,23 @@ function loadImage(src){
 }
 
 // photo: {url, original?, marks?} · onSave(newPhotoFields) · onClose()
-export function PhotoDraw({photo,onSave,onClose}){
+// If the editor breaks, the page behind it (and what was typed there) survives
+export function PhotoDraw(props){
+  return(
+    <ErrorBoundary where="Tegning på billede" fallback={()=>(
+      <div style={{position:"fixed",inset:0,zIndex:2500,background:"#0b0d10",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14,padding:20,color:"#fff",textAlign:"center"}}>
+        <i className="ti ti-alert-triangle" style={{fontSize:44,color:C.red}}/>
+        <div style={{fontSize:20,fontWeight:700}}>Tegningen kunne ikke åbnes</div>
+        <div style={{fontSize:15,color:"#aaa",maxWidth:460}}>Fejlen er sendt til serveren, så den kan blive rettet. Billedet og resten af det du har skrevet er ikke tabt.</div>
+        <button onClick={props.onClose} style={{minHeight:52,padding:"0 28px",borderRadius:10,border:"none",background:C.amber,color:"#1a1a1a",fontWeight:800,fontSize:16,cursor:"pointer"}}>Luk</button>
+      </div>
+    )}>
+      <PhotoDrawInner {...props}/>
+    </ErrorBoundary>
+  );
+}
+
+function PhotoDrawInner({photo,onSave,onClose}){
   const canvasRef=useRef(null), wrapRef=useRef(null);
   const [img,setImg]=useState(null);
   const [failed,setFailed]=useState(false);
@@ -258,7 +275,7 @@ export function PhotoDraw({photo,onSave,onClose}){
     background:kind==="save"?C.green:"rgba(255,255,255,.1)",color:kind==="save"?"#06210f":"#fff"});
 
   return(
-    <div style={{position:"fixed",inset:0,zIndex:1000,background:"#0b0d10",display:"flex",flexDirection:"column"}}>
+    <div style={{position:"fixed",inset:0,zIndex:2500,background:"#0b0d10",display:"flex",flexDirection:"column"}}>
       {/* Tools */}
       <div style={{padding:"10px 12px",display:"flex",gap:12,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",borderBottom:"1px solid rgba(255,255,255,.1)"}}>
         <div style={bar}>

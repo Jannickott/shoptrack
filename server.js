@@ -513,6 +513,8 @@ function mergeAndWrite(incoming) {
   merged.maintLog      = unionById(server.maintLog, incoming.maintLog);
   // Setup sheets: per sheet, newest updatedAt wins (deleting sets deleted:true)
   merged.setupSheets   = unionById(server.setupSheets, incoming.setupSheets);
+  // Vejledninger (how-to guides): per guide, newest updatedAt wins (deleting sets deleted:true)
+  merged.guides        = unionById(server.guides, incoming.guides);
   // Tool changes (tool life: "Nyt værktøj sat i" / "Slebet" per machine) — same rule
   merged.toolChanges   = unionById(server.toolChanges, incoming.toolChanges);
   merged.machineIssues = mergeIssues(server.machineIssues, incoming.machineIssues, merged.downtimeLog);
@@ -741,6 +743,8 @@ function externalizePhotos(data) {
   // Machine faults: photos / sketches from "Meld fejl"
   const faultPhotos = x => (x && x.photos || []).forEach(p => { if (p.url) p.url = toFile(p.url); if (p.original) p.original = toFile(p.original); });
   Object.values(data.machineIssues || {}).forEach(faultPhotos);
+  // Vejledninger: pictures on every step
+  (data.guides || []).forEach(g => (g.steps || []).forEach(faultPhotos));
   (data.downtimeLog || []).forEach(faultPhotos);
   (data.jobs || []).forEach(j => {
     if (j.photoData)  j.photoData  = toFile(j.photoData);
@@ -1062,6 +1066,62 @@ app.post("/api/photo", (req, res) => {
     fs.writeFileSync(filePath, Buffer.from(base64, "base64"));
     res.json({ url: `/photos/${filename}` });
   } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+// ── POST /api/client-error — something broke on a tablet ──
+// Written to client-errors.log next to the data file (kept under ~1 MB), so a crash
+// that only happens on a tablet can be found and fixed.
+const CLIENT_ERR_LOG = path.join(__dirname, "client-errors.log");
+app.post("/api/client-error", (req, res) => {
+  try {
+    const b = req.body || {};
+    const s = (v, n) => String(v || "").slice(0, n);
+    const line = `[${new Date().toLocaleString("da-DK")}] ${s(b.user, 40) || "(ikke logget ind)"} · ${s(b.where, 80)}\n  ${s(b.message, 500)}\n  ${s(b.ua, 200)}\n${s(b.stack, 2000)}\n${s(b.extra, 1500)}\n\n`;
+    console.log(`  ✗ Fejl på tablet (${s(b.user, 40) || "?"}, ${s(b.where, 80)}): ${s(b.message, 300)}`);
+    try { if (fs.existsSync(CLIENT_ERR_LOG) && fs.statSync(CLIENT_ERR_LOG).size > 1e6) fs.renameSync(CLIENT_ERR_LOG, CLIENT_ERR_LOG + ".old"); } catch { /* */ }
+    fs.appendFileSync(CLIENT_ERR_LOG, line);
+  } catch { /* never fail on the error reporter */ }
+  res.json({ ok: true });
+});
+
+// ── POST /api/video — a video for a guide (Vejledninger) ──
+// The raw file is streamed straight to disk (photos/videos/), so a big recording never
+// passes through memory or the 25 MB JSON limit. Written to .tmp first, renamed when
+// complete — the backup copy skips .tmp files, so a half upload is never copied.
+const VIDEO_MAX = 2 * 1024 * 1024 * 1024; // 2 GB
+const VIDEO_EXT = ["mp4", "webm", "mov", "3gp", "mkv", "m4v"];
+app.post("/api/video", (req, res) => {
+  const len = Number(req.headers["content-length"] || 0);
+  if (len > VIDEO_MAX) return res.status(413).json({ error: "Videoen er for stor (over 2 GB)" });
+  const name = String(req.query.name || "video.mp4");
+  const m = name.match(/\.(\w+)$/);
+  const ext = m && VIDEO_EXT.includes(m[1].toLowerCase()) ? m[1].toLowerCase() : "mp4";
+  const safe = name.replace(/\.\w+$/, "").replace(/[^\wæøåÆØÅ.-]+/g, "_").slice(0, 60) || "video";
+  const rel = `videos/${Date.now()}_${safe}.${ext}`;
+  const filePath = path.join(PHOTOS_DIR, rel);
+  const tmp = filePath + ".tmp";
+  fs.mkdirSync(path.dirname(filePath), { recursive: true });
+  const out = fs.createWriteStream(tmp);
+  let size = 0, failed = false;
+  const fail = (code, msg) => {
+    if (failed) return; failed = true;
+    out.destroy(); fs.rm(tmp, { force: true }, () => {});
+    if (!res.headersSent) res.status(code).json({ error: msg });
+  };
+  req.on("data", c => { size += c.length; if (size > VIDEO_MAX) { fail(413, "Videoen er for stor (over 2 GB)"); req.destroy(); } });
+  req.on("aborted", () => fail(400, "Upload afbrudt"));
+  req.on("error", () => fail(400, "Upload afbrudt"));
+  out.on("error", e => fail(500, e.message));
+  out.on("finish", () => {
+    if (failed) return;
+    if (!size) { fs.rm(tmp, { force: true }, () => {}); return res.status(400).json({ error: "Tom fil" }); }
+    fs.rename(tmp, filePath, e => {
+      if (e) return fail(500, e.message);
+      console.log(`  ✓ Video gemt: ${rel} (${(size / 1e6).toFixed(1)} MB)`);
+      res.json({ url: `/photos/${rel}`, name, size });
+    });
+  });
+  req.pipe(out);
 });
 
 // ── POST /api/file — a PDF drawing for a setup sheet or a task ──
