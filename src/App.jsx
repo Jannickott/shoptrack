@@ -23,6 +23,7 @@ import { QuickEntryTab } from "./operator/QuickEntryTab";
 import { PlanningTab } from "./planning/PlanningTab";
 import { SetupSheetsTab } from "./setupsheets/SetupSheetsTab";
 import { GuidesTab } from "./guides/GuidesTab";
+import { handOverAtLogin, handoverText } from "./lib/handover";
 import { ErrorBoundary, installErrorReporting } from "./components/ErrorCatcher";
 installErrorReporting();
 import { ToolsTab } from "./tools/ToolsTab";
@@ -505,7 +506,10 @@ export default function App(){
   const login =u=>{
     // Compute synchronously from stateRef so saveNow() gets correct state immediately
     const n=Date.now();
-    const updatedJobs=(stateRef.current.jobs||[]).map(j=>{
+    // Fast operatør: jobs on this operator's machines come to them (own machine back,
+    // or covering for someone who isn't here) — before their paused jobs start again
+    const ho=handOverAtLogin(stateRef.current.jobs||[],stateRef.current.machines||[],u,n);
+    const updatedJobs=ho.jobs.map(j=>{
       if(j.operatorId!==u.id||!j.logoutPaused||j.operatorPaused) return j;
       if(j.nightModeDone) return{...j,logoutPaused:false,nightMode:false,nightModeDone:false,nightModeDuration:0,nightModeEndsAt:null,lastModifiedAt:n};
       return{...j,logoutPaused:false,nightModeWaiting:false,phaseStartedAt:n,lastModifiedAt:n};
@@ -519,6 +523,7 @@ export default function App(){
     writeSession({userId:u.id,loginAt:n,tab:null});
     // (after the main screen is up — the message bar isn't there on the login screen)
     if(recentDraft) setTimeout(()=>notify("Du har et opstillingsark, der ikke er gemt — tryk Fortsæt","warn"),300);
+    if(ho.moves.length) setTimeout(()=>notify(handoverText(ho.moves),"info",9000),recentDraft?3200:300);
     // Maintenance due on the machines this operator looks after — said once at login
     if(u.role==="operator"){
       const s=stateRef.current;

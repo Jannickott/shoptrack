@@ -200,13 +200,17 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
   );
 }
 
-export function ManageMachines({machines,setMachines:setMachinesRaw,departments,jobs,saveNow}){
+export function ManageMachines({machines,setMachines:setMachinesRaw,departments,jobs,users,saveNow}){
   const setMachines=fn=>{setMachinesRaw(fn);saveNow&&saveNow();};
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [dept,setDept]=useState(""); const [err,setErr]=useState("");
   const [editTargetId,setEditTargetId]=useState(null); const [editTargetHours,setEditTargetHours]=useState("");
   const [editDeptId,setEditDeptId]=useState(null); const [editDeptVal,setEditDeptVal]=useState("");
   const [editNameId,setEditNameId]=useState(null); const [editNameVal,setEditNameVal]=useState(""); const [editNameErr,setEditNameErr]=useState("");
   const [confirmRemoveId,setConfirmRemoveId]=useState(null);
+  const [editOpsId,setEditOpsId]=useState(null); // machine whose operator list is open
+  const operators=(users||[]).filter(u=>u.active&&!u.removed&&u.role==="operator");
+  const opName=id=>(users||[]).find(u=>u.id===id)?.name||"?";
+  const setOps=(id,ops)=>setMachines(prev=>prev.map(m=>m.id===id?{...m,operators:ops}:m));
   const allDepts=(departments||[]).length>0?(departments||[]):[...new Set(machines.map(m=>m.department||"").filter(Boolean))].sort();
   const save=()=>{
     if(!name.trim()){setErr("Navn skal udfyldes");return;}
@@ -274,6 +278,9 @@ export function ManageMachines({machines,setMachines:setMachinesRaw,departments,
                 <span style={{fontSize:13,letterSpacing:1,textTransform:"uppercase",color:m.active?C.green:C.red}}>{m.active?"Aktive":"Inaktiv"}</span>
                 {m.department&&<span style={{fontSize:13,color:C.blue,background:"rgba(59,130,246,.12)",padding:"1px 7px",borderRadius:10}}><i className="ti ti-building-factory"/> {m.department}</span>}
               </div>
+              {(m.operators||[]).length>0&&editOpsId!==m.id&&(
+                <div style={{fontSize:13,color:C.muted,marginTop:3}}><i className="ti ti-users"/> {m.operators.map((id,i)=><span key={id} style={{color:i===0?C.amber:C.text}}>{i>0&&<span style={{color:C.muted}}> → </span>}{opName(id)}</span>)}</div>
+              )}
               {m.weeklyTargetHours>0&&editTargetId!==m.id&&(
                 <div style={{fontSize:13,color:C.muted,marginTop:2}}><i className="ti ti-target"/> {m.weeklyTargetHours}t / uge mål</div>
               )}
@@ -281,7 +288,8 @@ export function ManageMachines({machines,setMachines:setMachinesRaw,departments,
             <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
               <button style={btn("outline",false,true)} onClick={()=>{setEditNameId(editNameId===m.id?null:m.id);setEditNameVal(m.name);setEditNameErr("");setEditDeptId(null);setEditTargetId(null);}}><i className="ti ti-pencil"/></button>
               <button style={btn("outline",false,true)} onClick={()=>{setEditDeptId(editDeptId===m.id?null:m.id);setEditDeptVal(m.department||"");setEditTargetId(null);setEditNameId(null);}}><i className="ti ti-building-factory"/> Afd.</button>
-              <button style={btn("outline",false,true)} onClick={()=>{editTargetId===m.id?setEditTargetId(null):openTarget(m);setEditDeptId(null);setEditNameId(null);}}><i className="ti ti-target"/> Mål</button>
+              <button style={btn("outline",false,true)} onClick={()=>{editTargetId===m.id?setEditTargetId(null):openTarget(m);setEditDeptId(null);setEditNameId(null);setEditOpsId(null);}}><i className="ti ti-target"/> Mål</button>
+              <button style={btn(editOpsId===m.id?"primary":"outline",false,true)} onClick={()=>{setEditOpsId(editOpsId===m.id?null:m.id);setEditTargetId(null);setEditDeptId(null);setEditNameId(null);}}><i className="ti ti-users"/> Operatører</button>
               <button style={btn(m.active?"outline":"success",false,true)} onClick={()=>toggle(m.id)}>{m.active?"Deaktiver":"Aktiver"}</button>
               <button style={btn("danger",false,true)} onClick={()=>del(m.id)}><i className="ti ti-trash"/></button>
             </div>
@@ -311,6 +319,38 @@ export function ManageMachines({machines,setMachines:setMachinesRaw,departments,
               </div>
             </div>
           )}
+          {editOpsId===m.id&&(()=>{
+            const ops=(m.operators||[]).filter(id=>operators.some(u=>u.id===id));
+            const free=operators.filter(u=>!ops.includes(u.id));
+            const move=(i,d)=>{const a=[...ops];[a[i],a[i+d]]=[a[i+d],a[i]];setOps(m.id,a);};
+            return(
+              <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
+                <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Operatører på {m.name} — i prioriteret rækkefølge</div>
+                <div style={{fontSize:14,color:C.muted,marginBottom:10,lineHeight:1.5}}>
+                  Nr. 1 er maskinens faste operatør. Er han/hun ikke på arbejde, overtager den næste på listen, der logger ind, jobbet på maskinen — og når nr. 1 logger ind igen, kommer jobbet tilbage.
+                </div>
+                {ops.map((id,i)=>(
+                  <div key={id} style={{display:"flex",alignItems:"center",gap:8,background:C.raised,border:`1px solid ${i===0?C.amber:C.border}`,borderRadius:8,padding:"6px 8px 6px 12px",marginBottom:6}}>
+                    <div style={{width:30,height:30,borderRadius:"50%",background:i===0?C.amber:C.surface,color:i===0?"#1a1a1a":C.text,fontWeight:800,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>{i+1}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:16,color:C.text,fontWeight:700}}>{opName(id)}</div>
+                      <div style={{fontSize:12,color:i===0?C.amber:C.muted,letterSpacing:1,textTransform:"uppercase"}}>{i===0?"Fast operatør":`Afløser ${i}`}</div>
+                    </div>
+                    <button style={{...btn("outline",false,true),opacity:i===0?.35:1}} disabled={i===0} onClick={()=>move(i,-1)} title="Op"><i className="ti ti-arrow-up"/></button>
+                    <button style={{...btn("outline",false,true),opacity:i===ops.length-1?.35:1}} disabled={i===ops.length-1} onClick={()=>move(i,1)} title="Ned"><i className="ti ti-arrow-down"/></button>
+                    <button style={btn("outline",false,true)} onClick={()=>setOps(m.id,ops.filter(x=>x!==id))} title="Fjern"><i className="ti ti-x" style={{color:C.red}}/></button>
+                  </div>
+                ))}
+                {!ops.length&&<div style={{fontSize:14,color:C.muted,marginBottom:8}}>Ingen operatører valgt — job på maskinen skifter ikke selv hænder.</div>}
+                {free.length>0&&(
+                  <select style={{...inp(),color:C.muted,marginTop:4}} value="" onChange={e=>{const id=Number(e.target.value);if(id)setOps(m.id,[...ops,id]);}}>
+                    <option value="">+ Tilføj operatør{ops.length?" (som afløser)":" (fast operatør)"}</option>
+                    {free.map(u=><option key={u.id} value={u.id}>{u.name}</option>)}
+                  </select>
+                )}
+              </div>
+            );
+          })()}
           {editTargetId===m.id&&(
             <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
               <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:8}}>Ugentligt produktionsmål — {m.name}</div>
