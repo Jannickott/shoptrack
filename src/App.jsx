@@ -508,7 +508,7 @@ export default function App(){
     const n=Date.now();
     // Fast operatør: jobs on this operator's machines come to them (own machine back,
     // or covering for someone who isn't here) — before their paused jobs start again
-    const ho=handOverAtLogin(stateRef.current.jobs||[],stateRef.current.machines||[],u,n);
+    const ho=handOverAtLogin(stateRef.current.jobs||[],stateRef.current.machines||[],stateRef.current.users||[],u,n);
     const updatedJobs=ho.jobs.map(j=>{
       if(j.operatorId!==u.id||!j.logoutPaused||j.operatorPaused) return j;
       if(j.nightModeDone) return{...j,logoutPaused:false,nightMode:false,nightModeDone:false,nightModeDuration:0,nightModeEndsAt:null,lastModifiedAt:n};

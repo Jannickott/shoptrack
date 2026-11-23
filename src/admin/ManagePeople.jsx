@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { C, card, inp, btn, tag, avatar, label, errMsg } from "../lib/theme";
 import { initials } from "../lib/util";
+import { DAYS } from "../lib/handover";
 
 export function ManageOperators({users,setUsers:setUsersRaw,machines,departments,jobs,setJobs,saveNow}){
   const setUsers=fn=>{setUsersRaw(fn);saveNow&&saveNow();};
@@ -116,6 +117,25 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
               </button>
             )}
           </div>}
+          {/* Work days — used by Fast operatør: a cover only takes the job on days its operator doesn't work */}
+          {u.role==="operator"&&(()=>{
+            const wd=u.workDays||[];
+            const toggleDay=d=>setUsers(prev=>prev.map(x=>x.id!==u.id?x:{...x,workDays:wd.includes(d)?wd.filter(y=>y!==d):[...wd,d].sort()}));
+            return(
+              <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <i className="ti ti-calendar-week" style={{color:wd.length?C.amber:C.muted,fontSize:16,flexShrink:0}}/>
+                <div style={{flex:1,minWidth:240}}>
+                  <div style={{fontSize:12,color:C.muted,letterSpacing:1.5,textTransform:"uppercase",marginBottom:4}}>Arbejdsdage {!wd.length&&<span style={{textTransform:"none",letterSpacing:0}}>· ingen valgt = alle dage</span>}</div>
+                  <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
+                    {DAYS.map(([d,l])=>{const on=wd.includes(d);return(
+                      <button key={d} onClick={()=>toggleDay(d)} style={{minWidth:52,height:44,borderRadius:8,fontSize:16,fontWeight:700,cursor:"pointer",
+                        background:on?C.amber:C.raised,color:on?"#1a1a1a":C.muted,border:`1px solid ${on?C.amber:C.border}`}}>{l}</button>
+                    );})}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
           {/* Department badges */}
           {(u.departments||[]).length>0&&editDeptId!==u.id&&(
             <div style={{marginTop:8,display:"flex",flexWrap:"wrap",gap:4}}>
@@ -327,7 +347,7 @@ export function ManageMachines({machines,setMachines:setMachinesRaw,departments,
               <div style={{marginTop:12,paddingTop:12,borderTop:`1px solid ${C.border}`}}>
                 <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Operatører på {m.name} — i prioriteret rækkefølge</div>
                 <div style={{fontSize:14,color:C.muted,marginBottom:10,lineHeight:1.5}}>
-                  Nr. 1 er maskinens faste operatør. Er han/hun ikke på arbejde, overtager den næste på listen, der logger ind, jobbet på maskinen — og når nr. 1 logger ind igen, kommer jobbet tilbage.
+                  Nr. 1 er maskinens faste operatør. På dage hvor han/hun ikke arbejder (se Arbejdsdage under Operatører), overtager den næste på listen, der logger ind, jobbet på maskinen. På nr. 1s arbejdsdage kommer jobbet tilbage — også selvom afløseren møder først.
                 </div>
                 {ops.map((id,i)=>(
                   <div key={id} style={{display:"flex",alignItems:"center",gap:8,background:C.raised,border:`1px solid ${i===0?C.amber:C.border}`,borderRadius:8,padding:"6px 8px 6px 12px",marginBottom:6}}>
