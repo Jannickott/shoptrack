@@ -141,7 +141,7 @@ export function ManageTab({users,setUsers,machines,setMachines,workHours,setWork
         <button style={tag(view==="server")}      onClick={()=>setView("server")}     ><i className="ti ti-server"/> Server</button>
       </div>
       {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments} jobs={jobs} setJobs={setJobs} saveNow={saveNow}/>}
-      {view==="machines"   &&<ManageMachines    machines={machines} setMachines={setMachines} departments={departments} jobs={jobs} saveNow={saveNow}/>}
+      {view==="machines"   &&<ManageMachines    machines={machines} setMachines={setMachines} departments={departments} jobs={jobs} users={users} saveNow={saveNow}/>}
       {view==="departments"&&<ManageDepartments departments={departments} setDepartments={setDepartments} saveNow={saveNow}/>}
       {view==="goals"      &&<ManageEfficiencyGoals efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} machines={machines} departments={departments} saveNow={saveNow}/>}
       {view==="settings"   &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours} saveNow={saveNow}/>}
