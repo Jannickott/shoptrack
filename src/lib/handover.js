@@ -19,10 +19,14 @@ export const rankOn=(machine,userId)=>{
   return i<0?Infinity:i;
 };
 
+// "2026-11-24" in local time — user.absentOn holds the day an admin marked them not in
+export const dayKey=(t=Date.now())=>{const d=new Date(t);const p=n=>String(n).padStart(2,"0");return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())}`;};
+export const absentToday=(user,now=Date.now())=>!!user?.absentOn&&user.absentOn===dayKey(now);
+
 // Is this person expected at work on this day? No days ticked = every day.
-// Unknown / removed / inactive person = not coming.
+// Unknown / removed / inactive / marked "not in today" = not coming.
 export const dueOn=(user,now=Date.now())=>{
-  if(!user||user.removed||!user.active) return false;
+  if(!user||user.removed||!user.active||absentToday(user,now)) return false;
   const d=user.workDays||[];
   return !d.length||d.includes(new Date(now).getDay());
 };
@@ -78,6 +82,26 @@ export function handOverAtLogin(jobs,machines,users,user,now=Date.now()){
     return move(j,user,higher?(back?"tilbage":"prioritet"):"afløser",now);
   });
   return {jobs:moves.length||out.some((x,i)=>x!==jobs[i])?out:jobs,moves};
+}
+
+// Admin marks someone "not in today": all their open jobs (paused at fyraften, or still
+// running if fyraften never came) go straight to the first one on each machine's list who is due today —
+// as they are: paused ones the cover starts (Fortsæt, or at login), running ones keep running.
+// users must already have the absentOn set. Returns {jobs, moves:[{job,machine,from,to}]}
+export function coverAbsent(jobs,machines,users,absent,now=Date.now()){
+  const byName=new Map((machines||[]).filter(m=>m.active&&!m.removed).map(m=>[m.name,m]));
+  const byId=new Map((users||[]).map(u=>[u.id,u]));
+  const moves=[];
+  const out=(jobs||[]).map(j=>{
+    if(j.deleted||j.status==="done"||j.taskId||j.operatorId!==absent.id) return j;
+    const m=byName.get(j.machine);
+    const toId=(m?.operators||[]).find(id=>id!==absent.id&&dueOn(byId.get(id),now));
+    if(toId==null) return j;
+    const to=byId.get(toId);
+    moves.push({job:j,machine:j.machine,from:absent.name,to:to.name});
+    return move(j,to,"afløser",now);
+  });
+  return {jobs:moves.length?out:jobs,moves};
 }
 
 // Short text for the operator after login
