@@ -1,4 +1,5 @@
 import { HandoverTrail } from "../components/HandoverTrail";
+import { JobNotes } from "../notes/partNotes";
 import { useState } from "react";
 import { notify } from "../components/Feedback";
 import { C, inp, btn, badge, tag } from "../lib/theme";
@@ -73,6 +74,7 @@ export function JobCard({j,setJobs,startRun,setCompleteId,completeDeburring,paus
         <div style={{fontSize:14,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><i className="ti ti-hash"/> {j.job}</div>
         {j.op&&<div style={{fontSize:13,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{j.op}</div>}
         <HandoverTrail j={j}/>
+        <JobNotes j={j} setJobs={setJobs}/>
         <SheetButton j={j} nav={sheetNav}/>
         {j.paused&&<div style={{background:"rgba(231,76,60,0.12)",borderRadius:6,padding:"6px 8px",fontSize:13,color:C.red}}><i className="ti ti-player-pause"/> Tiduret er på pause — maskinen er nede</div>}
         {j.logoutPaused&&!j.nightModeDone&&!j.operatorPaused&&<div style={{background:"rgba(138,155,181,0.1)",borderRadius:6,padding:"6px 8px",fontSize:13,color:C.muted}}><i className="ti ti-moon"/> Tiduret er på pause — operatøren er væk</div>}
