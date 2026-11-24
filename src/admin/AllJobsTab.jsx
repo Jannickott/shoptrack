@@ -1,3 +1,4 @@
+import { HandoverTrail } from "../components/HandoverTrail";
 import { useState, useEffect } from "react";
 import { sortActive, ActiveJobsGrid } from "./AdminDash";
 import { notify } from "../components/Feedback";
@@ -321,6 +322,7 @@ export function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,sta
       <div style={{fontSize:13,color:C.muted,display:"flex",flexDirection:"column",gap:2}}>
         <span><i className="ti ti-robot"/> {j.machine}</span>
         <span><i className="ti ti-user"/> {j.operatorName}</span>
+        <HandoverTrail j={j} compact/>
         {j.targetQty>0&&(()=>{
           // Order quantity — with the last count while running, or what's missing when done
           const made=j.status==="done"?Math.max(j.pieces||0,j.pieces2||0):null;

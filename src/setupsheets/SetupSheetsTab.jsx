@@ -7,6 +7,9 @@ import { SetupSheetDetail } from "./SetupSheetDetail";
 import { SetupSheetForm } from "./SetupSheetForm";
 import { SheetHistory } from "./SheetHistory";
 import { sheetUseMap, lastUse, shortDate } from "./sheetUse";
+import { sheetsOfJob } from "../tools/toolLife";
+
+const IN_SETUP=j=>j.status==="setup"||j.status==="side2_setup";
 
 // ═══════════════════════════════════════════════════════
 // SETUP SHEETS — list + detail + form (turning)
@@ -80,6 +83,12 @@ export function SetupSheetsTab({prep,allSheets,user,setupSheets,setSetupSheets,m
     if(subDeptFilt!=="all"&&(s.subDepartment||"")!==subDeptFilt) return false;
     return true;
   });
+  // The logged-in operator's own jobs that aren't finished — setup first
+  const myJobs=useMemo(()=>(prep?.jobs||[])
+    .filter(j=>user&&j.operatorId===user.id&&!j.deleted&&!j.taskId&&j.status!=="done"&&j.status!=="deburring")
+    .sort((a,b)=>(IN_SETUP(b)?1:0)-(IN_SETUP(a)?1:0))
+    .map(j=>({j,sheet:sheetsOfJob(j,setupSheets)[0]||null})),[prep?.jobs,setupSheets,user]);
+  const mineBySheet=new Map(myJobs.filter(x=>x.sheet).map(x=>[x.sheet.id,x.j]));
   const machineNames=[...new Set(deptSheets.map(s=>s.machine).filter(Boolean))].sort();
   const filtered=deptSheets.filter(s=>{
     if(machineFilt!=="all"&&s.machine!==machineFilt) return false;
@@ -165,6 +174,42 @@ export function SetupSheetsTab({prep,allSheets,user,setupSheets,setSetupSheets,m
         {user?.role==="admin"&&<button style={{...btn("outline",false,true),padding:"8px 12px",background:showParamAdmin?C.amber+"22":"none",borderColor:showParamAdmin?C.amber:C.border,color:showParamAdmin?C.amber:C.muted}} onClick={()=>setShowParamAdmin(p=>!p)} title="Administrer parametre"><i className="ti ti-settings"/></button>}
         <button style={btn("primary",false,true)} onClick={()=>openEdit(null)}><i className="ti ti-plus"/></button>
       </div>
+      {/* Your jobs right now — so the sheet you are setting up from is always one tap away */}
+      {myJobs.length>0&&(
+        <div style={{marginBottom:14}}>
+          <div style={{fontSize:13,color:C.muted,letterSpacing:2,textTransform:"uppercase",marginBottom:6}}>Dine job nu</div>
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {myJobs.filter(x=>IN_SETUP(x.j)).map(({j,sheet})=>{
+              const setup=true;
+              const col=setup?C.amber:C.green;
+              return(
+                <div key={j.id} style={{display:"flex",alignItems:"center",gap:12,flexWrap:"wrap",background:setup?"rgba(240,165,0,.10)":C.surface,border:`${setup?2:1}px solid ${setup?C.amber:C.border}`,borderRadius:10,padding:"10px 12px"}}>
+                  <i className={`ti ti-${setup?"adjustments":"player-play"}`} style={{fontSize:24,color:col}}/>
+                  <div style={{flex:1,minWidth:160}}>
+                    <div style={{fontSize:18,fontWeight:700,color:C.text}}>{j.job} <span style={{fontSize:14,fontWeight:700,color:C.amber}}>· {j.machine}</span></div>
+                    <div style={{fontSize:13,color:col,fontWeight:700,letterSpacing:1,textTransform:"uppercase"}}>{setup?"I opstilling nu":"Kører"}{sheet?"":" · intet opstillingsark endnu"}</div>
+                  </div>
+                  {sheet
+                    ?<button style={btn(setup?"primary":"outline",false,true)} onClick={()=>{setSelectedId(sheet.id);setView("detail");}}><i className="ti ti-clipboard-list"/> Åbn opstillingsark</button>
+                    :<button style={{...btn("outline",false,true),borderColor:C.amber,color:C.amber}} onClick={()=>setNewSheetFor&&setNewSheetFor({partNumber:j.job,machine:j.machine,customer:j.customer||""})}><i className="ti ti-clipboard-plus"/> Lav opstillingsark</button>}
+                </div>
+              );
+            })}
+            {myJobs.some(x=>!IN_SETUP(x.j))&&(
+              <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                <span style={{fontSize:13,color:C.muted}}><i className="ti ti-player-play" style={{color:C.green}}/> Kører også:</span>
+                {myJobs.filter(x=>!IN_SETUP(x.j)).map(({j,sheet})=>(
+                  <button key={j.id} title={sheet?"Åbn opstillingsark":"Lav opstillingsark"}
+                    onClick={()=>sheet?(setSelectedId(sheet.id),setView("detail")):setNewSheetFor&&setNewSheetFor({partNumber:j.job,machine:j.machine,customer:j.customer||""})}
+                    style={{fontSize:14,padding:"8px 12px",minHeight:40,borderRadius:20,cursor:"pointer",background:C.raised,border:`1px solid ${sheet?C.green:C.border}`,color:C.text}}>
+                    <b>{j.job}</b> <span style={{color:C.amber}}>· {j.machine}</span> {sheet?<i className="ti ti-clipboard-list" style={{color:C.green}}/>:<i className="ti ti-clipboard-plus" style={{color:C.muted}}/>}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {/* Unsaved work — left behind by a reload, a logout or leaving the app */}
       {drafts.map(d=>{
         const k=String(d.sheetId??"new");
@@ -267,8 +312,9 @@ export function SetupSheetsTab({prep,allSheets,user,setupSheets,setSetupSheets,m
       {machineNames.length>1&&<div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12}}>{["all",...machineNames].map(m=><button key={m} style={{fontSize:13,padding:"3px 10px",borderRadius:20,border:`1px solid ${machineFilt===m?C.amber:C.border}`,background:machineFilt===m?C.amber+"22":C.raised,color:machineFilt===m?C.amber:C.muted,cursor:"pointer",fontWeight:machineFilt===m?700:400}} onClick={()=>setMachineFilt(m)}>{m==="all"?"Alle maskiner":m}</button>)}</div>}
       {filtered.length===0&&<div style={{textAlign:"center",padding:"50px 20px",color:C.muted}}><i className="ti ti-clipboard-list" style={{fontSize:40,display:"block",marginBottom:12,opacity:.25}}/><div style={{fontSize:16,marginBottom:6}}>Ingen opstillingsark endnu.</div><div style={{fontSize:14,color:C.amber,cursor:"pointer"}} onClick={()=>openEdit(null)}>+ Opret dit første opstillingsark</div></div>}
       <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {filtered.map(s=>(
-          <div key={s.id} onClick={()=>{setSelectedId(s.id);setView("detail");}} style={{background:C.surface,borderRadius:10,border:`1px solid ${C.border}`,padding:"12px 14px",cursor:"pointer"}}>
+        {filtered.map(s=>{const mine=mineBySheet.get(s.id);return(
+          <div key={s.id} onClick={()=>{setSelectedId(s.id);setView("detail");}} style={{background:mine?"rgba(240,165,0,.08)":C.surface,borderRadius:10,border:mine?`2px solid ${C.amber}`:`1px solid ${C.border}`,padding:"12px 14px",cursor:"pointer"}}>
+            {mine&&<div style={{fontSize:12,fontWeight:700,color:C.amber,letterSpacing:1,textTransform:"uppercase",marginBottom:4}}><i className="ti ti-adjustments"/> Dit job {IN_SETUP(mine)?"i opstilling nu":"kører nu"}</div>}
             <div style={{display:"flex",alignItems:"flex-start",justifyContent:"space-between",gap:8,marginBottom:6}}>
               <div style={{flex:1,minWidth:0}}><div style={{fontSize:18,fontWeight:700,color:C.text,marginBottom:2}}>{s.partNumber}</div><div style={{fontSize:14,color:C.muted}}>{[s.customer,s.material].filter(Boolean).join(" · ")}</div></div>
               <div style={{display:"flex",flexDirection:"column",alignItems:"flex-end",gap:4,flexShrink:0}}>
@@ -286,7 +332,7 @@ export function SetupSheetsTab({prep,allSheets,user,setupSheets,setSetupSheets,m
               {s.createdBy&&<span><i className="ti ti-user"/> {s.createdBy}</span>}
             </div>
           </div>
-        ))}
+        );})}
       </div>
       {/* Admin: deleted sheets — see their PDFs or bring one back */}
       {deletedSheets.length>0&&<div style={{marginTop:22}}>

@@ -1,10 +1,26 @@
 import { useState } from "react";
 import { C, card, inp, btn, tag, avatar, label, errMsg } from "../lib/theme";
 import { initials } from "../lib/util";
-import { DAYS } from "../lib/handover";
+import { DAYS, dayKey, absentToday, coverAbsent } from "../lib/handover";
+import { notify } from "../components/Feedback";
 
 export function ManageOperators({users,setUsers:setUsersRaw,machines,departments,jobs,setJobs,saveNow}){
   const setUsers=fn=>{setUsersRaw(fn);saveNow&&saveNow();};
+  // "Ikke på arbejde i dag" — sick / day off: their standing jobs go to the machine's cover now
+  const setAbsent=(u,on)=>{
+    const now=Date.now();
+    const nextUsers=(users||[]).map(x=>x.id===u.id?{...x,absentOn:on?dayKey(now):""}:x);
+    setUsers(()=>nextUsers);
+    if(!on){notify(`${u.name} er på arbejde igen`,"info");return;}
+    const r=coverAbsent(jobs||[],machines||[],nextUsers,{...u,absentOn:dayKey(now)},now);
+    if(r.moves.length){
+      const ids=new Map(r.jobs.map(j=>[j.id,j]));
+      setJobs&&setJobs(prev=>prev.map(j=>ids.get(j.id)||j));
+      saveNow&&saveNow();
+      const by=new Map();r.moves.forEach(d=>{const k=d.machine+"|"+d.to;if(!by.has(k))by.set(k,{...d,nos:[]});d.job.job&&by.get(k).nos.push(d.job.job);});
+      notify(`${u.name} er ikke på arbejde i dag · ${[...by.values()].map(x=>`${x.machine}${x.nos.length?` (${x.nos.join(", ")})`:""} → ${x.to}`).join(", ")}`,"info",9000);
+    } else notify(`${u.name} er ikke på arbejde i dag — ingen job at give videre lige nu`,"info");
+  };
   const [adding,setAdding]=useState(false); const [name,setName]=useState(""); const [pin,setPin]=useState(""); const [errs,setErrs]=useState({});
   const [editId,setEditId]=useState(null); const [editPin,setEditPin]=useState(""); const [editErr,setEditErr]=useState("");
   const [editDeptId,setEditDeptId]=useState(null);
@@ -120,6 +136,7 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
           {/* Work days — used by Fast operatør: a cover only takes the job on days its operator doesn't work */}
           {u.role==="operator"&&(()=>{
             const wd=u.workDays||[];
+            const away=absentToday(u);
             const toggleDay=d=>setUsers(prev=>prev.map(x=>x.id!==u.id?x:{...x,workDays:wd.includes(d)?wd.filter(y=>y!==d):[...wd,d].sort()}));
             return(
               <div style={{marginTop:10,paddingTop:10,borderTop:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
@@ -133,6 +150,10 @@ export function ManageOperators({users,setUsers:setUsersRaw,machines,departments
                     );})}
                   </div>
                 </div>
+                <button style={{...btn(away?"danger":"outline",false,true),whiteSpace:"nowrap"}} onClick={()=>setAbsent(u,!away)}>
+                  <i className={`ti ti-${away?"user-off":"user-x"}`}/> {away?"Ikke på arbejde i dag ✓":"Ikke på arbejde i dag"}
+                </button>
+                {away&&<div style={{width:"100%",fontSize:13,color:C.red}}>Hans/hendes job på maskinerne går til afløseren i dag. Tryk igen for at fortryde.</div>}
               </div>
             );
           })()}
