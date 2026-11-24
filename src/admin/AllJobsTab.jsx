@@ -1,4 +1,5 @@
 import { HandoverTrail } from "../components/HandoverTrail";
+import { NotesLine, AddNoteButton } from "../notes/partNotes";
 import { useState, useEffect } from "react";
 import { sortActive, ActiveJobsGrid } from "./AdminDash";
 import { notify } from "../components/Feedback";
@@ -206,6 +207,7 @@ export function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,sta
           <div style={{fontSize:13,color:C.muted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}><i className="ti ti-hash"/> {j.job}</div>
         </div>
         <div style={{display:"flex",gap:4,alignItems:"center"}}>
+          <AddNoteButton part={j.job} machine={j.machine} small/>
           {onToggleSelect&&<button style={{background:"none",border:"none",minWidth:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",color:selected?C.blue:C.muted,cursor:"pointer",fontSize:18,padding:2}} onClick={onToggleSelect}><i className={`ti ti-${selected?"square-check":"square"}`}/></button>}
           <button style={{background:"none",border:"none",minWidth:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",color:C.muted,cursor:"pointer",fontSize:16,padding:2}} onClick={()=>{setConfirmDelete(false);editing?setEditing(false):openEdit();}}><i className={`ti ti-${editing?"x":"pencil"}`}/></button>
           <button style={{background:"none",border:"none",minWidth:40,minHeight:40,display:"inline-flex",alignItems:"center",justifyContent:"center",color:confirmDelete?C.red:C.muted,cursor:"pointer",fontSize:16,padding:2}} onClick={()=>{setConfirmDelete(d=>!d);setEditing(false);}}><i className="ti ti-trash"/></button>
@@ -323,6 +325,7 @@ export function AdminJobCard({j,setJobs,setCompleteId,users,machines,saveNow,sta
         <span><i className="ti ti-robot"/> {j.machine}</span>
         <span><i className="ti ti-user"/> {j.operatorName}</span>
         <HandoverTrail j={j} compact/>
+        <NotesLine part={j.job} machine={j.machine}/>
         {j.targetQty>0&&(()=>{
           // Order quantity — with the last count while running, or what's missing when done
           const made=j.status==="done"?Math.max(j.pieces||0,j.pieces2||0):null;

@@ -1,3 +1,4 @@
+import { PartNotes } from "../notes/partNotes";
 import { useState } from "react";
 import { C, btn } from "../lib/theme";
 import { PdfDrawings } from "../components/PdfDrawings";
@@ -117,6 +118,7 @@ ${(sheet.photos||[]).length?`<h2>Fotos</h2><div class="photos">${sheet.photos.ma
         {onDuplicate&&<button style={{...btn("outline",false,true),padding:"10px 16px",flexShrink:0,fontSize:24}} title="Kopier ark" onClick={onDuplicate}><i className="ti ti-copy"/></button>}
         <button style={{...btn("outline",false,true),padding:"10px 16px",flexShrink:0,fontSize:24}} onClick={onEdit}><i className="ti ti-edit"/></button>
       </div>
+      <div style={{marginBottom:12}}><PartNotes part={sheet.partNumber} machine={sheet.machine}/></div>
       <div style={{fontSize:14,color:C.muted,marginBottom:10,display:"flex",gap:14,flexWrap:"wrap"}}>
         {use?<span style={{color:C.text}}><i className="ti ti-player-play"/> Sidst brugt {shortDate(use.at)}{use.by?` af ${use.by}`:""} · {use.count} job i alt</span>
           :<span><i className="ti ti-player-play"/> Ikke brugt til et job endnu</span>}

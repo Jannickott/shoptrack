@@ -3,6 +3,7 @@ import { C, card, btn } from "../lib/theme";
 import { fmtHM } from "../lib/util";
 import { jobProgress, normPart } from "./planEngine";
 import { CountReport } from "../components/CountReport";
+import { NotesLine, AddNoteButton } from "../notes/partNotes";
 
 // ═══════════════════════════════════════════════════════
 // PLANLÆGNING → "I gang": how far each running job is, when it will be done,
@@ -56,7 +57,9 @@ export function LiveProgress({jobs,machines,workHours,planOrders,setJobs,saveNow
               <span style={{flex:1}}/>
               <span style={{fontSize:12,letterSpacing:1,textTransform:"uppercase",color:phaseColor,background:phaseColor+"22",padding:"3px 8px",borderRadius:20,fontWeight:700}}>{phase}</span>
               {soon&&<span style={{fontSize:12,letterSpacing:1,textTransform:"uppercase",color:"#1a1a1a",background:C.amber,padding:"3px 8px",borderRadius:20,fontWeight:700}}>Snart færdig</span>}
+              <AddNoteButton part={j.job} machine={j.machine} small/>
             </div>
+            <div style={{marginTop:6}}><NotesLine part={j.job} machine={j.machine}/></div>
 
             {/* Pieces */}
             <div style={{display:"flex",alignItems:"center",gap:10,marginTop:10}}>

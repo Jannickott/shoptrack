@@ -23,7 +23,8 @@ import { QuickEntryTab } from "./operator/QuickEntryTab";
 import { PlanningTab } from "./planning/PlanningTab";
 import { SetupSheetsTab } from "./setupsheets/SetupSheetsTab";
 import { GuidesTab } from "./guides/GuidesTab";
-import { handOverAtLogin, handoverText } from "./lib/handover";
+import { handOverAtLogin, handoverText, absentToday } from "./lib/handover";
+import { NotesCtx } from "./notes/partNotes";
 import { ErrorBoundary, installErrorReporting } from "./components/ErrorCatcher";
 installErrorReporting();
 import { ToolsTab } from "./tools/ToolsTab";
@@ -100,6 +101,7 @@ export default function App(){
   const [maintLog,setMaintLog]=useState([]);
   const [toolChanges,setToolChanges]=useState([]); // tool life — see tools/toolLife.js
   const [guides,setGuides]=useState([]); // Vejledninger — see guides/guideUtil.js
+  const [partNotes,setPartNotes]=useState([]); // Job-noter — see notes/partNotes.jsx
 
   // New version on the server? The first /api/data response tells us which build
   // this page is; a different X-App-Version later means the server was updated.
@@ -169,6 +171,7 @@ export default function App(){
           if(data.maintLog) setMaintLog(data.maintLog);
           if(data.toolChanges) setToolChanges(data.toolChanges);
           if(data.guides) setGuides(data.guides);
+          if(data.partNotes) setPartNotes(data.partNotes);
           if(data.settingsVersion) settingsVersionRef.current=data.settingsVersion;
           // Still logged in on this tablet (page reloaded, app reopened) → carry on without the PIN
           const s=readSession();
@@ -192,7 +195,7 @@ export default function App(){
             planOrders:data.planOrders,
             planSettings:data.planSettings,
             tasks:data.tasks,
-            maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges,guides:data.guides,
+            maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges,guides:data.guides,partNotes:data.partNotes,
           };
         }
       })
@@ -211,8 +214,8 @@ export default function App(){
   const doSaveRef=useRef(null);         // doSave, for the 3 s loop (defined further down)
   const [serverOnline,setServerOnline]=useState(true);
   useEffect(()=>{
-    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges,guides};
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges,guides]);
+    stateRef.current={jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges,guides,partNotes};
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges,guides,partNotes]);
 
   // Save to server every 3 seconds — only when data has changed, with retry on failure
   useEffect(()=>{
@@ -274,6 +277,7 @@ export default function App(){
         mergeById("maintLog",setMaintLog);
         mergeById("toolChanges",setToolChanges);
         mergeById("guides",setGuides);
+        mergeById("partNotes",setPartNotes);
         // Settings: only apply if the server value actually changed (another device saved it)
         const s=JSON.stringify;
         if(data.workHours  &&s(data.workHours) !==s(last.workHours)) {setWorkHours(data.workHours);workHoursRef.current=data.workHours;}
@@ -311,7 +315,7 @@ export default function App(){
         // Keep settingsVersion in sync with server (take the max — never go backwards)
         if((data.settingsVersion||0)>settingsVersionRef.current) settingsVersionRef.current=data.settingsVersion;
         // Remember what the server last sent
-        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders,planSettings:data.planSettings,tasks:data.tasks,maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges,guides:data.guides};
+        lastServerRef.current={workHours:data.workHours,users:data.users,machines:data.machines,downtimeLog:data.downtimeLog,tools:data.tools,toolLog:data.toolLog,cabinets:data.cabinets,departments:data.departments,setupSheets:data.setupSheets,setupDeptParams:data.setupDeptParams,subDepartments:data.subDepartments,efficiencyGoals:data.efficiencyGoals,planOrders:data.planOrders,planSettings:data.planSettings,tasks:data.tasks,maintTasks:data.maintTasks,maintLog:data.maintLog,toolChanges:data.toolChanges,guides:data.guides,partNotes:data.partNotes};
       }).catch(()=>setServerOnline(false));
     },5000);
     return()=>clearInterval(t);
@@ -342,7 +346,7 @@ export default function App(){
     if(!savePendingRef.current) return;
     savePendingRef.current=false;
     doSave();
-  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges,guides]);
+  },[jobs,users,machines,workHours,downtimeLog,machineIssues,tools,toolLog,cabinets,departments,setupSheets,setupDeptParams,subDepartments,efficiencyGoals,planOrders,planSettings,tasks,maintTasks,maintLog,toolChanges,guides,partNotes]);
 
   // ── Refresh immediately when tab becomes visible again ────
   useEffect(()=>{
@@ -516,6 +520,12 @@ export default function App(){
     });
     stateRef.current={...stateRef.current,jobs:updatedJobs};
     setJobs(updatedJobs);
+    // Marked "Ikke på arbejde i dag" but logging in → they are here after all
+    if(absentToday(u,n)){
+      const updatedUsers=(stateRef.current.users||[]).map(x=>x.id===u.id?{...x,absentOn:""}:x);
+      stateRef.current={...stateRef.current,users:updatedUsers};
+      setUsers(updatedUsers);
+    }
     loginTimeRef.current=n;
     // A setup sheet left unsaved recently (app closed, logged out) → straight back to it
     const recentDraft=u.role!=="requester"&&listDrafts(u.id).find(d=>n-d.savedAt<12*3600*1000);
@@ -658,6 +668,7 @@ export default function App(){
       )}
 
       {/* CONTENT — if a tab breaks, only the tab shows an error (switching tab resets it) */}
+      <NotesCtx.Provider value={{notes:partNotes,setNotes:setPartNotes,saveNow,user,machines}}>
       <ErrorBoundary key={tab} where={`Fane: ${tab}`}>
       {user.role==="requester"?<RequesterTasksTab user={user} tasks={tasks} setTasks={setTasks} jobs={visibleJobs} saveNow={saveNow}/>:<>
       {tab==="new"      &&<NewJobTab         maintItems={myMaintItems} onOpenMaint={openMaintFor} user={user} machines={machines} machineIssues={machineIssues} setJobs={setJobs} jobs={visibleJobs} setupSheets={liveSheets} setTab={setTab} setFocusSheetId={setFocusSheetId} setNewSheetFor={setNewSheetFor} tasks={tasks} setTasks={setTasks}/>}
@@ -678,6 +689,7 @@ export default function App(){
       {tab==="manage"   &&<ManageTab         users={users} setUsers={setUsers} machines={machines} setMachines={setMachines} workHours={workHours} setWorkHours={setWorkHours} departments={departments} setDepartments={setDepartments} saveNow={saveNow} efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} jobs={jobs} setJobs={setJobs}/>}
       </>}
       </ErrorBoundary>
+      </NotesCtx.Provider>
 
       <Toasts/>
       {completeId&&<CompleteModal jobId={completeId} jobs={jobs} setJobs={setJobs} onClose={()=>setCompleteId(null)} saveNow={saveNow} stateRef={stateRef}/>}

@@ -1,3 +1,4 @@
+import { NotesAdmin } from "../notes/NotesAdmin";
 import { useState, useEffect } from "react";
 import { ManageCabinets } from "./ManageCabinets";
 import { ManageOperators, ManageMachines } from "./ManagePeople";
@@ -138,6 +139,7 @@ export function ManageTab({users,setUsers,machines,setMachines,workHours,setWork
         <button style={tag(view==="goals")}       onClick={()=>setView("goals")}      ><i className="ti ti-target"/> Mål</button>
         <button style={tag(view==="settings")}    onClick={()=>setView("settings")}   ><i className="ti ti-adjustments"/> Indstillinger</button>
         <button style={tag(view==="delegate")}    onClick={()=>setView("delegate")}   ><i className="ti ti-arrows-exchange"/> Uddeleger</button>
+        <button style={tag(view==="notes")}       onClick={()=>setView("notes")}      ><i className="ti ti-message-exclamation"/> Job-noter</button>
         <button style={tag(view==="server")}      onClick={()=>setView("server")}     ><i className="ti ti-server"/> Server</button>
       </div>
       {view==="operators"  &&<ManageOperators   users={users} setUsers={setUsers} machines={machines} departments={departments} jobs={jobs} setJobs={setJobs} saveNow={saveNow}/>}
@@ -146,6 +148,7 @@ export function ManageTab({users,setUsers,machines,setMachines,workHours,setWork
       {view==="goals"      &&<ManageEfficiencyGoals efficiencyGoals={efficiencyGoals} setEfficiencyGoals={setEfficiencyGoals} machines={machines} departments={departments} saveNow={saveNow}/>}
       {view==="settings"   &&<WorkHoursSettings workHours={workHours} setWorkHours={setWorkHours} saveNow={saveNow}/>}
       {view==="delegate"   &&<DelegateJobs      users={users} jobs={jobs} setJobs={setJobs} saveNow={saveNow}/>}
+      {view==="notes"      &&<NotesAdmin jobs={jobs}/>}
       {view==="server"     &&<ServerStatus/>}
     </div>
   );

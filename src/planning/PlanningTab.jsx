@@ -1,3 +1,4 @@
+import { NotesLine, AddNoteButton, PartNotes } from "../notes/partNotes";
 import { useState, useMemo } from "react";
 import { toLocalInput, fromLocalInput } from "../admin/AllJobsTab";
 import { C, card, inp, sel, btn, badge, tag, label, errMsg, th, td } from "../lib/theme";
@@ -217,6 +218,7 @@ export function PlanningTab({jobs,machines,departments,workHours,planOrders,setP
                   {[o.customer,o.partNumber].filter(Boolean).join(" · ")} <span style={{color:C.muted,fontWeight:400}}>× {o.quantity}</span>
                 </div>
                 <div style={{fontSize:13,color:C.muted,marginTop:2}}>Leveres {o.dueDate?fmtDay(dueTs(o)):"— (ingen leveringsdato)"}{r.end&&<> · planlagt færdig <span style={{color:r.late?C.red:C.green,fontWeight:700}}>{fmtDate(r.end)}</span></>}{r.late&&<span style={{color:C.red,fontWeight:700}}> · FORSINKET</span>}</div>
+                <div style={{marginTop:4}}><NotesLine part={o.partNumber}/></div>
                 {r.problem&&<div style={{fontSize:13,color:C.amber,marginTop:4}}><i className="ti ti-alert-triangle"/> {r.problem}</div>}
                 {r.warning&&<div style={{fontSize:13,color:C.amber,marginTop:4}}><i className="ti ti-pin"/> {r.warning}</div>}
                 <div style={{display:"flex",gap:4,flexWrap:"wrap",marginTop:6}}>
@@ -230,6 +232,7 @@ export function PlanningTab({jobs,machines,departments,workHours,planOrders,setP
               </div>
               <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
                 <button style={btn(o.urgent?"danger":"outline",false,true)} title="Haster — planlæg før alt andet" onClick={()=>patch(o,{urgent:!o.urgent})}><i className="ti ti-flame"/></button>
+                <AddNoteButton part={o.partNumber}/>
                 <button style={btn("outline",false,true)} title="Rediger" onClick={()=>setEditing({...o})}><i className="ti ti-pencil"/></button>
                 <button style={btn("success",false,true)} title="Ordren er færdig — fjern fra planen" onClick={()=>patch(o,{done:true,doneAt:Date.now()})}><i className="ti ti-check"/></button>
                 <button style={btn("outline",false,true)} title="Slet" onClick={()=>{if(window.confirm(`Slet ordre ${o.partNumber}?`))patch(o,{deleted:true});}}><i className="ti ti-trash"/></button>
@@ -322,6 +325,7 @@ export function PlanOrderForm({order,jobs,machines,activeMachines,allDepts,deptO
         <div><label style={label}>Kunde</label><input style={inp()} value={o.customer} onChange={e=>set("customer",e.target.value)}/></div>
         <div><label style={label}>Tegningsnr. *</label><input style={inp()} list="plan-parts" value={o.partNumber} onChange={e=>onPart(e.target.value)}/>
           <datalist id="plan-parts">{knownParts.map(p=><option key={p} value={p}/>)}</datalist>
+          <div style={{marginTop:6}}><PartNotes part={o.partNumber} compact/></div>
           <div style={{fontSize:12,color:hist.length?C.green:C.muted,marginTop:4}}>{hist.length?`${hist.length} tidligere ${hist.length!==1?"kørsler":"kørsel"} fundet`:o.partNumber?"Nyt emne — ingen historik, indtast minutter pr. trin":""}</div>
         </div>
         <div><label style={label}>Antal *</label><input type="number" min="1" style={inp()} value={o.quantity} onChange={e=>set("quantity",e.target.value)}/></div>

@@ -1,3 +1,4 @@
+import { PartNotes } from "../notes/partNotes";
 import { useState } from "react";
 import { notify } from "../components/Feedback";
 import { C, card, inp, sel, btn, avatar, label, errMsg } from "../lib/theme";
@@ -181,6 +182,8 @@ export function NewJobTab({user,machines,setJobs,jobs,setupSheets,setTab,setFocu
         </select>
         {errs.machine&&<div style={errMsg}>{errs.machine}</div>}
       </div>
+      {/* Admin's note / warning on this part — read before starting */}
+      <div style={{marginBottom:12}}><PartNotes part={job} machine={machine} title="Læs før du starter"/></div>
       <div style={{marginBottom:12}}>
         <label style={label}>Operation / beskrivelse</label>
         <input style={inp()} value={op} onChange={e=>setOp(e.target.value)} placeholder="f.eks. planfræsning af top"/>

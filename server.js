@@ -517,6 +517,8 @@ function mergeAndWrite(incoming) {
   merged.guides        = unionById(server.guides, incoming.guides);
   // Tool changes (tool life: "Nyt værktøj sat i" / "Slebet" per machine) — same rule
   merged.toolChanges   = unionById(server.toolChanges, incoming.toolChanges);
+  // Job-noter (notes / warnings on a part): per note, newest updatedAt wins
+  merged.partNotes     = unionById(server.partNotes, incoming.partNotes);
   merged.machineIssues = mergeIssues(server.machineIssues, incoming.machineIssues, merged.downtimeLog);
 
   merged.settingsVersion = Math.max(serverSV, incomingSV);
@@ -746,6 +748,7 @@ function externalizePhotos(data) {
   // Vejledninger: pictures on every step
   (data.guides || []).forEach(g => (g.steps || []).forEach(faultPhotos));
   (data.downtimeLog || []).forEach(faultPhotos);
+  (data.partNotes || []).forEach(faultPhotos);
   (data.jobs || []).forEach(j => {
     if (j.photoData)  j.photoData  = toFile(j.photoData);
     if (j.photoData2) j.photoData2 = toFile(j.photoData2);
