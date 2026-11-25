@@ -5,6 +5,8 @@ import { PdfDrawings } from "../components/PdfDrawings";
 import { VideoPlayer } from "../components/VideoAttach";
 import { VERDICT, VerdictBadge } from "../components/PhotoAttach";
 import { catLabel, catIcon } from "./guideUtil";
+import { printGuide } from "./printGuide";
+import { notify } from "../components/Feedback";
 
 // One guide, read on the tablet: numbered steps in big type, pictures and videos
 // right where they belong.
@@ -18,6 +20,7 @@ export function GuideView({guide:g,backLabel,canDelete,onBack,onEdit,onDelete}){
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}>
         <button style={btn("outline",false,true)} onClick={onBack}><i className="ti ti-arrow-left"/> {backLabel||"Tilbage"}</button>
         <div style={{flex:1}}/>
+        <button style={btn("outline",false,true)} title="Udskriv / gem som PDF" onClick={()=>{if(!printGuide(g))notify("Kunne ikke åbne udskriften — tillad pop-up vinduer","warn");}}><i className="ti ti-printer"/> Udskriv</button>
         <button style={btn("primary",false,true)} onClick={onEdit}><i className="ti ti-pencil"/> Ret</button>
         {canDelete&&<button style={btn("outline",false,true)} onClick={()=>setConfirmDel(true)} title="Slet vejledning"><i className="ti ti-trash" style={{color:C.red}}/></button>}
       </div>
